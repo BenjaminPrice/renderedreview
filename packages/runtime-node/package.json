@@ -12,7 +12,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@rendered-review/runtime": "workspace:*"
+    "@rendered-review/control-plane": "workspace:*",
+    "@rendered-review/runtime": "workspace:*",
+    "postgres": "^3.4.9"
   },
   "devDependencies": {
     "@types/node": "^24.13.6"

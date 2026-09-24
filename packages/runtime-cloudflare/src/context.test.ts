@@ -14,6 +14,8 @@ describe("buildRequestContext", () => {
     expect(await context.secrets.get("SOME_SECRET")).toBe("secret-value");
     expect(await context.secrets.get("DB")).toBeUndefined();
     expect(await context.secrets.get("MISSING")).toBeUndefined();
+    expect(context.db).toBeDefined();
+    expect(buildRequestContext(publicOnly, () => {}).db).toBeUndefined();
   });
 
   it("does not require DATABASE_URL because D1 is bound", () => {

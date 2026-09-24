@@ -12,6 +12,8 @@
     "@rendered-review/runtime": "workspace:*"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "5.20260922.1"
+    "@cloudflare/workers-types": "5.20260922.1",
+    "@rendered-review/control-plane": "workspace:*",
+    "miniflare": "^4.20260730.0"
   }
 }
