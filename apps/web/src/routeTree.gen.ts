@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as HealthRouteImport } from './routes/health'
 import { Route as FramesMermaidRouteImport } from './routes/frames.mermaid'
+import { Route as FramesRendererRouteImport } from './routes/frames.renderer'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiGithubPublicSplatRouteImport } from './routes/api/github/public/$'
 import { Route as ApiGithubUserSplatRouteImport } from './routes/api/github/user/$'
@@ -31,6 +32,11 @@ const HealthRoute = HealthRouteImport.update({
 const FramesMermaidRoute = FramesMermaidRouteImport.update({
   id: '/frames/mermaid',
   path: '/frames/mermaid',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FramesRendererRoute = FramesRendererRouteImport.update({
+  id: '/frames/renderer',
+  path: '/frames/renderer',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
@@ -63,6 +69,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/health': typeof HealthRoute
   '/frames/mermaid': typeof FramesMermaidRoute
+  '/frames/renderer': typeof FramesRendererRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/github/public/$': typeof ApiGithubPublicSplatRoute
   '/api/github/user/$': typeof ApiGithubUserSplatRoute
@@ -73,6 +80,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/health': typeof HealthRoute
   '/frames/mermaid': typeof FramesMermaidRoute
+  '/frames/renderer': typeof FramesRendererRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/github/public/$': typeof ApiGithubPublicSplatRoute
   '/api/github/user/$': typeof ApiGithubUserSplatRoute
@@ -84,6 +92,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/health': typeof HealthRoute
   '/frames/mermaid': typeof FramesMermaidRoute
+  '/frames/renderer': typeof FramesRendererRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/github/public/$': typeof ApiGithubPublicSplatRoute
   '/api/github/user/$': typeof ApiGithubUserSplatRoute
@@ -96,6 +105,7 @@ export interface FileRouteTypes {
     | '/'
     | '/health'
     | '/frames/mermaid'
+    | '/frames/renderer'
     | '/api/auth/$'
     | '/api/github/public/$'
     | '/api/github/user/$'
@@ -106,6 +116,7 @@ export interface FileRouteTypes {
     | '/'
     | '/health'
     | '/frames/mermaid'
+    | '/frames/renderer'
     | '/api/auth/$'
     | '/api/github/public/$'
     | '/api/github/user/$'
@@ -116,6 +127,7 @@ export interface FileRouteTypes {
     | '/'
     | '/health'
     | '/frames/mermaid'
+    | '/frames/renderer'
     | '/api/auth/$'
     | '/api/github/public/$'
     | '/api/github/user/$'
@@ -127,6 +139,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   HealthRoute: typeof HealthRoute
   FramesMermaidRoute: typeof FramesMermaidRoute
+  FramesRendererRoute: typeof FramesRendererRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiGithubPublicSplatRoute: typeof ApiGithubPublicSplatRoute
   ApiGithubUserSplatRoute: typeof ApiGithubUserSplatRoute
@@ -155,6 +168,13 @@ declare module '@tanstack/react-router' {
       path: '/frames/mermaid'
       fullPath: '/frames/mermaid'
       preLoaderRoute: typeof FramesMermaidRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/frames/renderer': {
+      id: '/frames/renderer'
+      path: '/frames/renderer'
+      fullPath: '/frames/renderer'
+      preLoaderRoute: typeof FramesRendererRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/auth/$': {
@@ -199,6 +219,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   HealthRoute: HealthRoute,
   FramesMermaidRoute: FramesMermaidRoute,
+  FramesRendererRoute: FramesRendererRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiGithubPublicSplatRoute: ApiGithubPublicSplatRoute,
   ApiGithubUserSplatRoute: ApiGithubUserSplatRoute,
