@@ -2174,6 +2174,16 @@ samp {
   color: var(--rr-text);
   font: var(--rr-text-sm) / 1.45 var(--rr-font-ui);
 }
+.rr-composer-code {
+  font: 12px/1.55 var(--rr-font-mono);
+  white-space: pre;
+  overflow-wrap: normal;
+  overflow-x: auto;
+}
+.rr-composer .rr-diff,
+.rr-draft .rr-diff {
+  margin: 0 12px 8px;
+}
 .rr-composer-text:focus-visible {
   outline-offset: 0;
 }

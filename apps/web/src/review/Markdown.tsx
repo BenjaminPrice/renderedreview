@@ -71,6 +71,28 @@ export function Markdown({
 }
 
 function ProposedChange({ original, proposed, href }: { original: string[] | null; proposed: string; href: string }) {
+  return (
+    <ChangeDiff
+      label="Suggested change"
+      aside={<ExternalLink href={href}>Apply on GitHub</ExternalLink>}
+      original={original ?? []}
+      proposed={proposed.split("\n")}
+    />
+  );
+}
+
+/** Removed then added lines, in the change styles; text only, never HTML. */
+export function ChangeDiff({
+  label,
+  aside,
+  original,
+  proposed,
+}: {
+  label: string;
+  aside?: ReactNode;
+  original: string[];
+  proposed: string[];
+}) {
   const row = (kind: "del" | "add", text: string, key: number): ReactNode => (
     <div key={`${kind}${key}`} className={`rr-diff-${kind}`}>
       <span className="rr-sr-only">{kind === "del" ? "Removed: " : "Added: "}</span>
@@ -78,13 +100,13 @@ function ProposedChange({ original, proposed, href }: { original: string[] | nul
     </div>
   );
   return (
-    <div className="rr-diff" role="group" aria-label="Suggested change">
+    <div className="rr-diff" role="group" aria-label={label}>
       <div className="rr-diff-head">
-        <span>Suggested change</span>
-        <ExternalLink href={href}>Apply on GitHub</ExternalLink>
+        <span>{label}</span>
+        {aside}
       </div>
-      {original?.map((l, i) => row("del", l, i))}
-      {proposed.split("\n").map((l, i) => row("add", l, i))}
+      {original.map((l, i) => row("del", l, i))}
+      {proposed.map((l, i) => row("add", l, i))}
     </div>
   );
 }

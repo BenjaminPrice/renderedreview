@@ -156,3 +156,90 @@ describe("signed out", () => {
     expect(onSignIn).toHaveBeenCalled();
   });
 });
+
+describe("suggesting", () => {
+  const original = "Each delay includes full jitter of up to 20%.";
+  const replacement = () => screen.getByRole("textbox", { name: "Replacement" });
+  const suggestTab = () => screen.getByRole("button", { name: "Suggest" });
+
+  it("prefills the replacement with the whole source lines, previews the change and adds it", async () => {
+    const { onAddToReview, card } = mount({ original });
+    await userEvent.click(suggestTab());
+    expect(suggestTab().getAttribute("aria-pressed")).toBe("true");
+    expect(within(card).getByText("Suggesting a replacement for line 24")).toBeTruthy();
+    expect(replacement()).toHaveProperty("value", original);
+    expect(screen.getByRole("textbox", { name: "Comment (optional)" })).toBeTruthy();
+
+    // Nothing changed yet: nothing to suggest.
+    const add = screen.getByRole("button", { name: "Add to review" });
+    expect(add.hasAttribute("disabled")).toBe(true);
+    expect(within(card).getByText("Edit the replacement to suggest a change.")).toBeTruthy();
+
+    await userEvent.clear(replacement());
+    await userEvent.type(replacement(), "Each delay includes `equal` jitter.");
+    const preview = within(card).getByRole("group", { name: "Preview of the change" });
+    expect([...preview.querySelectorAll(".rr-diff-del, .rr-diff-add")].map((row) => row.textContent)).toEqual([
+      `Removed: ${original}`,
+      "Added: Each delay includes `equal` jitter.",
+    ]);
+    await userEvent.click(add);
+    expect(onAddToReview).toHaveBeenCalledWith("", "Each delay includes `equal` jitter.");
+  });
+
+  it("says a suggestion on head diff lines posts natively, and elsewhere must be applied manually", async () => {
+    mount({ original });
+    await userEvent.click(suggestTab());
+    expect(screen.getByText(/authors can apply it/).closest("p")!.textContent).toBe(
+      "Will post as a native suggestion · authors can apply it on GitHub",
+    );
+    cleanup();
+    mount({ original, representation: { kind: "review-file", reason: "Will post as file comment · x" } });
+    await userEvent.click(suggestTab());
+    expect(screen.getByText(/must be applied manually/).closest("p")!.textContent).toBe(
+      "Will post as a proposed change · it must be applied manually",
+    );
+  });
+
+  it("covers every line of a multi-line selection", async () => {
+    mount({
+      original: "a\nb\nc",
+      selection: { ...selection, sourceRange: { startLine: 22, startColumn: 3, endLine: 25, endColumn: 1 } },
+    });
+    await userEvent.click(suggestTab());
+    expect(screen.getByText("Suggesting a replacement for lines 22–24")).toBeTruthy();
+    expect(replacement()).toHaveProperty("value", "a\nb\nc");
+  });
+
+  it("publishes a suggestion now, with the optional comment", async () => {
+    const { onCommentNow } = mount({ original, suggest: true });
+    await userEvent.type(replacement(), " More.");
+    await userEvent.type(screen.getByRole("textbox", { name: "Comment (optional)" }), "Clearer?");
+    await userEvent.click(screen.getByRole("button", { name: "Comment now" }));
+    expect(onCommentNow).toHaveBeenCalledWith("Clearer?", `${original} More.`);
+  });
+
+  it("goes back to a plain comment on the Comment tab", async () => {
+    const { onAddToReview } = mount({ original, suggest: true });
+    await userEvent.click(screen.getByRole("button", { name: "Comment" }));
+    await userEvent.type(textarea(), "Just a note");
+    await userEvent.click(screen.getByRole("button", { name: "Add to review" }));
+    expect(onAddToReview).toHaveBeenCalledWith("Just a note");
+  });
+
+  it("edits a suggestion draft from its replacement", async () => {
+    const { onAddToReview } = mount({ original, editing: true, initial: "Why", initialReplacement: "New text" });
+    expect(suggestTab().getAttribute("aria-pressed")).toBe("true");
+    expect(replacement()).toHaveProperty("value", "New text");
+    await userEvent.type(replacement(), "!");
+    await userEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    expect(onAddToReview).toHaveBeenCalledWith("Why", "New text!");
+  });
+
+  it("is unavailable without the source lines or when signed out", () => {
+    mount();
+    expect(suggestTab().getAttribute("aria-disabled")).toBe("true");
+    cleanup();
+    mount({ original, signedIn: false });
+    expect(suggestTab().getAttribute("aria-disabled")).toBe("true");
+  });
+});

@@ -64,7 +64,7 @@ export function prepareAnnotation(target: CommentTarget, selection: SourceSelect
 }
 
 /** The 1-based inclusive source lines `selection` touches. */
-function selectedLines({ sourceRange: r }: SourceSelection) {
+export function selectedLines({ sourceRange: r }: SourceSelection) {
   // The range is half-open: ending at column 1 means the previous line was the last one selected.
   return { startLine: r.startLine, endLine: r.endColumn === 1 && r.endLine > r.startLine ? r.endLine - 1 : r.endLine };
 }
