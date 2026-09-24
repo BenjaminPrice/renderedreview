@@ -3,6 +3,7 @@ import type { Element, Nodes, Root } from "hast";
 import { toHtml } from "hast-util-to-html";
 import { describe, expect, test } from "vitest";
 import adr from "./fixtures/adr-0007-use-postgres.md?raw";
+import alerts from "./fixtures/alerts.md?raw";
 import frontmatterDocs from "./fixtures/frontmatter-docs.md?raw";
 import frontmatterInvalid from "./fixtures/frontmatter-invalid.md?raw";
 import frontmatterNested from "./fixtures/frontmatter-nested.md?raw";
@@ -14,6 +15,7 @@ import { blocksForLines, renderMarkdown, type SourcePoint, type SourceRange } fr
 
 const fixtures = {
   adr,
+  alerts,
   rfd,
   xss,
   "frontmatter-docs": frontmatterDocs,
@@ -38,7 +40,7 @@ function expectValidRange(source: string, range: SourceRange) {
 }
 
 /** Text the pipeline generates without source (footnote chrome and reference numbers). */
-const GENERATED_TEXT = new Set(["Footnotes", "↩", "1"]);
+const GENERATED_TEXT = new Set(["Footnotes", "↩", "1", "Note", "Tip", "Important", "Warning", "Caution"]);
 
 describe.each(Object.entries(fixtures))("%s fixture", (name, source) => {
   const doc = renderMarkdown(source);
@@ -72,9 +74,11 @@ describe.each(Object.entries(fixtures))("%s fixture", (name, source) => {
           expect(GENERATED_TEXT, `unmapped text ${JSON.stringify(node.value)}`).toContain(node.value);
         } else {
           expectValidRange(source, range as SourceRange);
-          const slice = normalizeText(source.slice(range.start.offset, range.end.offset));
+          // Compared without line indentation and blockquote markers, which paragraph text drops.
+          const flat = (t: string) => normalizeText(t).replace(/^[ \t]*(>[ \t]?)*/gm, "");
+          const slice = flat(source.slice(range.start.offset, range.end.offset));
           // trim(): remark-rehype appends a space to the text before a footnote back-reference.
-          if (!GENERATED_TEXT.has(node.value)) expect(slice).toContain(normalizeText(node.value.trim()));
+          if (!GENERATED_TEXT.has(node.value)) expect(slice).toContain(flat(node.value.trim()));
         }
       }
       if (node.type === "element") {
@@ -247,6 +251,79 @@ describe("front matter", () => {
     const h1 = doc.nodes.find((n) => n.type === "heading")!;
     expect(h1.headingPath).toEqual(["Array.prototype.map()"]);
     expect(doc.nodes.filter((n) => n.type === "yamlEntry").every((n) => n.headingPath.length === 0)).toBe(true);
+  });
+});
+
+describe("GitHub alerts", () => {
+  const html = (md: string) =>
+    toHtml(renderMarkdown(md).tree)
+      .trim()
+      .replace(/ data-rr-(id="\d+"|unmapped)/g, "")
+      .replace(/<svg[^]*?<\/svg>/g, "<svg/>");
+
+  test("a marked top-level blockquote renders as a titled callout without the marker", () => {
+    expect(html("> [!NOTE]\n> Body")).toBe(
+      '<div class="markdown-alert markdown-alert-note"><p class="markdown-alert-title"><svg/>Note</p>\n<p>Body</p>\n</div>',
+    );
+  });
+
+  test.each([
+    ["tip", "Tip"],
+    ["important", "Important"],
+    ["warning", "Warning"],
+    ["caution", "Caution"],
+  ])("%s alerts", (type, title) => {
+    expect(html(`> [!${type.toUpperCase()}]\n> Body`)).toContain(
+      `<div class="markdown-alert markdown-alert-${type}"><p class="markdown-alert-title"><svg/>${title}</p>`,
+    );
+  });
+
+  test("the icon is decorative", () => {
+    const svg = /<svg[^>]*>/.exec(toHtml(renderMarkdown("> [!TIP]\n> Body").tree))![0];
+    expect(svg).toContain('aria-hidden="true"');
+  });
+
+  test("the marker is case-insensitive and may stand alone or before a hard break", () => {
+    const doc = renderMarkdown(alerts);
+    const callouts = doc.nodes.filter((n) => n.tagName === "div").map((n) => n.text);
+    expect(callouts).toEqual([
+      "NoteUseful information that users should know.",
+      "TipHelpful advice for doing things better.",
+      "ImportantKey information users need to know.",
+      "WarningUrgent info that needs immediate attention.with a list",
+      "CautionLazy continuation of a caution.",
+    ]);
+  });
+
+  test.each([
+    ["text on the marker line", "> [!NOTE] Text."],
+    ["an unknown type", "> [!FOO]\n> Body"],
+    ["a marker with no content", "> [!NOTE]"],
+    ["a marker after the first line", "> Text.\n> [!NOTE]\n> Body"],
+    ["a nested blockquote", "> > [!NOTE]\n> > Body"],
+    ["a blockquote inside a list", "- Item\n\n  > [!NOTE]\n  > Body"],
+  ])("%s stays a blockquote", (_, md) => {
+    const out = html(md);
+    expect(out).toContain("<blockquote>");
+    expect(out).toContain("[!");
+    expect(out).not.toContain("markdown-alert");
+  });
+
+  test("the callout maps to the blockquote's range; its first paragraph starts after the marker", () => {
+    const doc = renderMarkdown("> [!NOTE]\n> Body\n\n> [!TIP]\n>\n> Tip body\n");
+    const at = (l: number) => blocksForLines(doc, l, l).map((n) => `${n.type}:${n.tagName}:${n.text}`);
+    expect(at(1)).toEqual(["blockquote:div:NoteBody"]);
+    expect(at(2)).toEqual(["paragraph:p:Body"]);
+    expect(at(4)).toEqual(["blockquote:div:TipTip body"]);
+    expect(at(6)).toEqual(["paragraph:p:Tip body"]);
+    const body = doc.nodes.find((n) => n.text === "Body")!;
+    expect([body.range.start.line, body.range.start.column]).toEqual([2, 3]);
+  });
+
+  test("the title is generated, not selectable source text", () => {
+    expect(toHtml(renderMarkdown("> [!NOTE]\n> Body").tree)).toContain(
+      '<p class="markdown-alert-title" data-rr-unmapped>',
+    );
   });
 });
 
