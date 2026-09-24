@@ -37,6 +37,8 @@ beforeEach(() => {
     [`${API}/pulls/45377/comments?per_page=100`]: fixture("review-comments.json"),
     [`${API}/pulls/45377/reviews?per_page=100`]: fixture("reviews.json"),
     [`${API}/issues/45377/comments?per_page=100`]: fixture("issue-comments.json"),
+    // The base revision of the modified document, read by path instead of through the base tree.
+    [`${API}/contents/${INDEX}?ref=${BASE}`]: fixture("blob-4e1326aa2512d4d8eec8533471eee0dc684de810.md"),
   };
   for (const oid of [
     "1a05f7e9c35e2bb310563708351758307f34a599",
@@ -125,6 +127,26 @@ it("binds the selected doc to the URL and marks changed sections of a modified d
   expect(screen.getByRole("note", { name: "Changed-section legend" })).toBeTruthy();
 });
 
+it("opens changed docs without fetching a recursive tree", async () => {
+  renderPage(`?doc=${encodeURIComponent(INDEX)}`);
+  const article = await screen.findByRole("article", { name: "Rendered document" });
+  await vi.waitFor(() => expect(article.querySelector('[data-rr-change="modified"]')).toBeTruthy());
+  await userEvent.click(fileLink(/102\/index\.md/));
+  await screen.findByText(/Deleted in this pull request/);
+  expect(requested.filter((u) => u.includes("/git/trees/"))).toEqual([]);
+});
+
+it("fetches the head tree once for All docs, not per document open", async () => {
+  const head = withHead("c".repeat(40), fixture("tree-head.json"));
+  renderPage("?files=all");
+  await userEvent.click(await screen.findByRole("link", { name: /status\/index\.md, modified/ }));
+  await screen.findByRole("article", { name: "Rendered document" });
+  await userEvent.click(fileLink(/README\.md, unchanged/));
+  await userEvent.click(fileLink(/status\/index\.md, modified/));
+  await screen.findByRole("article", { name: "Rendered document" });
+  expect(requested.filter((u) => u.includes("/git/trees/"))).toEqual([`${API}/git/trees/${head}?recursive=1`]);
+});
+
 it("shows a document's front matter as terms and definitions, not as a heading", async () => {
   renderPage(`?doc=${encodeURIComponent(INDEX)}`);
   const article = await screen.findByRole("article", { name: "Rendered document" });
@@ -185,6 +207,85 @@ it("lists every head Markdown file under All docs, bound to the files param", as
       .getByRole("button", { name: /All docs/ })
       .getAttribute("aria-pressed"),
   ).toBe("true");
+});
+
+/** Serves the PR at a fresh head commit with `tree`: trees are cached by OID for the whole test file. */
+function withHead(sha: string, tree: string) {
+  const pr = JSON.parse(fixture("pull.json")) as { head: { sha: string } };
+  pr.head.sha = sha;
+  responses[`${API}/pulls/45377`] = JSON.stringify(pr);
+  responses[`${API}/git/trees/${sha}?recursive=1`] = tree;
+  return sha;
+}
+
+// A synthetic head tree the size of a very large documentation repository.
+const BIG = 15_000;
+const bigPath = (i: number) => `docs/${String(i).padStart(5, "0")}.md`;
+const withBigTree = () =>
+  withHead(
+    "e".repeat(40),
+    JSON.stringify({
+      sha: "e".repeat(40),
+      truncated: false,
+      tree: Array.from({ length: BIG }, (_, i) => ({
+        path: bigPath(i),
+        mode: "100644",
+        type: "blob",
+        sha: i.toString(16).padStart(40, "0"),
+      })),
+    }),
+  );
+const allList = () => screen.findByRole("list", { name: "All documents" });
+const rows = (list: HTMLElement) => within(list).getAllByRole("listitem");
+const activeRow = () => document.activeElement!.closest("li")!;
+
+it("renders only a window of a 15,000-document All docs list, with the list size exposed", async () => {
+  withBigTree();
+  renderPage("?files=all");
+  const list = await allList();
+  await vi.waitFor(() => expect(rows(list).length).toBeGreaterThan(0));
+  expect(rows(list).length).toBeLessThan(100);
+  expect(rows(list)[0]!.getAttribute("aria-setsize")).toBe(String(BIG));
+  expect(rows(list)[0]!.getAttribute("aria-posinset")).toBe("1");
+  expect(within(sidebar()).getByRole("button", { name: /All docs/ }).textContent).toContain(String(BIG));
+});
+
+it("moves through the whole virtualized list with the keyboard", async () => {
+  withBigTree();
+  renderPage("?files=all");
+  const list = await allList();
+  within(list).getAllByRole("link")[0]!.focus();
+  await userEvent.keyboard("{End}");
+  expect(activeRow().getAttribute("aria-posinset")).toBe(String(BIG));
+  expect(document.activeElement!.getAttribute("title")).toBe(bigPath(BIG - 1));
+  await userEvent.keyboard("{ArrowUp}");
+  expect(document.activeElement!.getAttribute("title")).toBe(bigPath(BIG - 2));
+  await userEvent.keyboard("{Home}");
+  expect(activeRow().getAttribute("aria-posinset")).toBe("1");
+  await userEvent.keyboard("{ArrowDown}");
+  expect(document.activeElement!.getAttribute("title")).toBe(bigPath(1));
+  expect(rows(list).length).toBeLessThan(100);
+});
+
+it("keeps a deep-linked document far down the All docs list reachable", async () => {
+  withBigTree();
+  renderPage(`?files=all&doc=${encodeURIComponent(bigPath(9_000))}`);
+  const list = await allList();
+  const link = await within(list).findByRole("link", { current: "page" });
+  expect(link.getAttribute("title")).toBe(bigPath(9_000));
+  expect(link.getAttribute("tabindex")).toBe("0");
+});
+
+it("filters All docs by path, case-insensitively, and announces the count", async () => {
+  withBigTree();
+  renderPage("?files=all");
+  await allList();
+  await userEvent.type(within(sidebar()).getByRole("searchbox", { name: "Filter documents" }), "DOCS/0999");
+  // 09990 to 09999.
+  await vi.waitFor(() => expect(within(sidebar()).getByRole("status").textContent).toBe("10 documents"));
+  const first = rows(await allList())[0]!;
+  expect(first.getAttribute("aria-setsize")).toBe("10");
+  expect(within(first).getByRole("link").getAttribute("title")).toBe(bigPath(9_990));
 });
 
 it("moves between files with the arrow keys", async () => {

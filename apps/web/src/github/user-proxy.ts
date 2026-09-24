@@ -58,9 +58,11 @@ export async function proxyUserGitHub(
   const url = new URL(request.url);
   const target = parseProxyPath(url, USER_PREFIX, allowedHosts);
   if (target instanceof Response) return target;
-  const { host, path } = target;
-  const threads = url.search ? null : REVIEW_THREADS.exec(path);
-  if (!threads && !classifyPath(path, url.searchParams)) return reject(403, "Path not allowed");
+  const { host } = target;
+  const threads = url.search ? null : REVIEW_THREADS.exec(target.path);
+  // Forward the canonical path, exactly what was validated.
+  const path = threads ? target.path : classifyPath(target.path, url.searchParams)?.path;
+  if (!path) return reject(403, "Path not allowed");
 
   const user = await identity.getSessionUser(request.headers);
   if (!user) return deny(401, "unauthenticated", "Sign in with GitHub");

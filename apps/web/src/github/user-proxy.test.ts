@@ -104,9 +104,29 @@ describe("proxyUserGitHub", () => {
     expect(res.headers.get("cache-control")).toBe("private, no-store");
   });
 
+  it("reads a file at a commit OID, raw", async () => {
+    const { fetch, call } = setup();
+    const path = `github.com/repos/acme/three/contents/docs/index.md?ref=${OID}`;
+    const res = await call(path, { headers: { accept: "application/vnd.github.raw+json" } });
+    expect(res.status).toBe(200);
+    expect(fetch.mock.calls[1]![0]).toBe(`https://api.github.com/repos/acme/three/contents/docs/index.md?ref=${OID}`);
+    expect(fetch.mock.calls[1]![1]?.headers).toHaveProperty("Accept", "application/vnd.github.raw+json");
+  });
+
+  it("forwards a file path re-encoded from the validated names", async () => {
+    const { fetch, call } = setup();
+    await call(`github.com/repos/acme/four/contents/notes/caf%c3%a9 (1).md?ref=${OID}`);
+    expect(fetch.mock.calls[1]![0]).toBe(
+      `https://api.github.com/repos/acme/four/contents/notes/caf%C3%A9%20(1).md?ref=${OID}`,
+    );
+  });
+
   it.each([
     "github.com/user",
     "github.com/repos/acme/x/contents/README.md",
+    "github.com/repos/acme/x/contents/README.md?ref=main",
+    `github.com/repos/acme/x/contents/%2e%2e/%2e%2e/user?ref=${OID}`,
+    `github.com/repos/acme/x/contents/%252e%252e/%252e%252e/user?ref=${OID}`,
     "github.com/graphql",
     "evil.example.com/repos/a/b/pulls/1",
   ])("rejects %s", async (path) => {
