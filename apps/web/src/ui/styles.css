@@ -1344,6 +1344,9 @@ samp {
 .rr-markdown .rr-frontmatter > [data-rr-change]::before {
   left: -43px; /* -28px less the block's border and padding */
 }
+.rr-markdown .rr-mdx > [data-rr-change]::before {
+  left: -41px; /* -28px less the MDX box's border and padding */
+}
 
 /* Rendered Markdown typography */
 .rr-markdown {
