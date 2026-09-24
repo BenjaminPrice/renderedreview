@@ -40,7 +40,12 @@ describe("proxyPublicGitHub", () => {
     const logs = captureLogs();
     await setup().call("github.com/repos/acme/widgets/pulls/1/files?per_page=100");
     expect(logs.events()).toEqual([
-      expect.objectContaining({ event: "github.request", host: "api.github.com", route: "/repos/:/:/pulls/:/files", status: 200 }),
+      expect.objectContaining({
+        event: "github.request",
+        host: "api.github.com",
+        route: "/repos/:/:/pulls/:/files",
+        status: 200,
+      }),
     ]);
     expect(logs.raw()).not.toMatch(/acme|widgets/);
   });

@@ -17,14 +17,11 @@ export interface LogFields {
   method?: string;
   status?: number;
   durationMs?: number;
-  attempt?: number;
   count?: number;
   rateLimitRemaining?: number;
-  retryAfterSeconds?: number;
-  ok?: boolean;
 }
 
-const TYPES: Record<keyof LogFields, "string" | "number" | "boolean"> = {
+const TYPES: Record<keyof LogFields, "string" | "number"> = {
   category: "string",
   error: "string",
   outcome: "string",
@@ -33,29 +30,24 @@ const TYPES: Record<keyof LogFields, "string" | "number" | "boolean"> = {
   method: "string",
   status: "number",
   durationMs: "number",
-  attempt: "number",
   count: "number",
   rateLimitRemaining: "number",
-  retryAfterSeconds: "number",
-  ok: "boolean",
 };
 // No spaces, `@`, `?`, `=` or quotes: rules out prose, emails and query strings.
 const SAFE_STRING = /^[\w.:/*-]*$/;
 const MAX_STRING = 100;
 const EVENT = /^[a-z][\w.-]{0,63}$/;
 // Workers Logs indexes the fields of a logged object; elsewhere a JSON line is the portable form.
-const WORKERS = () => globalThis.navigator?.userAgent === "Cloudflare-Workers";
+const WORKERS = () =>
+  (globalThis as { navigator?: { userAgent?: string } }).navigator?.userAgent === "Cloudflare-Workers";
 
-function redact(fields: LogFields): Record<string, string | number | boolean> {
-  const out: Record<string, string | number | boolean> = {};
+function redact(fields: LogFields): Record<string, string | number> {
+  const out: Record<string, string | number> = {};
   for (const [key, value] of Object.entries(fields)) {
     const type = TYPES[key as keyof LogFields];
     if (!Object.hasOwn(TYPES, key) || typeof value !== type) continue;
-    if (typeof value === "string") {
-      if (SAFE_STRING.test(value)) out[key] = value.slice(0, MAX_STRING);
-    } else if (typeof value === "number") {
-      if (Number.isFinite(value)) out[key] = Math.round(value);
-    } else out[key] = value as boolean;
+    if (typeof value === "string" ? SAFE_STRING.test(value) : Number.isFinite(value))
+      out[key] = typeof value === "string" ? value.slice(0, MAX_STRING) : Math.round(value as number);
   }
   return out;
 }

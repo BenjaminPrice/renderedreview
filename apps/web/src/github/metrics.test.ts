@@ -52,9 +52,19 @@ describe("meteredFetch", () => {
 
   it("warns on GitHub errors and rate limits", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const fetch = meteredFetch(async () => new Response("{}", { status: 403, headers: { "x-ratelimit-remaining": "0" } }));
+    const fetch = meteredFetch(
+      async () => new Response("{}", { status: 403, headers: { "x-ratelimit-remaining": "0" } }),
+    );
     await fetch(new Request("https://api.github.com/graphql", { method: "POST", body: "{}" }));
-    expect(lines(warn)).toEqual([expect.objectContaining({ route: "/graphql", method: "POST", status: 403, outcome: "error", rateLimitRemaining: 0 })]);
+    expect(lines(warn)).toEqual([
+      expect.objectContaining({
+        route: "/graphql",
+        method: "POST",
+        status: 403,
+        outcome: "error",
+        rateLimitRemaining: 0,
+      }),
+    ]);
   });
 
   it("logs a network failure by error class and rethrows it", async () => {

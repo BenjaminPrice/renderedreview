@@ -19,7 +19,8 @@ export function createRequestContext(): RequestContext {
       secrets: { get: async (name) => process.env[name] },
       scheduler: {
         // Node keeps running after the response, so only make sure failures are logged.
-        waitUntil: (work) => void work.catch((error: unknown) => log.error("background.failed", { error: errorName(error) })),
+        waitUntil: (work) =>
+          void work.catch((error: unknown) => log.error("background.failed", { error: errorName(error) })),
       },
       db: config.databaseUrl ? migrated(openDatabase(config.databaseUrl)) : undefined,
     };

@@ -327,10 +327,25 @@ describe("comment", () => {
       "comment",
       comment({ body: withMarker("more secret words") }),
     );
-    expect(logs.events()).toContainEqual({ level: "info", event: "github.publish", category: "stale-head", status: 409 });
-    expect(logs.events()).toContainEqual({ level: "info", event: "github.publish", category: "published", status: 201 });
+    expect(logs.events()).toContainEqual({
+      level: "info",
+      event: "github.publish",
+      category: "stale-head",
+      status: 409,
+    });
+    expect(logs.events()).toContainEqual({
+      level: "info",
+      event: "github.publish",
+      category: "published",
+      status: 201,
+    });
     expect(logs.events()).toContainEqual(
-      expect.objectContaining({ event: "github.request", method: "POST", route: "/repos/:/:/pulls/:/comments", status: 201 }),
+      expect.objectContaining({
+        event: "github.request",
+        method: "POST",
+        route: "/repos/:/:/pulls/:/comments",
+        status: 201,
+      }),
     );
     expect(logs.raw()).not.toMatch(/secret words|app-token|acme|widgets|rendered-review:|docs\/a\.md|octocat/);
   });

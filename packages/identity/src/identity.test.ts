@@ -113,7 +113,9 @@ async function signIn(identity: Identity, callbackURL: string, base = BASE) {
 
 /** Everything written to the console while `run` runs: parsed log events and the raw text. */
 async function consoleDuring(run: () => Promise<unknown>) {
-  const spies = (["log", "info", "warn", "error"] as const).map((l) => vi.spyOn(console, l).mockImplementation(() => {}));
+  const spies = (["log", "info", "warn", "error"] as const).map((l) =>
+    vi.spyOn(console, l).mockImplementation(() => {}),
+  );
   let lines: string[];
   try {
     await run();
@@ -497,8 +499,13 @@ describe.each(databases)("GitHub sign-in on %s", (_, open) => {
     it("logs a rejected refresh by category, never the token or GitHub's message", async () => {
       await signIn(identity, "/");
       vi.useFakeTimers({ now: Date.now() + 28800 * 1000, toFake: ["Date"] });
-      tokenReply = () => ({ error: "bad_refresh_token", error_description: "The refresh token ghr_refreshToken1 is bad." });
-      const { events, raw } = await consoleDuring(async () => identity.getUserGitHubToken(await userId(), "github.com"));
+      tokenReply = () => ({
+        error: "bad_refresh_token",
+        error_description: "The refresh token ghr_refreshToken1 is bad.",
+      });
+      const { events, raw } = await consoleDuring(async () =>
+        identity.getUserGitHubToken(await userId(), "github.com"),
+      );
       expect(events).toEqual([{ level: "warn", event: "auth.failure", category: "refresh-rejected" }]);
       expect(raw).not.toMatch(/ghr_|ghu_|refresh token/);
     });

@@ -44,7 +44,13 @@ describe("withErrorLog", () => {
     const error = new SyntaxError("Unexpected token in acme/secret-app plans.md: ghu_token");
     await expect(withErrorLog(request, () => Promise.reject(error))).rejects.toBe(error);
     expect(logs.events()).toEqual([
-      { level: "error", event: "server.error", method: "GET", route: "/:host/:owner/:repo/pull/:number", error: "SyntaxError" },
+      {
+        level: "error",
+        event: "server.error",
+        method: "GET",
+        route: "/:host/:owner/:repo/pull/:number",
+        error: "SyntaxError",
+      },
     ]);
     expect(logs.raw()).not.toMatch(/acme|secret|plans|ghu_/);
   });

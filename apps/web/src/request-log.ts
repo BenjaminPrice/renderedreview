@@ -3,7 +3,14 @@
 // repositories and files, and error messages can quote them (or tokens), so neither is logged.
 import { errorName, log } from "@rendered-review/runtime";
 
-const PREFIXES = ["/api/github/public/", "/api/github/user/", "/api/github/write/", "/api/auth/", "/_serverFn/", "/assets/"];
+const PREFIXES = [
+  "/api/github/public/",
+  "/api/github/user/",
+  "/api/github/write/",
+  "/api/auth/",
+  "/_serverFn/",
+  "/assets/",
+];
 const EXACT = new Set(["/", "/health", "/frames/mermaid"]);
 const PULL = /^\/[^/]+\/[^/]+\/[^/]+\/pull\/\d+\/?$/;
 
@@ -16,7 +23,7 @@ export function appRoute(pathname: string): string {
 }
 
 /** Runs `handle`, logging a `server.error` event for a 5xx response or a thrown error (rethrown). */
-export async function withErrorLog(request: Request, handle: () => Promise<Response>): Promise<Response> {
+export async function withErrorLog(request: Request, handle: () => Response | Promise<Response>): Promise<Response> {
   const fields = { method: request.method, route: appRoute(new URL(request.url).pathname) };
   try {
     const response = await handle();

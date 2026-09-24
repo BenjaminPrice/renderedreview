@@ -124,7 +124,10 @@ export async function createIdentity({
     telemetry: { enabled: false },
     // Better Auth's messages and arguments can carry codes, tokens or profiles: only their level
     // is logged. Failures are logged by category in `handle`.
-    logger: { level: "warn", log: (level) => log[level === "error" ? "error" : "warn"]("auth.library", { category: level }) },
+    logger: {
+      level: "warn",
+      log: (level) => log[level === "error" ? "error" : "warn"]("auth.library", { category: level }),
+    },
     socialProviders: {
       github: {
         clientId: app.clientId,
@@ -311,5 +314,6 @@ function logFailure(route: string, response: Response) {
   const location = response.headers.get("location");
   const category = location && new URL(location, "http://x").searchParams.get("error");
   if (category) log.warn("auth.failure", { route, category });
-  else if (response.status >= 400 && response.status !== 404) log.warn("auth.failure", { route, status: response.status });
+  else if (response.status >= 400 && response.status !== 404)
+    log.warn("auth.failure", { route, status: response.status });
 }
