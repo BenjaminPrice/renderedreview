@@ -3,7 +3,8 @@ import type { ChangedFile, Tree } from "@rendered-review/github-integration";
 import { renderMarkdown } from "@rendered-review/markdown-domain";
 import { describe, expect, it } from "vitest";
 import { allDocs, changedDocs, changedLines, selectedPath, sourceUrl } from "./docs";
-import { changeMarks } from "./document";
+import type { PrIdentity } from "../github/queries";
+import { changeMarks, inAppDocLink } from "./document";
 
 const file = (path: string, status: ChangedFile["status"], extra: Partial<ChangedFile> = {}): ChangedFile => ({
   path,
@@ -106,5 +107,15 @@ describe("sourceUrl", () => {
     expect(sourceUrl({ ...repo, host: "ghe.example.com" }, "abc", "README.md")).toBe(
       "https://ghe.example.com/o/r/blob/abc/README.md",
     );
+  });
+});
+
+describe("inAppDocLink", () => {
+  const id = { host: "github.com", owner: "o", repo: "r", number: 7 } as PrIdentity;
+  it("routes Markdown links to the document in this PR and leaves other files to GitHub", () => {
+    expect(inAppDocLink(id, "docs/a b.md", "?x=1#usage")).toBe("/github.com/o/r/pull/7?doc=docs%2Fa+b.md#usage");
+    expect(inAppDocLink(id, "README.md", "")).toBe("/github.com/o/r/pull/7?doc=README.md");
+    expect(inAppDocLink(id, "src/index.ts", "")).toBeUndefined();
+    expect(inAppDocLink(id, "docs/", "")).toBeUndefined();
   });
 });

@@ -3,10 +3,12 @@
 // result and the article element (`containerRef`), and finds rendered blocks with `nodeElement`.
 import { blocksForLines, renderMarkdown, type RenderedMarkdown } from "@rendered-review/markdown-domain";
 import { useQuery } from "@tanstack/react-query";
+import { useRouter } from "@tanstack/react-router";
 import type { Element, Root } from "hast";
 import { toJsxRuntime } from "hast-util-to-jsx-runtime";
 import { useMemo, type Ref } from "react";
 import { Fragment, jsx, jsxs } from "react/jsx-runtime";
+import { isMarkdownPath } from "../pr-url";
 import { blobQuery, type PrIdentity, treeQuery } from "../github/queries";
 import { type ChangeKind, changedLines, type DocEntry, type LineChange, sourceUrl, splitLines } from "./docs";
 
@@ -17,13 +19,27 @@ export const MAX_RENDER_CHARS = 1_000_000;
 const RENDER_CACHE_SIZE = 32;
 const renderCache = new Map<string, RenderedMarkdown>();
 
-/** `renderMarkdown` memoized by blob OID, so UI state changes and revisits never reparse. */
-function renderBlob(oid: string, source: string): RenderedMarkdown {
-  let rendered = renderCache.get(oid);
+/** In-app route for a repository Markdown file; other links keep GitHub's default. */
+export function inAppDocLink(id: PrIdentity, path: string, suffix: string): string | undefined {
+  if (!isMarkdownPath(path)) return undefined;
+  const hash = suffix.includes("#") ? suffix.slice(suffix.indexOf("#")) : "";
+  return `/${id.host}/${id.owner}/${id.repo}/pull/${id.number}?${new URLSearchParams({ doc: path })}${hash}`;
+}
+
+/**
+ * `renderMarkdown` memoized by blob and location, so UI state changes and revisits never
+ * reparse. Relative links and images resolve at `sha`; Markdown links open in this PR.
+ */
+function renderBlob(id: PrIdentity, sha: string, entry: DocEntry, source: string): RenderedMarkdown {
+  const key = `${entry.oid}:${sha}:${entry.path}`;
+  let rendered = renderCache.get(key);
   if (!rendered) {
-    rendered = renderMarkdown(source);
+    rendered = renderMarkdown(source, {
+      location: { host: id.host, owner: id.owner, repo: id.repo, commitOid: sha, path: entry.path },
+      resolveLink: (path, suffix) => inAppDocLink(id, path, suffix),
+    });
     if (renderCache.size >= RENDER_CACHE_SIZE) renderCache.delete(renderCache.keys().next().value!);
-    renderCache.set(oid, rendered);
+    renderCache.set(key, rendered);
   }
   return rendered;
 }
@@ -50,10 +66,11 @@ export function useDocument(id: PrIdentity, entry: DocEntry | undefined): Loaded
   const base = useQuery({ ...blobQuery(id, baseOid ?? ""), enabled: !!baseOid });
 
   const source = head.data;
+  const sha = deleted ? id.baseSha : id.headSha;
   const tooLarge = (source?.length ?? 0) > MAX_RENDER_CHARS;
   const rendered = useMemo(
-    () => (entry && source !== undefined && !tooLarge ? renderBlob(entry.oid, source) : undefined),
-    [entry, source, tooLarge],
+    () => (entry && source !== undefined && !tooLarge ? renderBlob(id, sha, entry, source) : undefined),
+    [id, sha, entry, source, tooLarge],
   );
   const baseSource = entry?.status === "added" ? "" : base.data;
   const changes = useMemo(
@@ -65,7 +82,7 @@ export function useDocument(id: PrIdentity, entry: DocEntry | undefined): Loaded
     rendered,
     tooLarge,
     changes,
-    sha: deleted ? id.baseSha : id.headSha,
+    sha,
     // A missing base blob only costs the change markers; don't fail the document for it.
     error: head.error,
   };
@@ -115,8 +132,22 @@ export function RenderedDocument({
     () => toJsxRuntime(withMarks(rendered.tree, changeMarks(rendered, changes)), { Fragment, jsx, jsxs }),
     [rendered, changes],
   );
+  const router = useRouter();
   return (
-    <article ref={containerRef} className="rr-markdown" aria-label="Rendered document">
+    <article
+      ref={containerRef}
+      className="rr-markdown"
+      aria-label="Rendered document"
+      onClick={(event) => {
+        // Links to other documents in this PR navigate in-app instead of reloading the page.
+        const link = (event.target as HTMLElement).closest("a");
+        const href = link?.getAttribute("href");
+        if (!link || !href || href.startsWith("#") || link.origin !== window.location.origin) return;
+        if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        event.preventDefault();
+        void router.navigate({ href: link.pathname + link.search + link.hash });
+      }}
+    >
       {content}
     </article>
   );
