@@ -3,7 +3,7 @@
 // only, so the same code runs on Node and Workers; the runtime supplies the SqlDatabase.
 import { betterAuth } from "better-auth/minimal";
 import { genericOAuth } from "better-auth/plugins/generic-oauth";
-import type { AppConfig, SqlDatabase } from "@rendered-review/runtime";
+import { type AppConfig, log, type SqlDatabase } from "@rendered-review/runtime";
 import { sqlAdapter } from "./sql-adapter";
 import { createTokenCipher } from "./token-cipher";
 
@@ -122,6 +122,9 @@ export async function createIdentity({
     secret: config.authSecret,
     database: sqlAdapter(db, cipher),
     telemetry: { enabled: false },
+    // Better Auth's messages and arguments can carry codes, tokens or profiles: only their level
+    // is logged. Failures are logged by category in `handle`.
+    logger: { level: "warn", log: (level) => log[level === "error" ? "error" : "warn"]("auth.library", { category: level }) },
     socialProviders: {
       github: {
         clientId: app.clientId,
@@ -250,7 +253,10 @@ export async function createIdentity({
           });
           return tokens.accessToken;
         } catch (error) {
-          if (error instanceof RefreshRejected) return null;
+          if (error instanceof RefreshRejected) {
+            log.warn("auth.failure", { category: "refresh-rejected" });
+            return null;
+          }
           throw error;
         } finally {
           refreshing.delete(account.id);
@@ -290,6 +296,7 @@ export async function createIdentity({
     } else {
       response = new Response("Not Found", { status: 404 });
     }
+    logFailure(path, response);
     // Auth responses are per user: never cached, by the browser, a CDN or the service worker.
     const out = new Response(response.body, response);
     out.headers.set("cache-control", "no-store");
@@ -297,4 +304,12 @@ export async function createIdentity({
   }
 
   return { handle, getSessionUser, getUserGitHubToken, getUserPublicWriteToken };
+}
+
+/** Logs a failed sign-in step by route and category: an error redirect's code, or the status. */
+function logFailure(route: string, response: Response) {
+  const location = response.headers.get("location");
+  const category = location && new URL(location, "http://x").searchParams.get("error");
+  if (category) log.warn("auth.failure", { route, category });
+  else if (response.status >= 400 && response.status !== 404) log.warn("auth.failure", { route, status: response.status });
 }
