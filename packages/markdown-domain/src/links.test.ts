@@ -31,6 +31,8 @@ describe("external links open in a new tab without a referrer", () => {
     ["an http autolink", "www.example.com"],
     ["a GitHub permalink", "[x](https://github.com/acme/specs/blob/abc/a.md#L3)"],
     ["a repository link resolved to its GitHub blob", "[x](other.txt)"],
+    ["a protocol-relative link", "[x](//example.com/x)"],
+    ["an uppercase protocol-relative link in raw HTML", '<a href=" //EXAMPLE.com/x">x</a>'],
   ])("%s", (_, markdown) => {
     expect(opensNewTab(links(markdown)[0])).toEqual(NEW_TAB);
   });
