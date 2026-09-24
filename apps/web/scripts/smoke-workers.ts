@@ -8,6 +8,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { checkCsp } from "./check-csp.ts";
+import { checkRenderWorker } from "./check-render-worker.ts";
 
 const wrangler = new URL("../node_modules/wrangler/bin/wrangler.js", import.meta.url).pathname;
 const cwd = new URL("..", import.meta.url);
@@ -62,6 +63,7 @@ await serve([], async (origin) => {
   assert.match(home.headers.get("content-type") ?? "", /text\/html/);
   console.log("ok: / renders");
   await checkCsp(`${origin}/`);
+  await checkRenderWorker(new URL("../dist/client/assets/", import.meta.url));
 
   const pr = await fetch(`${origin}/github.com/octocat/hello-world/pull/1`);
   assert.equal(pr.status, 200);
