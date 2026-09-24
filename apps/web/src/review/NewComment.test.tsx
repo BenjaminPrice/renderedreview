@@ -2,6 +2,7 @@
 // @vitest-environment happy-dom
 // The Overview's "Add a comment" box: a plain PR conversation comment through the write boundary.
 import { extractAnnotation } from "@rendered-review/annotation-domain";
+import { type BrowserCache, openBrowserCache } from "@rendered-review/browser-cache";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -38,20 +39,22 @@ type Viewer = { signInEnabled: boolean; signedIn: boolean; login?: string };
 function mount(
   viewer: Viewer = { signInEnabled: true, signedIn: true, login: "octocat" },
   response: () => Response = () => Response.json({ comment: { id: 1 } }, { status: 201 }),
+  cache: BrowserCache = openBrowserCache(),
 ) {
   const fetch = vi.fn<(url: string, init: RequestInit) => Promise<Response>>(async () => response());
   vi.stubGlobal("fetch", fetch);
   const client = new QueryClient();
   client.setQueryData(viewerQuery.queryKey, viewer);
   const invalidate = vi.spyOn(client, "invalidateQueries");
-  render(
+  const ui = (
     <QueryClientProvider client={client}>
-      <NewConversationComment id={id} isPrivate />
-    </QueryClientProvider>,
+      <NewConversationComment id={id} isPrivate cache={cache} />
+    </QueryClientProvider>
   );
+  const { unmount } = render(ui);
   const sent = () =>
     fetch.mock.calls.map(([url, init]) => ({ url, body: JSON.parse(init.body as string) as Record<string, unknown> }));
-  return { sent, invalidate };
+  return { sent, invalidate, remount: () => (unmount(), render(ui)) };
 }
 
 const box = () => screen.getByRole("textbox", { name: "Add a comment" });
@@ -131,6 +134,13 @@ it("asks GitHub for public-repository permission when publishing needs it", asyn
   expect((await screen.findByRole("alert")).textContent).toMatch(/permission to comment on public repositories/);
   expect(authorizePublicComments).toHaveBeenCalled();
   expect((box() as HTMLTextAreaElement).value).toBe("Hello");
+});
+
+it("keeps unsent text when the Overview is left and opened again", async () => {
+  const { remount } = mount();
+  await userEvent.type(box(), "Unsent");
+  remount();
+  await vi.waitFor(() => expect((box() as HTMLTextAreaElement).value).toBe("Unsent"));
 });
 
 it("offers sign-in instead of a box to signed-out readers", async () => {

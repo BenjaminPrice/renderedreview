@@ -1,19 +1,33 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // The Overview's "Add a comment" box below the conversation: a plain PR conversation comment, not
 // anchored to any document, so it carries no annotation marker.
+import type { BrowserCache } from "@rendered-review/browser-cache";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { type KeyboardEvent, useEffect, useId, useRef, useState } from "react";
 import { commentMutation } from "../github/mutations";
 import { type PrIdentity, viewerQuery } from "../github/queries";
 import { signIn } from "../ui/Viewer";
+import { useUnsentComment } from "./drafts";
 import { Markdown } from "./Markdown";
 import { publishErrorMessage } from "./publish";
 import { initials } from "./ThreadCard";
 
-export function NewConversationComment({ id }: { id: PrIdentity; isPrivate: boolean }) {
+export function NewConversationComment({
+  id,
+  isPrivate,
+  cache,
+}: {
+  id: PrIdentity;
+  /** Private (or unknown visibility): unsent text stays in this tab's memory only. */
+  isPrivate: boolean;
+  cache?: BrowserCache;
+}) {
   const viewer = useQuery(viewerQuery).data;
   const comment = useMutation(commentMutation(id));
-  const [text, setText] = useState("");
+  const [text, setText] = useUnsentComment(
+    { host: id.host, repositoryId: id.repositoryId, number: id.number, private: isPrivate },
+    cache,
+  );
   const [preview, setPreview] = useState(false);
   const [sending, setSending] = useState(false);
   const [failure, setFailure] = useState<string>();
