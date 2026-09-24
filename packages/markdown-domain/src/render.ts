@@ -62,7 +62,9 @@ export interface SourceNode {
    * Markdown node type (`paragraph`, `heading`, `code`, `tableCell`, `emphasis`, ...) when the
    * element corresponds exactly to an mdast node, `part` for `thead`/`tbody`, otherwise `html`
    * (an element parsed from raw HTML). Front matter is `yaml` (the block), `yamlEntry` (one
-   * top-level key and its value), `yamlKey` and `yamlValue`.
+   * top-level key and its value), `yamlKey` and `yamlValue`. Inert MDX source keeps its MDX node
+   * type (`mdxjsEsm`, `mdxFlowExpression`, `mdxJsxFlowElement`, `mdxJsxTextElement`,
+   * `mdxTextExpression`); a JSX element's opening and closing tags are `mdxJsxTag`.
    */
   type: string;
   tagName: string;
