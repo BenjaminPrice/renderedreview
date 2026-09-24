@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { expect, it } from "vitest";
-import { MERMAID_FRAME_PATH, mermaidFrameResponse } from "./frame";
+import { MERMAID_FRAME_PATH, mermaidFrameResponse, RENDERER_FRAME_PATH, rendererFrameResponse } from "./frame";
 
 const frame = (script: string | null) =>
   mermaidFrameResponse(
@@ -56,4 +56,22 @@ it.each([
   "/a/%2E%2E/x.js",
 ])("refuses script %s", (script) => {
   expect(frame(script).status).toBe(400);
+});
+
+it("hosts bundled renderers in a Worker, allowing WebAssembly but no network", async () => {
+  const response = rendererFrameResponse(new Request(`https://rr.example${RENDERER_FRAME_PATH}`), "n0nce");
+  expect(response.status).toBe(200);
+  const csp = directives(response.headers.get("content-security-policy")!);
+  expect(csp["sandbox"]).toEqual(["allow-scripts"]);
+  expect(csp["default-src"]).toEqual(["'none'"]);
+  // WebAssembly compilation only: no string-to-code evaluation.
+  expect(csp["script-src"]).toEqual(["'nonce-n0nce'", "'wasm-unsafe-eval'"]);
+  // The Worker runs the renderer script the page hands over, from a blob URL made in the frame.
+  expect(csp["worker-src"]).toEqual(["blob:"]);
+  expect(csp["frame-ancestors"]).toEqual(["'self'"]);
+  expect(Object.keys(csp)).not.toContain("connect-src");
+  const html = await response.text();
+  // Only the host script: the renderer itself never runs in the frame's own thread.
+  expect(html.match(/<script/g)).toHaveLength(1);
+  expect(html).toMatch(/<script nonce="n0nce">[^<]*new Worker[^<]*<\/script>/);
 });

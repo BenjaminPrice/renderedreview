@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// The page Mermaid runs in: an application-controlled frame with its own strict policy. Its
-// `sandbox` CSP directive gives it an opaque origin even when opened directly, so the renderer
+// The pages diagram renderers run in: application-controlled frames with their own strict policy.
+// The `sandbox` CSP directive gives it an opaque origin even when opened directly, so the renderer
 // can never reach the app's cookies, storage or DOM; `default-src 'none'` stops all network
 // access except the renderer script itself. The parent posts `{ id, source, theme }` and gets
 // `{ id, svg }` or `{ id, error }` back; `{ ready: true }` announces the frame (`false`: the
@@ -11,6 +11,8 @@
 import { createNonce } from "../csp";
 
 export const MERMAID_FRAME_PATH = "/frames/mermaid";
+/** Hosts renderers bundled by this app (`*-frame.ts`, see ./frame-entry.ts) in a Worker. */
+export const RENDERER_FRAME_PATH = "/frames/renderer";
 
 // The script path comes from the request (`?script=`): the page passes the URL Vite assigned
 // Mermaid's browser build (a hashed `/assets/` file, or a dev-server path). It must be a plain
@@ -53,19 +55,61 @@ const BOOTSTRAP = `(() => {
   parent.postMessage({ ready: true }, "*");
 })();`;
 
+// Runs in the renderer frame: starts a Worker from the renderer script the page posts (as text:
+// the frame's opaque origin cannot load same-origin scripts into a Worker), then relays messages
+// both ways. The Worker keeps heavy layouts off every page thread, and inherits this policy.
+const WORKER_HOST = `(() => {
+  let worker;
+  addEventListener("message", (event) => {
+    if (event.source !== parent) return;
+    if (!worker && typeof event.data?.script === "string") {
+      worker = new Worker(URL.createObjectURL(new Blob([event.data.script], { type: "text/javascript" })));
+      worker.onmessage = (message) => parent.postMessage(message.data, "*");
+      worker.onerror = () => parent.postMessage({ ready: false }, "*");
+    } else if (worker) worker.postMessage(event.data);
+  });
+  parent.postMessage({ host: true }, "*");
+})();`;
+
 export function mermaidFrameResponse(request: Request, nonce = createNonce()): Response {
   const script = new URL(request.url).searchParams.get("script") ?? "";
   if (!isScriptPath(script)) return new Response("Bad renderer script", { status: 400 });
+  return frameResponse({ src: script, inline: BOOTSTRAP, nonce });
+}
+
+// Bundled renderers include WebAssembly builds: compiling WebAssembly is all `wasm-unsafe-eval`
+// allows. Only code in the frame can create the blob URLs `worker-src` admits.
+export function rendererFrameResponse(_request: Request, nonce = createNonce()): Response {
+  return frameResponse({
+    inline: WORKER_HOST,
+    nonce,
+    scriptSources: ["'wasm-unsafe-eval'"],
+    extra: ["worker-src blob:"],
+  });
+}
+
+function frameResponse(page: {
+  /** A renderer script for the page itself to load. */
+  src?: string;
+  /** Runs after it. */
+  inline: string;
+  nonce: string;
+  scriptSources?: string[];
+  extra?: string[];
+}): Response {
+  const { src, inline, nonce, scriptSources = [], extra = [] } = page;
   const csp = [
     "sandbox allow-scripts",
     "default-src 'none'",
-    `script-src 'nonce-${nonce}'`,
+    `script-src 'nonce-${nonce}'${scriptSources.map((s) => ` ${s}`).join("")}`,
     "style-src 'unsafe-inline'",
+    ...extra,
     "base-uri 'none'",
     "form-action 'none'",
     "frame-ancestors 'self'",
   ].join("; ");
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Diagram renderer</title><script nonce="${nonce}" src="${script}"></script></head><body><script nonce="${nonce}">${BOOTSTRAP}</script></body></html>`;
+  const script = src ? `<script nonce="${nonce}" src="${src}"></script>` : "";
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Diagram renderer</title>${script}</head><body><script nonce="${nonce}">${inline}</script></body></html>`;
   return new Response(html, {
     headers: {
       "content-type": "text/html; charset=utf-8",
