@@ -90,9 +90,7 @@ async function signIn(identity: Identity, callbackURL: string, base = BASE) {
 }
 
 const viewer = async (identity: Identity, cookie?: string) => {
-  const response = await identity.handle(
-    new Request(`${BASE}/api/auth/viewer`, { headers: cookie ? { cookie } : {} }),
-  );
+  const response = await identity.handle(new Request(`${BASE}/api/auth/viewer`, { headers: cookie ? { cookie } : {} }));
   return { response, body: await response.json() };
 };
 
