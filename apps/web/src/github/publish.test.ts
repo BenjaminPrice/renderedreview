@@ -300,9 +300,23 @@ describe("comment", () => {
     const { call } = setup({ routes: { "POST /issues/7/comments": created() } });
     const body = { expectedHeadOid: HEAD, representation: "conversation", body: "b" };
     const statuses: number[] = [];
-    for (let i = 0; i < 31; i++) statuses.push((await call("comment", body)).status);
-    expect(statuses.slice(0, 30).every((s) => s === 201)).toBe(true);
-    expect(statuses[30]).toBe(429);
+    for (let i = 0; i < 61; i++) statuses.push((await call("comment", body)).status);
+    expect(statuses.slice(0, 60).every((s) => s === 201)).toBe(true);
+    expect(statuses[60]).toBe(429);
+  });
+
+  it("counts each draft of a review against the limit", async () => {
+    const { call } = setup({ routes: { "POST /issues/7/comments": created() } });
+    const drafts = (n: number, from = 0) =>
+      Array.from({ length: n }, (_, i) => ({ id: `d${from + i}`, representation: "conversation", body: "b" }));
+    const review = (submissionId: string, n: number) => ({
+      expectedHeadOid: HEAD,
+      submissionId,
+      event: "COMMENT",
+      drafts: drafts(n),
+    });
+    expect((await call("review", review("s1", 50))).status).toBe(200);
+    expect((await call("review", review("s2", 11))).status).toBe(429);
   });
 
   it("logs categories only, never bodies or tokens", async () => {

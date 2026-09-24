@@ -89,16 +89,17 @@ function fromGitHub(error: unknown, representation?: Representation): Refusal {
 // ponytail: per-process fixed window per user; hosted abuse controls (shared store, per-repository
 // limits) replace it when there is more than one instance.
 const WINDOW_MS = 60_000;
-const WRITES_PER_WINDOW = 30;
+const WRITES_PER_WINDOW = 60;
 const windows = new Map<string, { count: number; until: number }>();
-function limitRate(userId: string) {
+/** Counts `cost` writes against the user's window: a review costs one per draft. */
+function limitRate(userId: string, cost = 1) {
   const now = Date.now();
   let window = windows.get(userId);
   if (!window || window.until <= now) {
     if (windows.size >= 10_000) windows.clear();
     windows.set(userId, (window = { count: 0, until: now + WINDOW_MS }));
   }
-  if (++window.count > WRITES_PER_WINDOW)
+  if ((window.count += cost) > WRITES_PER_WINDOW)
     refuse(429, "rate-limited", "Too many comments at once; try again in a minute", {
       resetAt: new Date(window.until).toISOString(),
     });
@@ -414,6 +415,8 @@ async function handle(request: Request, deps: Deps): Promise<Result> {
       if (!EVENTS.has(event)) invalid("event must be COMMENT, APPROVE or REQUEST_CHANGES");
       if (!Array.isArray(drafts) || drafts.length > MAX_DRAFTS)
         invalid(`drafts must list at most ${MAX_DRAFTS} drafts`);
+      // The request itself already counted once.
+      limitRate(t.userId, Math.max(0, (drafts as unknown[]).length - 1));
       const ids = new Set<string>();
       const checked = (drafts as unknown[]).map((v) => {
         if (!isObject(v) || typeof v.id !== "string" || !SUBMISSION_ID.test(v.id))
