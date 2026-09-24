@@ -17,9 +17,20 @@ export function routeRequest(request: RequestInfo, origin: string): Route {
   return "bypass";
 }
 
-// Server-rendered pages may one day carry private data. The server marks those
-// `Cache-Control: private` or `no-store`, and the worker honours that.
-export function isStorable(response: Pick<Response, "status" | "type" | "redirected" | "headers">): boolean {
+// A response header the server sets on pages that are safe to keep for offline use.
+export const OFFLINE_HEADER = "X-Rendered-Review-Offline";
+export const OFFLINE_SHELL = "shell";
+
+type StorableResponse = Pick<Response, "status" | "type" | "redirected" | "headers">;
+
+// Build assets and opted-in pages: a plain 200 that HTTP caching rules allow storing.
+export function isStorable(response: StorableResponse): boolean {
   if (response.status !== 200 || response.type !== "basic" || response.redirected) return false;
   return !/\b(no-store|private)\b/i.test(response.headers.get("cache-control") ?? "");
+}
+
+// Pages can carry private repository data, so they are stored only when the server
+// explicitly opts in. The private/no-store check in isStorable still applies on top.
+export function isStorablePage(response: StorableResponse): boolean {
+  return response.headers.get(OFFLINE_HEADER) === OFFLINE_SHELL && isStorable(response);
 }

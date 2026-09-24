@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 /// <reference lib="webworker" />
-import { isStorable, routeRequest } from "./policy";
+import { isStorable, isStorablePage, routeRequest } from "./policy";
 
 declare const self: ServiceWorkerGlobalScope;
 // Replaced at build time with the client build's file list and a hash of it (see vite.config.ts).
@@ -10,9 +10,13 @@ const { version, urls } = __SW_MANIFEST__;
 const CACHE_PREFIX = "rendered-review-";
 const CACHE = CACHE_PREFIX + version;
 
-async function fetchAndStore(cache: Cache, request: Request | string): Promise<Response> {
+async function fetchAndStore(
+  cache: Cache,
+  request: Request | string,
+  storable: (response: Response) => boolean,
+): Promise<Response> {
   const response = await fetch(request);
-  if (isStorable(response)) await cache.put(request, response.clone());
+  if (storable(response)) await cache.put(request, response.clone());
   else await cache.delete(request);
   return response;
 }
@@ -22,7 +26,7 @@ self.addEventListener("install", (event) => {
     (async () => {
       const cache = await caches.open(CACHE);
       await cache.addAll(urls);
-      // The first visit loads before the worker exists, so store the pages open right now.
+      // The first visit loads before the worker exists, so store the open pages that opt in.
       const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
       await Promise.all(
         windows
@@ -33,7 +37,7 @@ self.addEventListener("install", (event) => {
                 self.location.origin,
               ) === "page",
           )
-          .map((w) => fetchAndStore(cache, w.url).catch(() => undefined)),
+          .map((w) => fetchAndStore(cache, w.url, isStorablePage).catch(() => undefined)),
       );
       // ponytail: activates immediately; an open tab from the old deploy that lazy-loads a
       // chunk after this falls back to the network. Add an update prompt if that bites.
@@ -56,8 +60,15 @@ self.addEventListener("fetch", (event) => {
   const { request } = event;
   const route = routeRequest(request, self.location.origin);
   if (route === "asset") {
+    // Hashed files are identical for every requester, so ignore `Vary: Origin`: module
+    // scripts send an Origin header that the precache requests did not.
     event.respondWith(
-      caches.open(CACHE).then(async (cache) => (await cache.match(request)) ?? fetchAndStore(cache, request)),
+      caches
+        .open(CACHE)
+        .then(
+          async (cache) =>
+            (await cache.match(request, { ignoreVary: true })) ?? fetchAndStore(cache, request, isStorable),
+        ),
     );
   } else if (route === "page") {
     // Network first so SSR stays fresh; the cached copy is only the offline fallback.
@@ -65,7 +76,9 @@ self.addEventListener("fetch", (event) => {
       caches
         .open(CACHE)
         .then((cache) =>
-          fetchAndStore(cache, request).catch(async () => (await cache.match(request)) ?? Response.error()),
+          fetchAndStore(cache, request, isStorablePage).catch(
+            async () => (await cache.match(request)) ?? Response.error(),
+          ),
         ),
     );
   }

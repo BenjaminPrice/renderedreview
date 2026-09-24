@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { describe, expect, it } from "vitest";
-import { isStorable, routeRequest, type RequestInfo } from "./policy";
+import { isStorable, isStorablePage, OFFLINE_HEADER, OFFLINE_SHELL, routeRequest, type RequestInfo } from "./policy";
 
 const origin = "https://app.example";
 const req = (url: string, init: Partial<RequestInfo> = {}): RequestInfo => ({
@@ -39,14 +39,16 @@ describe("routeRequest", () => {
   });
 });
 
-describe("isStorable", () => {
-  const res = (init: { status?: number; type?: ResponseType; redirected?: boolean; cacheControl?: string } = {}) => ({
-    status: init.status ?? 200,
-    type: init.type ?? "basic",
-    redirected: init.redirected ?? false,
-    headers: new Headers(init.cacheControl ? { "cache-control": init.cacheControl } : {}),
-  });
+const res = (
+  init: { status?: number; type?: ResponseType; redirected?: boolean; cacheControl?: string; offline?: string } = {},
+) => {
+  const headers = new Headers();
+  if (init.cacheControl) headers.set("cache-control", init.cacheControl);
+  if (init.offline) headers.set(OFFLINE_HEADER, init.offline);
+  return { status: init.status ?? 200, type: init.type ?? "basic", redirected: init.redirected ?? false, headers };
+};
 
+describe("isStorable", () => {
   it("stores plain and public 200 responses", () => {
     expect(isStorable(res())).toBe(true);
     expect(isStorable(res({ cacheControl: "public, max-age=60" }))).toBe(true);
@@ -61,5 +63,23 @@ describe("isStorable", () => {
     ["redirected", res({ redirected: true })],
   ])("refuses %s", (_, response) => {
     expect(isStorable(response)).toBe(false);
+  });
+});
+
+describe("isStorablePage", () => {
+  it("stores only pages the server opts in", () => {
+    expect(isStorablePage(res({ offline: OFFLINE_SHELL }))).toBe(true);
+    expect(isStorablePage(res({ offline: OFFLINE_SHELL, cacheControl: "public, max-age=60" }))).toBe(true);
+  });
+
+  it.each([
+    ["no opt-in header", res()],
+    ["public but no opt-in header", res({ cacheControl: "public, max-age=600" })],
+    ["unknown opt-in value", res({ offline: "yes" })],
+    ["opted in but private", res({ offline: OFFLINE_SHELL, cacheControl: "private" })],
+    ["opted in but no-store", res({ offline: OFFLINE_SHELL, cacheControl: "no-store" })],
+    ["opted in but error status", res({ offline: OFFLINE_SHELL, status: 500 })],
+  ])("refuses %s", (_, response) => {
+    expect(isStorablePage(response)).toBe(false);
   });
 });
