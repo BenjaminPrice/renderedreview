@@ -98,10 +98,10 @@ export function CommentRail(props: CommentRailProps) {
     // Right edge of the text column; the document's right padding is the marker and connector gutter.
     const textRight = origin.width - parseFloat(getComputedStyle(doc).paddingRight);
     const rows = aligned.map((a) => {
+      // Word-level anchors align to their words' line; connectors still start in the gutter.
       const words = props.wordRanges?.get(a.id)?.[0]?.getBoundingClientRect();
       return {
         id: a.id,
-        words,
         anchor: words ?? find(a.blockId)?.getBoundingClientRect(),
         card: document.getElementById(threadDomId(a.id)),
         count: a.placement?.thread.comments.length ?? 0,
@@ -152,7 +152,7 @@ export function CommentRail(props: CommentRailProps) {
                 id: r.id,
                 cardX: boxRect.left + r.card.offsetLeft - origin.left,
                 cardY: boxRect.top + tops.get(r.id)! - origin.top + 18,
-                anchorX: r.words ? r.words.right - origin.left + 2 : textRight + 12,
+                anchorX: textRight + 12,
                 anchorY: r.anchor.top - origin.top + Math.min(r.anchor.height / 2, 13),
               },
             ]
