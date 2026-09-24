@@ -55,6 +55,11 @@ function clientsFor(host: string): HostClients {
   return entry;
 }
 
+/** Sends `host` reads to the proxy first: the server reads it with a token, so it is not rate-limited like anonymous calls. */
+export function preferProxy(host: string) {
+  clientsFor(host).proxyUntil = Infinity;
+}
+
 /** Runs `call` against GitHub directly, retrying through the proxy for fallback-eligible failures. */
 export async function withPublicGitHub<T>(host: string, call: (client: GitHubClient) => Promise<T>): Promise<T> {
   const entry = clientsFor(host);

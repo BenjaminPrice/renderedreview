@@ -64,7 +64,7 @@ function renderPage(search = "") {
   // The real root renders <html>; tests mount the page into the test document's body.
   RootRoute.update({ component: Outlet });
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  queryClient.setQueryData(allowedHostsQuery.queryKey, ["github.com"]);
+  queryClient.setQueryData(allowedHostsQuery.queryKey, { hosts: ["github.com"], proxyFirst: [] });
   const router = createRouter({
     routeTree,
     context: { queryClient },

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { loadConfig } from "@rendered-review/runtime";
 import { describe, expect, it, vi } from "vitest";
-import { allowedHosts, proxyPublicGitHub } from "./proxy";
+import { allowedHosts, proxyFirstHosts, proxyPublicGitHub } from "./proxy";
 
 const OID = "a".repeat(40);
 const origin = "https://app.example";
@@ -22,6 +22,14 @@ describe("allowedHosts", () => {
   it("always allows github.com", () => expect(hosts()).toEqual(["github.com"]));
   it("adds the configured Enterprise Server host", () =>
     expect(hosts("https://GHE.example.com:8443/")).toEqual(["github.com", "ghe.example.com:8443"]));
+});
+
+it("prefers the proxy only for the host the server token belongs to", () => {
+  const hosts = (env: Record<string, string>) =>
+    proxyFirstHosts(loadConfig({ HOSTING_MODE: "community", ACCESS_POLICY: "disabled", ...env }));
+  expect(hosts({})).toEqual([]);
+  expect(hosts({ GITHUB_PUBLIC_READ_TOKEN: "t" })).toEqual(["github.com"]);
+  expect(hosts({ GITHUB_PUBLIC_READ_TOKEN: "t", GITHUB_URL: "https://ghe.example.com" })).toEqual(["ghe.example.com"]);
 });
 
 describe("proxyPublicGitHub", () => {
