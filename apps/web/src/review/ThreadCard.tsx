@@ -10,7 +10,7 @@ import {
 import type { ReactNode } from "react";
 import { ExternalLink } from "../ui/ExternalLink";
 import { Markdown } from "./Markdown";
-import { anchorLabel, blobUrl, isEdited, relativeTime, suggestionOriginal, threadState } from "./model";
+import { anchorLabel, blobUrl, isEdited, lines, relativeTime, suggestionOriginal, threadState } from "./model";
 
 /** DOM id of a thread card. Anchors point at it with `aria-details`. */
 export const threadDomId = (threadId: string) => `rr-thread-${threadId.replace(/[^\w-]/g, "_")}`;
@@ -149,6 +149,8 @@ export interface ThreadCardProps {
   verified?: boolean;
   /** Its annotation does not match the document it names: why. */
   damaged?: string;
+  /** Re-anchored from an earlier revision to these lines of the displayed document. */
+  moved?: { startLine: number; endLine: number };
   onActivate?: () => void;
 }
 
@@ -161,6 +163,7 @@ export function ThreadCard({
   reason,
   verified,
   damaged,
+  moved,
   onActivate,
 }: ThreadCardProps) {
   const state = threadState(thread);
@@ -168,7 +171,7 @@ export function ThreadCard({
   const a =
     thread.anchor.type === "annotation" && !verified && thread.anchor.fallback ? thread.anchor.fallback : thread.anchor;
   const root = thread.comments[0]!;
-  const label = anchorLabel(a);
+  const label = moved ? `Selected text · ${lines(moved)}` : anchorLabel(a);
   const n = thread.comments.length;
 
   const outdated = a.type === "outdated" && (
@@ -181,9 +184,15 @@ export function ThreadCard({
       Unresolved
     </Badge>
   );
-  const badges = (outdated || unresolved) && (
+  const movedBadge = moved && (
+    <Badge tone="mod" icon="history">
+      Moved
+    </Badge>
+  );
+  const badges = (outdated || movedBadge || unresolved) && (
     <>
       {outdated}
+      {movedBadge}
       {unresolved}
     </>
   );
@@ -287,7 +296,7 @@ export function ThreadCard({
     );
 
   return (
-    <section {...common} aria-label={`${label}, by ${who}${a.type === "outdated" ? ", outdated" : ""}`}>
+    <section {...common} aria-label={`${label}, by ${who}${a.type === "outdated" ? ", outdated" : moved ? ", moved" : ""}`}>
       {body}
     </section>
   );

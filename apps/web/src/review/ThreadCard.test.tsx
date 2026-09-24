@@ -109,7 +109,7 @@ describe("resolved threads", () => {
 });
 
 describe("application threads", () => {
-  const REANCHOR = "Document changed since this comment — re-anchoring pending";
+  const REANCHOR = "The quoted text changed since this comment";
 
   it("labels the selected words and hides the repeated quote once the anchor is verified", () => {
     const el = render(<ThreadCard thread={appThread()} repository={repository} verified />).container;
@@ -123,6 +123,14 @@ describe("application threads", () => {
     const el = render(<ThreadCard thread={appThread()} repository={repository} unplaced reason={REANCHOR} />).container;
     expect(el.querySelector("blockquote")?.textContent?.trim()).toBe("retries failed requests");
     expect(screen.getByText(`Selected text · L3 · ${REANCHOR}`)).toBeTruthy();
+  });
+
+  it("marks a thread re-anchored to moved text at its new lines, keeping the original quote visible", () => {
+    const moved = { startLine: 5, endLine: 5 };
+    const el = render(<ThreadCard thread={appThread()} repository={repository} moved={moved} />).container;
+    const card = screen.getByRole("region", { name: "Selected text · L5, by alice, moved" });
+    expect(within(card).getByText("Moved")).toBeTruthy();
+    expect(el.querySelector("blockquote")?.textContent?.trim()).toBe("retries failed requests");
   });
 
   it("shows resolve and reopen as small events, not as comments", () => {

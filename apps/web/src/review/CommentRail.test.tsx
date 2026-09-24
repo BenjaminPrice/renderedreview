@@ -113,15 +113,26 @@ describe("threads and filters", () => {
     };
     await renderPage([
       { thread: placed, blocks: [block(1)], range },
-      { thread: pending, blocks: [], reason: "Document changed since this comment — re-anchoring pending" },
+      { thread: pending, blocks: [], reason: "The quoted text now appears in 2 places" },
       { thread: damaged, blocks: [], damaged: "The quoted text does not match" },
     ]);
     const aligned = within(rail()).getByText("Placed one").closest("section")!;
     expect(aligned.querySelector("blockquote")).toBeNull();
     const group = within(rail()).getByRole("region", { name: "Not placed in document" });
-    expect(within(group).getByText(/re-anchoring pending$/)).toBeTruthy();
+    expect(within(group).getByText(/now appears in 2 places$/)).toBeTruthy();
     expect(within(group).getByText("Metadata damaged")).toBeTruthy();
     expect(within(group).getAllByText("retries failed requests")).toHaveLength(2);
+  });
+
+  it("shows a thread re-anchored from an earlier revision at its new lines, marked moved", async () => {
+    const moved = appThread([issueComment("Moved one")]);
+    const sourceRange = { startLine: 5, startColumn: 12, endLine: 5, endColumn: 35 };
+    const range = { kind: "annotation" as const, sourceRange, textQuote: { exact: "retries failed requests" } };
+    const reanchor = { state: "moved" as const, evidence: "quote-context" as const, confidence: 0.95, sourceRange, candidates: [] };
+    await renderPage([{ thread: moved, blocks: [block(1)], range, reanchor }]);
+    const card = within(rail()).getByRole("region", { name: "Selected text · L5, by alice, moved" });
+    expect(within(card).getByText("Moved")).toBeTruthy();
+    expect(within(card).getByText("retries failed requests")).toBeTruthy();
   });
 
   it("filters threads by state without losing the rest", async () => {

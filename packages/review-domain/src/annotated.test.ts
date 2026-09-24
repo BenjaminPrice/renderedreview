@@ -94,8 +94,12 @@ describe("placeThreads with annotations", () => {
   });
 
   // The fixture annotation quotes DOC; these revisions change it.
-  const place = (source: string, thread = appThread(target({ blobOid: OLD_BLOB }))) =>
-    placeThreads([thread], "doc.md", { head: renderMarkdown(source), blob: { oid: BLOB, source } })[0]!;
+  // Blob OIDs name content, and re-anchoring results are cached by them: one per revision here.
+  let revision = 0;
+  const place = (source: string, thread = appThread(target({ blobOid: OLD_BLOB }))) => {
+    const oid = (++revision).toString(16).padStart(40, "e");
+    return placeThreads([thread], "doc.md", { head: renderMarkdown(source), blob: { oid, source } })[0]!;
+  };
 
   it("re-anchors an annotation from an older blob whose words did not move", () => {
     const p = place(DOC);
@@ -126,7 +130,10 @@ describe("placeThreads with annotations", () => {
   });
 
   it("uses the GitHub line of an annotated review comment when re-anchoring cannot place it", () => {
-    const p = place("# Reliability\n\nThe system gives up after three attempts.\n", appThread(target({ blobOid: OLD_BLOB }), line));
+    const p = place(
+      "# Reliability\n\nThe system gives up after three attempts.\n",
+      appThread(target({ blobOid: OLD_BLOB }), line),
+    );
     expect(p.blocks).toHaveLength(1);
     expect(p.range).toBeUndefined();
     expect(p.reason).toBeUndefined();

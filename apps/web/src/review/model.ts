@@ -24,7 +24,7 @@ export function filterCounts(threads: NativeThread[]): Record<ThreadState, numbe
 
 export { isEdited } from "@rendered-review/review-domain";
 
-const lines = (a: { startLine: number; endLine: number }) =>
+export const lines = (a: { startLine: number; endLine: number }) =>
   a.startLine === a.endLine ? `L${a.startLine}` : `L${a.startLine}–L${a.endLine}`;
 
 /** Location label. GitHub line anchors never claim a word-level selection; only annotations do. */
