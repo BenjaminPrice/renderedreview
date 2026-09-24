@@ -47,6 +47,9 @@
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "topojson-client": "^3.1.0",
+    "vega": "^6.4.0",
+    "vega-interpreter": "^2.3.2",
+    "vega-lite": "^6.4.3",
     "wavedrom": "^3.7.0"
   },
   "devDependencies": {

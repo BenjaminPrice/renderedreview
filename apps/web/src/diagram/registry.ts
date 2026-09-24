@@ -35,6 +35,11 @@ export const diagramRegistry = createDiagramRegistry([
     fenceNames: ["stl"],
     load: () => (import.meta.env.SSR ? SERVER() : import("./stl").then((m) => m.loadStl())),
   },
+  {
+    label: "Vega",
+    fenceNames: ["vega", "vega-lite"],
+    load: () => (import.meta.env.SSR ? SERVER() : import("./vega").then((m) => m.loadVega())),
+  },
 ]);
 
 /** Tests substitute fake renderers here. */
