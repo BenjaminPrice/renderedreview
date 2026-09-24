@@ -10,6 +10,7 @@ import remarkRehype from "remark-rehype";
 import { unified } from "unified";
 import type { Position } from "unist";
 import { visit } from "unist-util-visit";
+import { markExternalLinks } from "./links.js";
 import { normalizeText } from "./normalize.js";
 import { resolveResources, type ResourceOptions } from "./resources.js";
 
@@ -17,7 +18,7 @@ import { resolveResources, type ResourceOptions } from "./resources.js";
  * Source-map representation
  * -------------------------
  * Pipeline: remark-parse + remark-gfm -> remark-rehype -> rehype-raw -> rehype-sanitize (GitHub
- * allowlist) -> resource resolution (./resources.ts) -> stamping. Stamping runs after sanitization, so authored HTML can never supply or
+ * allowlist) -> resource resolution (./resources.ts) -> external links (./links.ts) -> stamping. Stamping runs after sanitization, so authored HTML can never supply or
  * forge the markers, and the sanitizer (which keeps `position`) cannot strip them.
  *
  * - Each element with a source position gets `data-rr-id="<n>"`; `nodes[n]` holds its range,
@@ -121,6 +122,7 @@ export function renderMarkdown(source: string, options: ResourceOptions = {}): R
 
   const tree = toSafeHast.runSync(structuredClone(mdast)) as HastRoot;
   resolveResources(tree, options);
+  markExternalLinks(tree);
   const nodes: SourceNode[] = [];
   const headings: { depth: number; text: string }[] = [];
 
