@@ -3,7 +3,7 @@
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from "@tanstack/react-router";
 import { render } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { expect } from "vitest";
+import { expect, vi } from "vitest";
 
 export async function renderWithRouter(ui: () => ReactNode, url = "/") {
   const router = createRouter({
@@ -19,4 +19,15 @@ export function expectNewTab(link: HTMLElement) {
   expect(link.getAttribute("target")).toBe("_blank");
   expect(link.getAttribute("rel")?.split(" ").sort()).toEqual(["noopener", "noreferrer"]);
   expect(link.textContent + (link.getAttribute("aria-label") ?? "")).toMatch(/\(opens in new tab\)$/);
+}
+
+/** Silences the server logger and returns a reader for the events it emitted (JSON lines). */
+export function captureLogs() {
+  const spies = (["info", "warn", "error"] as const).map((level) =>
+    vi.spyOn(console, level).mockImplementation(() => {}),
+  );
+  const raw = () => JSON.stringify(spies.map((s) => s.mock.calls));
+  const events = () =>
+    spies.flatMap((s) => s.mock.calls.map(([line]) => JSON.parse(String(line)) as Record<string, unknown>));
+  return { events, raw };
 }

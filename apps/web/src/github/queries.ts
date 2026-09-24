@@ -62,6 +62,14 @@ export const changedFilesQuery = (id: PrIdentity) =>
     staleTime: PR_STALE_MS,
   });
 
+/** The PR's commits, oldest first: titles and dates for its revisions. */
+export const pullRequestCommitsQuery = (id: PrIdentity) =>
+  queryOptions({
+    queryKey: prKey(id, "commits"),
+    queryFn: () => withGitHub(id.access, id.host, (c) => c.listPullRequestCommits(id.owner, id.repo, id.number)),
+    staleTime: PR_STALE_MS,
+  });
+
 export const reviewCommentsQuery = (id: PrIdentity) =>
   queryOptions({
     queryKey: prKey(id, "review-comments"),

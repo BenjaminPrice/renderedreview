@@ -30,7 +30,7 @@ ACCESS_POLICY=disabled
 
 ## Configuration
 
-All builds read the same environment variables (`packages/runtime/src/config.ts`). Only what the chosen mode needs is required. Startup reports every problem at once and logs the effective configuration with secrets redacted.
+All builds read the same environment variables (`packages/runtime/src/config.ts`). Only what the chosen mode needs is required. Startup reports every problem at once and logs the effective configuration with secrets redacted. What the server logs, and what it never logs, is in [docs/observability.md](docs/observability.md).
 
 | Variable                                                                                                                   | Required                                                                     |
 | -------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |

@@ -287,6 +287,7 @@ export interface ThreadPlacement {
 function unplacedReason(r: ReanchorResult): string {
   if (r.state === "ambiguous") return `The quoted text now appears in ${r.candidates.length} places`;
   if (r.state === "unavailable") return "The original version of this document is no longer available";
+  if (r.state === "historical-only") return "The quoted text is only in an earlier revision";
   return "The quoted text changed since this comment";
 }
 
@@ -303,6 +304,8 @@ export function placeThreads(
     base?: RenderedMarkdown;
     /** The head blob `head` was rendered from; annotations are placed only on the blob they name. */
     blob?: { oid: string; source: string };
+    /** Whether annotations' original blobs can still be read, by blob OID, where known. */
+    original?: ReadonlyMap<string, "available" | "missing">;
   },
 ): ThreadPlacement[] {
   const lineBlocks = (a: NativeAnchor | undefined) => {
@@ -327,7 +330,13 @@ export function placeThreads(
         };
       };
       if (blob.oid !== a.annotation.target.blobOid) {
-        const r = reanchor({ annotation: a.annotation, blobOid: blob.oid, source: blob.source, doc: head });
+        const r = reanchor({
+          annotation: a.annotation,
+          blobOid: blob.oid,
+          source: blob.source,
+          doc: head,
+          original: docs.original?.get(a.annotation.target.blobOid),
+        });
         // Reworded text is placed on its block only: no word range claims precision it lacks.
         if (r.approximate)
           return {
@@ -345,6 +354,46 @@ export function placeThreads(
       const { startLine, startColumn, endLine, endColumn } = sourceRange(a.annotation);
       return at({ startLine, startColumn, endLine, endColumn });
     });
+}
+
+/**
+ * The threads written on one earlier revision of a document, for showing it as it was:
+ * annotations made on its commit or on its blob, and review comments first posted on its commit,
+ * whose GitHub lines become their original lines. Others are left out.
+ */
+export function historicalThreads(
+  threads: NativeThread[],
+  revision: { commitOid: string; blobOid?: string },
+): NativeThread[] {
+  const original = (thread: NativeThread): NativeAnchor | undefined => {
+    const root = thread.comments[0]!;
+    if (!("originalCommitOid" in root) || root.originalCommitOid !== revision.commitOid) return undefined;
+    if (root.subjectType === "file") return { type: "file" };
+    // ponytail: LEFT-side original lines refer to the base of that diff; left out until needed.
+    if (root.originalLine === null || (root.side ?? "RIGHT") !== "RIGHT") return undefined;
+    const sameSide = (root.startSide ?? "RIGHT") === "RIGHT";
+    const startLine = (sameSide && root.originalStartLine) || root.originalLine;
+    return {
+      type: "current",
+      kind: "github-line",
+      side: "RIGHT",
+      startLine,
+      endLine: root.originalLine,
+      commitOid: revision.commitOid,
+    };
+  };
+  return threads.flatMap((thread) => {
+    const a = thread.anchor;
+    if (a.type === "annotation") {
+      const { commitOid, blobOid } = a.annotation.target;
+      if (commitOid !== revision.commitOid && blobOid !== revision.blobOid) return [];
+      // Its GitHub fallback lines are the head's; only lines on this revision apply here.
+      const fallback = original(thread);
+      return [{ ...thread, anchor: { type: "annotation", annotation: a.annotation, ...(fallback && { fallback }) } }];
+    }
+    const anchor = original(thread);
+    return anchor ? [{ ...thread, anchor }] : [];
+  });
 }
 
 /**

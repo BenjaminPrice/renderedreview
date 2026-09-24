@@ -4,7 +4,14 @@ import { composeCommentBody, type RenderedReviewAnnotationV1 } from "@rendered-r
 import { renderMarkdown } from "@rendered-review/markdown-domain";
 import { describe, expect, it } from "vitest";
 import { annotation, at, BLOB, context, DOC, issueComment, OLD_BLOB, reviewComment, target } from "./fixtures.js";
-import { anchorLines, displayBody, type NativeThread, placeThreads, projectReview } from "./projection.js";
+import {
+  anchorLines,
+  displayBody,
+  historicalThreads,
+  type NativeThread,
+  placeThreads,
+  projectReview,
+} from "./projection.js";
 
 const body = (a: RenderedReviewAnnotationV1, text = "Should this define a retry limit?") =>
   composeCommentBody({ annotation: a, comment: text, location: "conversation" });
@@ -134,6 +141,22 @@ describe("placeThreads with annotations", () => {
     expect(p.range).toBeUndefined();
   });
 
+  it("says whether the original of an unplaced annotation can still be shown", () => {
+    const gone = "# Reliability\n\nThe system gives up after three attempts.\n";
+    const docs = (original: ReadonlyMap<string, "available" | "missing">) => ({
+      head: renderMarkdown(gone),
+      blob: { oid: "f".repeat(40), source: gone },
+      original,
+    });
+    const thread = appThread(target({ blobOid: OLD_BLOB }));
+    const [historical] = placeThreads([thread], "doc.md", docs(new Map([[OLD_BLOB, "available"]])));
+    expect(historical).toMatchObject({ blocks: [], reason: "The quoted text is only in an earlier revision" });
+    expect(historical!.reanchor?.state).toBe("historical-only");
+    const [missing] = placeThreads([thread], "doc.md", docs(new Map([[OLD_BLOB, "missing"]])));
+    expect(missing!.reanchor?.state).toBe("unavailable");
+    expect(missing!.reason).toBe("The original version of this document is no longer available");
+  });
+
   it("never places an ambiguous annotation, and counts its candidates", () => {
     const p = place("# Reliability\n\nIt retries failed requests. It also retries failed requests.\n");
     expect(p).toMatchObject({ blocks: [], reason: "The quoted text now appears in 2 places" });
@@ -173,6 +196,55 @@ describe("placeThreads with annotations", () => {
     );
     // A range ending at column 1 does not include that line.
     expect(anchorLines({ type: "annotation", annotation: multi })).toEqual({ startLine: 3, endLine: 5 });
+  });
+});
+
+describe("historicalThreads", () => {
+  const OLD = "b".repeat(40);
+  const app = (a: RenderedReviewAnnotationV1): NativeThread => ({
+    id: `app:${a.target.commitOid}:${a.target.blobOid}`,
+    path: "doc.md",
+    comments: [issueComment(body(a))],
+    resolution: "unresolved",
+    anchor: { type: "annotation", annotation: a },
+  });
+
+  it("keeps threads written on the revision, with GitHub lines moved to their original lines", () => {
+    const outdated = reviewComment("Was on line 3", {
+      commitOid: OLD,
+      line: null,
+      originalCommitOid: OLD,
+      originalLine: 3,
+    });
+    const moved = reviewComment("Now line 5", {
+      commitOid: "a".repeat(40),
+      line: 5,
+      originalCommitOid: OLD,
+      originalLine: 3,
+    });
+    const later = reviewComment("Written later", { originalCommitOid: "a".repeat(40) });
+    const threads = projectReview({
+      repository: context,
+      reviewComments: [outdated, moved, later],
+      reviews: [],
+      issueComments: [],
+    }).threads;
+    const kept = historicalThreads(threads, { commitOid: OLD });
+    expect(kept.map((t) => t.comments[0]!.id)).toEqual([outdated.id, moved.id]);
+    for (const t of kept) expect(t.anchor).toMatchObject({ type: "current", startLine: 3, endLine: 3, commitOid: OLD });
+    const placed = placeThreads(kept, "doc.md", { head: renderMarkdown(DOC) });
+    expect(placed.map((p) => p.blocks.map((b) => b.text))).toEqual([
+      ["The system retries failed requests indefinitely."],
+      ["The system retries failed requests indefinitely."],
+    ]);
+  });
+
+  it("keeps annotations made on the revision's commit or on its blob, and nothing else", () => {
+    const onCommit = app(target({ commitOid: OLD, blobOid: OLD_BLOB }));
+    const sameBlob = app(target({ commitOid: "e".repeat(40), blobOid: BLOB }));
+    const other = app(target({ commitOid: "e".repeat(40), blobOid: "e".repeat(40) }));
+    const kept = historicalThreads([onCommit, sameBlob, other], { commitOid: OLD, blobOid: BLOB });
+    expect(kept).toEqual([onCommit, sameBlob]);
   });
 });
 

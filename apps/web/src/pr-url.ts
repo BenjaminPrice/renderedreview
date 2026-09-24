@@ -17,12 +17,16 @@ export interface PrSearch {
   doc?: string;
   /** Selected comment or thread locator: a numeric comment ID or a node ID. Numbers stay numbers so the URL reads `thread=123`. */
   thread?: string | number;
+  /** A full commit OID: show `doc` as it was at that commit instead of the PR head. */
+  rev?: string;
 }
 
 const HOST = /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/;
 // GitHub owner and repository names: letters, digits, `-`, `_`, `.`; never `.` or `..`.
 const NAME = /^(?!\.\.?$)[\w.-]{1,100}$/;
 const NUMBER = /^[1-9]\d{0,9}$/;
+// SHA-1 or SHA-256 object names, in full: an abbreviation could become ambiguous later.
+const OID = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/i;
 
 /** `name` or `name:port`, port 1–65535 without leading zeros. */
 function validHost(host: string): boolean {
@@ -52,6 +56,7 @@ export function validatePrSearch(
     view?: PrSearch["view"];
     doc?: string;
     thread?: string | number;
+    rev?: string;
   } & SearchSchemaInput,
 ): PrSearch {
   const { thread } = search;
@@ -62,6 +67,7 @@ export function validatePrSearch(
     ...(((typeof thread === "string" && thread) || (typeof thread === "number" && Number.isSafeInteger(thread))) && {
       thread,
     }),
+    ...(typeof search.rev === "string" && OID.test(search.rev) && { rev: search.rev.toLowerCase() }),
   };
 }
 

@@ -2,16 +2,16 @@
 // @vitest-environment happy-dom
 // The comment rail inside the app shell: filters, connector preference and visibility, margin markers.
 import type { SourceNode } from "@rendered-review/markdown-domain";
-import type { ThreadPlacement } from "@rendered-review/review-domain";
+import type { ReanchorResult, ThreadPlacement } from "@rendered-review/review-domain";
 import { act, cleanup, fireEvent, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useRef, useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderWithRouter } from "../test-utils";
 import { AppShell } from "../ui/AppShell";
-import { CommentRail, RailHeader } from "./CommentRail";
+import { CommentRail, type CommentRailProps, RailHeader } from "./CommentRail";
 import { appThread, comment, issueComment, lineAnchor, OLD, repository, thread } from "./fixtures";
-import { DEFAULT_FILTERS, filterCounts } from "./model";
+import { DEFAULT_FILTERS, placementCounts } from "./model";
 import { threadDomId } from "./ThreadCard";
 
 const block = (id: number) => ({ id }) as SourceNode;
@@ -28,15 +28,22 @@ const placements: ThreadPlacement[] = [
   },
 ];
 
-function Page({ items = placements }: { items?: ThreadPlacement[] }) {
+function Page({ items = placements, originalLink }: { items?: ThreadPlacement[] } & Partial<CommentRailProps>) {
   const docRef = useRef<HTMLElement>(null);
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
-  const threads = items.map((p) => p.thread);
   return (
     <AppShell
-      commentCount={threads.length}
-      railHeader={<RailHeader counts={filterCounts(threads)} filters={filters} onFiltersChange={setFilters} />}
-      rail={<CommentRail placements={items} repository={repository} filters={filters} docContainerRef={docRef} />}
+      commentCount={items.length}
+      railHeader={<RailHeader counts={placementCounts(items)} filters={filters} onFiltersChange={setFilters} />}
+      rail={
+        <CommentRail
+          placements={items}
+          repository={repository}
+          filters={filters}
+          docContainerRef={docRef}
+          originalLink={originalLink}
+        />
+      }
     >
       <article ref={docRef} aria-label="Rendered document" style={{ paddingRight: 48 }}>
         <p data-rr-id="1">First paragraph</p>
@@ -46,7 +53,8 @@ function Page({ items = placements }: { items?: ThreadPlacement[] }) {
   );
 }
 
-const renderPage = (items?: ThreadPlacement[]) => renderWithRouter(() => <Page items={items} />);
+const renderPage = (items?: ThreadPlacement[], props: Partial<CommentRailProps> = {}) =>
+  renderWithRouter(() => <Page items={items} {...props} />);
 const rail = () => screen.getByRole("complementary", { name: /Comments/ });
 const commentsButton = () => screen.getByRole("button", { name: /^Comments/ });
 const chip = (name: RegExp) =>
@@ -86,6 +94,28 @@ describe("threads and filters", () => {
       ["Outdated 1", "true"],
       ["Historical 0", "false"],
     ]);
+  });
+
+  it("files threads whose words are only in an earlier revision under Historical", async () => {
+    const reanchor: ReanchorResult = { state: "historical-only", evidence: "none", confidence: 0, candidates: [] };
+    const reason = "The quoted text is only in an earlier revision";
+    await renderPage([...placements, { thread: appThread([issueComment("Gone one")]), blocks: [], reason, reanchor }]);
+    expect(chip(/^Historical/).textContent).toBe("Historical 1");
+    expect(within(rail()).queryByText("Gone one")).toBeNull();
+    await userEvent.click(chip(/^Historical/));
+    const card = within(rail()).getByText("Gone one").closest("section")!;
+    expect(card.getAttribute("aria-label")).toMatch(/, historical$/);
+  });
+
+  it("links threads not shown as written to their original revision", async () => {
+    const originalLink = vi.fn((_thread, commitOid: string) => ({ href: `/somewhere?rev=${commitOid}` }));
+    await renderPage(undefined, { originalLink });
+    const old = within(rail()).getByText("Old one").closest("section")!;
+    expect(within(old).getByRole("link", { name: "View in original" }).getAttribute("href")).toBe(
+      `/somewhere?rev=${OLD}`,
+    );
+    const current = within(rail()).getByText("Current one").closest("section")!;
+    expect(within(current).queryByRole("link", { name: /View in original/ })).toBeNull();
   });
 
   it("keeps resolved threads collapsed in place", async () => {

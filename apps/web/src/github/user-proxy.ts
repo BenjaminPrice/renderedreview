@@ -4,7 +4,9 @@
 // shared-cacheable. Public repositories only for now. Web Request/Response/fetch only.
 import { createGitHubClient, GitHubError } from "@rendered-review/github-integration";
 import type { Identity } from "@rendered-review/identity";
+import { log } from "@rendered-review/runtime";
 import { forRepository } from "./broker";
+import { meteredFetch } from "./metrics";
 import {
   ACCEPT,
   apiBase,
@@ -32,7 +34,7 @@ const REVIEW_THREADS = new RegExp(
 const PRIVATE = { "cache-control": "private, no-store", vary: "Cookie" };
 
 const deny = (status: number, category: string, message: string) => {
-  console.info(`github user read: ${category}`);
+  log.info("github.user_proxy", { category, status });
   const res = reject(status, message, category);
   res.headers.set("vary", "Cookie");
   return res;
@@ -44,7 +46,7 @@ export async function proxyUserGitHub(
   {
     allowedHosts,
     identity,
-    fetch: fetchFn = fetch,
+    fetch: unmetered = fetch,
   }: {
     allowedHosts: string[];
     /** Undefined when this deployment has no sign-in. */
@@ -55,6 +57,7 @@ export async function proxyUserGitHub(
   if (request.method !== "GET") return reject(405, "Method not allowed");
   if (request.headers.get("x-requested-with") !== REQUESTED_WITH) return reject(403, "Missing X-Requested-With");
   if (!identity) return reject(404, "Not found");
+  const fetchFn = meteredFetch(unmetered);
   const url = new URL(request.url);
   const target = parseProxyPath(url, USER_PREFIX, allowedHosts);
   if (target instanceof Response) return target;

@@ -29,6 +29,11 @@ const DELETED_BLOB = "d8730ec82103b7ac29d4cdc0bdd9dfd575c49441";
 const INDEX = "files/en-us/web/http/reference/status/index.md";
 const DELETED = "files/en-us/web/http/reference/status/102/index.md";
 const API = "https://api.github.com/repos/mdn/content";
+// Commits the recorded index.md review comments were written on, and index.md's blob at each.
+const FIRST_REVIEWED = "c5ebc9f3071d5e5e143298f508c2aedb7060c884";
+const FIRST_REVIEWED_BLOB = "a6e888e9ec7270e8c5f0c65035df7a0960495fb7";
+const LINTED = "cd176a8b0178a6911d7b36fb83c8ce6d7c10f44f";
+const LINTED_BLOB = "e5e23959a5d5d851063e4a5f68f166baa7bbd358";
 
 let responses: Record<string, string>;
 /** Every URL fetched. GitHub clients keep the first stubbed fetch, so it records into this shared list. */
@@ -46,11 +51,17 @@ beforeEach(() => {
     [`${API}/issues/45377/comments?per_page=100`]: fixture("issue-comments.json"),
     // The base revision of the modified document, read by path instead of through the base tree.
     [`${API}/contents/${INDEX}?ref=${BASE}`]: fixture("blob-4e1326aa2512d4d8eec8533471eee0dc684de810.md"),
+    [`${API}/pulls/45377/commits?per_page=100`]: fixture("pull-commits.json"),
+    // index.md at the two commits its outdated review comments were written on.
+    [`${API}/contents/${INDEX}?ref=${FIRST_REVIEWED}`]: fixture(`blob-${FIRST_REVIEWED_BLOB}.md`),
+    [`${API}/contents/${INDEX}?ref=${LINTED}`]: fixture(`blob-${LINTED_BLOB}.md`),
   };
   for (const oid of [
     "1a05f7e9c35e2bb310563708351758307f34a599",
     "4e1326aa2512d4d8eec8533471eee0dc684de810",
     DELETED_BLOB,
+    FIRST_REVIEWED_BLOB,
+    LINTED_BLOB,
   ])
     responses[`${API}/git/blobs/${oid}`] = fixture(`blob-${oid}.md`);
   vi.stubGlobal("fetch", async (input: RequestInfo | URL) => {
@@ -382,6 +393,7 @@ it("shows the old path of a renamed doc", async () => {
 // current anchor move the suggestion thread onto head line 30 (as if it was written on the head).
 const SUGGESTION = 3945848286; // hamishwillee's suggestion on index.md
 const LINTER = 3945851001; // reviewdog's outdated suggestion on index.md
+const LINTED_ID = LINTER;
 
 type RawComment = Record<string, unknown> & { id: number };
 function editComments(edit: (comments: RawComment[]) => void) {
@@ -806,7 +818,10 @@ it("lands on the Overview when no Markdown changed", async () => {
 
 // Application comments: PR conversation comments carrying Rendered Review annotation metadata.
 const HEAD_BLOB = "1a05f7e9c35e2bb310563708351758307f34a599";
-function appComment(id: number, over: { pullRequest?: number; blobOid?: string; exact?: string } = {}) {
+function appComment(
+  id: number,
+  over: { pullRequest?: number; blobOid?: string; exact?: string; path?: string; commitOid?: string } = {},
+) {
   const annotation = {
     version: 1,
     target: {
@@ -814,8 +829,8 @@ function appComment(id: number, over: { pullRequest?: number; blobOid?: string; 
       repositoryId: 295774370,
       repository: "mdn/content",
       pullRequest: over.pullRequest ?? 45377,
-      path: INDEX,
-      commitOid: HEAD,
+      path: over.path ?? INDEX,
+      commitOid: over.commitOid ?? HEAD,
       blobOid: over.blobOid ?? HEAD_BLOB,
       selectors: [
         { type: "TextQuoteSelector", exact: over.exact ?? "indicates that the client" },
@@ -841,7 +856,8 @@ it("shows application comments on their words in the document, not in the conver
       { ...cs[0]!, ...appComment(11) },
       // Written on an earlier blob: re-anchored onto the same words, or not placed once they are gone.
       { ...cs[0]!, ...appComment(12, { blobOid: "e".repeat(40) }) },
-      { ...cs[0]!, ...appComment(13, { blobOid: "e".repeat(40), exact: "words no longer in the page" }) },
+      // Its original blob is not served: once that is known, it says so.
+      { ...cs[0]!, ...appComment(13, { blobOid: "beef".repeat(10), exact: "words no longer in the page" }) },
     ),
   );
   renderPage(`?doc=${encodeURIComponent(INDEX)}`);
@@ -849,9 +865,13 @@ it("shows application comments on their words in the document, not in the conver
   expect(placed.getAttribute("aria-label")).toMatch(/^Selected text · L26, by /);
   expect(within(placed).queryByText("indicates that the client")).toBeNull();
   expect(anchorOf(placed)?.textContent).toContain("indicates that the client");
-  const unanchored = within(rail()).getByRole("region", { name: "Not placed in document" });
-  expect(within(unanchored).getByText(/The quoted text changed since this comment$/)).toBeTruthy();
-  expect(within(unanchored).queryByText(/right word\? \(12\)/)).toBeNull();
+  const unanchored = () => within(rail()).getByRole("region", { name: "Not placed in document" });
+  await vi.waitFor(() =>
+    expect(
+      within(unanchored()).getByText(/The original version of this document is no longer available$/),
+    ).toBeTruthy(),
+  );
+  expect(within(unanchored()).queryByText(/right word\? \(12\)/)).toBeNull();
   const reanchored = screen.getByText(/right word\? \(12\)/).closest("section")!;
   expect(anchorOf(reanchored)?.textContent).toContain("indicates that the client");
 
@@ -890,4 +910,150 @@ it("turns a text selection into a new comment, which needs sign-in where the ser
   await userEvent.click(within(pending).getByRole("button", { name: "Cancel" }));
   expect(screen.queryByRole("region", { name: "New comment" })).toBeNull();
   document.getSelection()!.removeAllRanges();
+});
+
+// Historical revisions: a document as it was at the commit a comment was written on.
+const revisionSelect = () => screen.getByRole("combobox", { name: "Revision" });
+const banner = () => screen.getByRole("status", { name: "Historical revision" });
+
+it("opens an outdated thread in its original revision, at its original lines", async () => {
+  const router = renderPage(`?doc=${encodeURIComponent(INDEX)}`);
+  const outdated = await threadCard(/by github-actions\[bot\], outdated/);
+  const original = within(outdated).getByRole("link", { name: "View in original" });
+  expect(original.getAttribute("target")).toBeNull();
+  await userEvent.click(original);
+  await vi.waitFor(() =>
+    expect(router.state.location.search).toMatchObject({ doc: INDEX, rev: LINTED, thread: LINTED_ID }),
+  );
+
+  expect(await screen.findByText(/^Viewing/)).toBeTruthy();
+  expect(banner().textContent).toMatch(/Viewing cd176a8.* from .*2026.*read-only/);
+  expectNewTab(within(banner()).getByRole("link", { name: /cd176a8/ }));
+  expect(
+    within(banner())
+      .getByRole("link", { name: /cd176a8/ })
+      .getAttribute("href"),
+  ).toBe(`https://github.com/mdn/content/commit/${LINTED}`);
+  // Written on this revision, it is now current and placed on its original lines (31–32).
+  const card = await threadCard(/GitHub line comment · L31–L32, by github-actions\[bot\]$/);
+  const article = screen.getByRole("article", { name: "Rendered document" });
+  expect(article.contains(anchorOf(card))).toBe(true);
+  expect(anchorOf(card)!.textContent).toContain("The status code was first introduced");
+  await vi.waitFor(() => expect(document.activeElement).toBe(card));
+  // The other outdated thread was written on another commit: not shown here.
+  expect(within(rail()).queryByRole("region", { name: /by hamishwillee/ })).toBeNull();
+  expect(revisionSelect()).toHaveProperty("value", LINTED);
+
+  await userEvent.click(within(banner()).getByRole("link", { name: "Back to current" }));
+  await vi.waitFor(() => expect(router.state.location.search.rev).toBeUndefined());
+  expect(screen.queryByRole("status", { name: "Historical revision" })).toBeNull();
+});
+
+it("lists the current revision, the commits this document's comments were written on, and the base", async () => {
+  const router = renderPage(`?doc=${encodeURIComponent(INDEX)}`);
+  await screen.findByRole("article", { name: "Rendered document" });
+  const select = await vi.waitFor(() => {
+    const el = revisionSelect() as HTMLSelectElement;
+    expect(el.options.length).toBe(4);
+    return el;
+  });
+  expect([...select.options].map((o) => o.textContent)).toEqual([
+    `Current · ${HEAD.slice(0, 7)}`,
+    "Original · cd176a8 · Apply suggestion from @hamishwillee",
+    "Original · c5ebc9f · add more info about 102 status",
+    `Base · ${BASE.slice(0, 7)}`,
+  ]);
+  expect(select.value).toBe(HEAD);
+  await userEvent.selectOptions(select, FIRST_REVIEWED);
+  await vi.waitFor(() => expect(router.state.location.search.rev).toBe(FIRST_REVIEWED));
+  const card = await threadCard(/GitHub line comment · L30, by hamishwillee/);
+  expect(anchorOf(card)!.textContent).toContain("Web Distributed Authoring and Versioning");
+  await userEvent.selectOptions(revisionSelect(), HEAD);
+  await vi.waitFor(() => expect(router.state.location.search.rev).toBeUndefined());
+});
+
+it("shows a historical revision read-only: selecting text offers no new comment", async () => {
+  renderPage(`?doc=${encodeURIComponent(INDEX)}&rev=${FIRST_REVIEWED}`);
+  await screen.findByText(/^Viewing/);
+  const article = await screen.findByRole("article", { name: "Rendered document" });
+  const text = [...article.querySelectorAll("p")]
+    .flatMap((p) => [...p.childNodes])
+    .find((n): n is Text => n instanceof Text && n.data.includes("Responses are grouped"))!;
+  const from = text.data.indexOf("grouped");
+  document.getSelection()!.setBaseAndExtent(text, from, text, from + "grouped".length);
+  article.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+  await new Promise((r) => setTimeout(r, 50));
+  expect(screen.queryByRole("toolbar", { name: "Selection actions" })).toBeNull();
+  document.getSelection()!.removeAllRanges();
+});
+
+it("tells comments whose words are only in an earlier revision from ones whose original is gone", async () => {
+  // Not served, and never cached by another test (blobs are cached across tests by OID).
+  const GONE_BLOB = "dead".repeat(10);
+  editIssueComments((cs) =>
+    cs.push(
+      // Written on a blob GitHub still has: historical, and it opens there.
+      {
+        ...cs[0]!,
+        ...appComment(21, {
+          commitOid: FIRST_REVIEWED,
+          blobOid: FIRST_REVIEWED_BLOB,
+          exact: "words no longer in the page",
+        }),
+      },
+      // Written on a blob GitHub no longer has.
+      { ...cs[0]!, ...appComment(22, { blobOid: GONE_BLOB, exact: "words no longer in the page" }) },
+    ),
+  );
+  renderPage(`?doc=${encodeURIComponent(INDEX)}`);
+  await screen.findByText(/right word\? \(22\)/);
+  // Cards re-render as the originals' availability arrives: look each one up afresh.
+  const cardOf = (n: number) => screen.getByText(new RegExp(`right word\\? \\(${n}\\)`)).closest("section")!;
+  await vi.waitFor(() =>
+    expect(cardOf(22).textContent).toMatch(/The original version of this document is no longer available/),
+  );
+  const gone = cardOf(22);
+  expect(within(gone).queryByRole("link", { name: "View in original" })).toBeNull();
+  expect(screen.queryByText(/right word\? \(21\)/)).toBeNull(); // Historical is off by default
+  const historical = within(screen.getByRole("group", { name: "Filter comments" })).getByRole("button", {
+    name: /^Historical/,
+  });
+  expect(historical.textContent).toBe("Historical 1");
+  await userEvent.click(historical);
+  const card = screen.getByText(/right word\? \(21\)/).closest("section")!;
+  expect(within(card).getByText(/The quoted text is only in an earlier revision$/)).toBeTruthy();
+  expect(within(card).getByRole("link", { name: "View in original" }).getAttribute("href")).toContain(
+    `rev=${FIRST_REVIEWED}`,
+  );
+  // Originals are read only for comments that need them (the head blob may come from the cache).
+  const blobs = requested.filter((u) => u.includes("/git/blobs/"));
+  expect(blobs).toContain(`${API}/git/blobs/${GONE_BLOB}`);
+  const allowed = [GONE_BLOB, FIRST_REVIEWED_BLOB, HEAD_BLOB].map((oid) => `${API}/git/blobs/${oid}`);
+  expect(blobs.filter((u) => !allowed.includes(u))).toEqual([]);
+});
+
+it("opens a renamed document's comment at its original words, reading the original blob by OID", async () => {
+  const OLD_PATH = "files/en-us/web/http/status/index.md";
+  const files = JSON.parse(fixture("files.json")) as { filename: string; status: string; previous_filename?: string }[];
+  Object.assign(
+    files.find((f) => f.filename === INDEX)!,
+    { status: "renamed", previous_filename: OLD_PATH },
+  );
+  responses[`${API}/pulls/45377/files?per_page=100`] = JSON.stringify(files);
+  editIssueComments((cs) =>
+    cs.push({
+      ...cs[0]!,
+      ...appComment(23, {
+        path: OLD_PATH,
+        commitOid: FIRST_REVIEWED,
+        blobOid: FIRST_REVIEWED_BLOB,
+        exact: "indicates that the client",
+      }),
+    }),
+  );
+  renderPage(`?doc=${encodeURIComponent(INDEX)}&rev=${FIRST_REVIEWED}&thread=23`);
+  const card = (await screen.findByText(/right word\? \(23\)/)).closest("section")!;
+  expect(card.getAttribute("aria-label")).toMatch(/^Selected text · L26, by /);
+  expect(anchorOf(card)?.textContent).toContain("indicates that the client");
+  expect(requested.some((u) => u.includes(`/contents/`) && u.includes(FIRST_REVIEWED))).toBe(false);
 });

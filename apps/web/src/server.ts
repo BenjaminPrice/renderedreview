@@ -5,6 +5,7 @@ import handler, { createServerEntry } from "@tanstack/react-start/server-entry";
 import { createRequestContext } from "#runtime";
 import type { RequestContext } from "@rendered-review/runtime";
 import { contentSecurityPolicy, createNonce } from "./csp";
+import { withErrorLog } from "./request-log";
 
 declare module "@tanstack/react-start" {
   interface Register {
@@ -20,7 +21,7 @@ export default createServerEntry({
   fetch: async (request) => {
     const context = createRequestContext();
     const nonce = createNonce();
-    const response = await handler.fetch(request, { context: { ...context, nonce } });
+    const response = await withErrorLog(request, () => handler.fetch(request, { context: { ...context, nonce } }));
     // Copy, since some responses (e.g. Response.json, redirects) have immutable headers.
     const secured = new Response(response.body, response);
     // A response with its own policy (the diagram renderer frame) keeps it.
