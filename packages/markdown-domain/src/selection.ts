@@ -77,6 +77,13 @@ const MESSAGES: Record<SelectionRejection, string> = {
   frontmatter: "A selection cannot span the front matter and the document body.",
 };
 
+/** A rejected selection, with the reason shown to the reader. */
+export const rejectSelection = (reason: SelectionRejection): SelectionResult => ({
+  ok: false,
+  reason,
+  message: MESSAGES[reason],
+});
+
 interface Segment {
   text: string;
   /** Offset in the rendered document's text. */
@@ -243,9 +250,14 @@ function common(doc: RenderedMarkdown, a: number, b: number): number | null {
 const blockish = (doc: RenderedMarkdown, n: SourceNode) =>
   isBlock(doc, n) && !(n.type === "html" && n.parentId !== null && PHRASING.has(n.tagName));
 
+const sameRange = (a: SourceNode, b: SourceNode) =>
+  a.range.start.offset === b.range.start.offset && a.range.end.offset === b.range.end.offset;
+
+/** The block containing `id`; of a same-range pair (pre > code), the outer one, as `blocksForLines` picks. */
 function blockOf(doc: RenderedMarkdown, id: number): SourceNode {
   let n = doc.nodes[id]!;
   while (!blockish(doc, n) && n.parentId !== null) n = doc.nodes[n.parentId]!;
+  while (n.parentId !== null && sameRange(n, doc.nodes[n.parentId]!)) n = doc.nodes[n.parentId]!;
   return n;
 }
 
@@ -274,12 +286,11 @@ export function selectionToSource(
   end: RenderedPoint,
 ): SelectionResult {
   const ix = indexOf(doc);
-  const reject = (reason: SelectionRejection): SelectionResult => ({ ok: false, reason, message: MESSAGES[reason] });
   const g0 = ix.extent[start.id]![0] + start.offset;
   const g1 = ix.extent[end.id]![0] + end.offset;
-  if (g1 <= g0) return reject("empty");
+  if (g1 <= g0) return rejectSelection("empty");
   let clamped = clamp(doc, ix, g0, g1);
-  if (!clamped) return reject("generated");
+  if (!clamped) return rejectSelection("generated");
   let [k0, a, k1, b] = clamped;
   const first = ix.segments[k0]!;
   const last = ix.segments[k1]!;
@@ -301,7 +312,7 @@ export function selectionToSource(
     nodeType = n.type;
     blockIds = [sb.id];
   } else {
-    if (inFrontmatter(doc, sb.id) !== inFrontmatter(doc, eb.id)) return reject("frontmatter");
+    if (inFrontmatter(doc, sb.id) !== inFrontmatter(doc, eb.id)) return rejectSelection("frontmatter");
     const lca = common(doc, sb.id, eb.id);
     const [x, y] =
       lca === sb.id || lca === eb.id
