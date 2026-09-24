@@ -6,6 +6,7 @@ import rehypeRaw from "rehype-raw";
 import rehypeSanitize from "rehype-sanitize";
 import remarkFrontmatter from "remark-frontmatter";
 import remarkGfm from "remark-gfm";
+import remarkMdx from "remark-mdx";
 import remarkParse from "remark-parse";
 import remarkRehype from "remark-rehype";
 import { unified } from "unified";
@@ -14,15 +15,17 @@ import { visit } from "unist-util-visit";
 import { extractAlerts, renderAlerts } from "./alerts.js";
 import { renderFrontmatter } from "./frontmatter.js";
 import { markExternalLinks } from "./links.js";
+import { inertMdx, labelMdx } from "./mdx.js";
 import { normalizeText } from "./normalize.js";
 import { resolveResources, type ResourceOptions } from "./resources.js";
 
 /*
  * Source-map representation
  * -------------------------
- * Pipeline: remark-parse + remark-gfm + remark-frontmatter (YAML) -> GitHub alert markers removed
- * (./alerts.ts) -> remark-rehype -> rehype-raw -> rehype-sanitize (GitHub allowlist) -> resource
- * resolution (./resources.ts) -> alert callout markup (./alerts.ts) -> front matter
+ * Pipeline: remark-parse (+ remark-mdx for MDX) + remark-gfm + remark-frontmatter (YAML) -> GitHub
+ * alert markers removed (./alerts.ts) -> MDX nodes made inert source (./mdx.ts) -> remark-rehype ->
+ * rehype-raw -> rehype-sanitize (GitHub allowlist) -> resource resolution (./resources.ts) -> alert
+ * callout markup (./alerts.ts) -> MDX labels (./mdx.ts) -> front matter
  * (./frontmatter.ts, text nodes only) -> external links (./links.ts, last so it sees every link,
  * generated or authored) -> stamping. Generated markup is added after sanitization so it can
  * carry its own classes. Stamping runs last, so authored HTML can never supply or
@@ -80,6 +83,9 @@ export interface RenderedMarkdown {
 }
 
 const BLOCK_TYPES = new Set([
+  "mdxFlowExpression",
+  "mdxJsxFlowElement",
+  "mdxjsEsm",
   "blockquote",
   "code",
   "footnoteDefinition",
@@ -95,7 +101,13 @@ const BLOCK_TYPES = new Set([
 // remark-rehype gives these the position of their first/only row; they are not Markdown nodes.
 const STRUCTURAL = new Set(["thead", "tbody"]);
 
+export interface RenderOptions extends ResourceOptions {
+  /** `mdx` parses MDX syntax (JSX, ESM, expressions) and shows it as inert source. Default `md`. */
+  format?: "md" | "mdx";
+}
+
 const markdownParser = unified().use(remarkParse).use(remarkGfm).use(remarkFrontmatter).freeze();
+const mdxParser = unified().use(remarkParse).use(remarkMdx).use(remarkGfm).use(remarkFrontmatter).freeze();
 const toSafeHast = unified()
   // Ids are left bare here so the sanitizer's clobber prefix yields GitHub's `user-content-` ids.
   .use(remarkRehype, { allowDangerousHtml: true, clobberPrefix: "" })
@@ -118,10 +130,14 @@ const key = (p: Position) => `${p.start.offset}:${p.end.offset}`;
  * Every element with a source position gets `data-rr-id` (an index into `nodes`). Elements the
  * pipeline generates without a position (footnote section heading, back-references, task-list
  * checkboxes, ...) get `data-rr-unmapped` and must not be offered as selectable.
+ *
+ * With `format: "mdx"`, MDX is parsed but never evaluated: JSX, imports/exports and expressions render
+ * as labelled source (see ./mdx.ts). Invalid MDX throws `Invalid MDX[ at line L, column C]: reason`.
  */
-export function renderMarkdown(source: string, options: ResourceOptions = {}): RenderedMarkdown {
-  const mdast = markdownParser.runSync(markdownParser.parse(source)) as MdastRoot;
+export function renderMarkdown(source: string, options: RenderOptions = {}): RenderedMarkdown {
+  const mdast = parse(source, options.format === "mdx");
   const alerts = extractAlerts(mdast, source);
+  const mdxLabels = inertMdx(mdast, source);
 
   const mdastTypes = new Map<string, { type: string; lang?: string }>();
   visit(mdast, (node) => {
@@ -134,6 +150,7 @@ export function renderMarkdown(source: string, options: ResourceOptions = {}): R
   const tree = toSafeHast.runSync(structuredClone(mdast)) as HastRoot;
   resolveResources(tree, options);
   renderAlerts(tree, alerts);
+  labelMdx(tree, mdxLabels);
   const first = mdast.children[0];
   if (first?.type === "yaml") {
     const front = renderFrontmatter(source, first);
@@ -175,6 +192,17 @@ export function renderMarkdown(source: string, options: ResourceOptions = {}): R
   for (const child of tree.children) if (child.type === "element") walk(child, null, true);
 
   return { tree, nodes };
+}
+
+function parse(source: string, mdx: boolean): MdastRoot {
+  if (!mdx) return markdownParser.runSync(markdownParser.parse(source)) as MdastRoot;
+  try {
+    return mdxParser.runSync(mdxParser.parse(source)) as MdastRoot;
+  } catch (error) {
+    const { line, column, reason } = error as { line?: number; column?: number; reason?: string };
+    const at = line ? ` at line ${line}, column ${column}` : "";
+    throw new Error(`Invalid MDX${at}: ${reason ?? String(error)}`, { cause: error });
+  }
 }
 
 /**
