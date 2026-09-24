@@ -28,10 +28,21 @@ const words = (id: string, exact: string, block = first!): ThreadPlacement => {
   return {
     thread: thread(id, lineAnchor(3)),
     blocks: [block],
-    range: { kind: "annotation", sourceRange, textQuote: { exact }, textPosition: { start, end: start + exact.length } },
+    range: {
+      kind: "annotation",
+      sourceRange,
+      textQuote: { exact },
+      textPosition: { start, end: start + exact.length },
+    },
   };
 };
-const approximate: ReanchorResult = { state: "moved", evidence: "structure", confidence: 0.5, approximate: true, candidates: [] };
+const approximate: ReanchorResult = {
+  state: "moved",
+  evidence: "structure",
+  confidence: 0.5,
+  approximate: true,
+  candidates: [],
+};
 const placements: ThreadPlacement[] = [
   words("brave", "brave"),
   words("old", "old man"),

@@ -66,7 +66,9 @@ export function useAnchors(
     const resolved = new Set(placements.filter((p) => threadState(p.thread) === "resolved").map((p) => p.thread.id));
     const named = Object.fromEntries(NAMES.map((n) => [n, [] as Range[]]));
     for (const [id, r] of ranges)
-      named[id === activeId ? "rr-comment-active" : resolved.has(id) ? "rr-comment-resolved" : "rr-comment"]!.push(...r);
+      named[id === activeId ? "rr-comment-active" : resolved.has(id) ? "rr-comment-resolved" : "rr-comment"]!.push(
+        ...r,
+      );
     for (const name of NAMES) CSS.highlights.set(name, new Highlight(...named[name]!));
     return () => NAMES.forEach((name) => CSS.highlights.delete(name));
   }, [ranges, placements, activeId]);

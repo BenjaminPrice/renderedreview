@@ -60,13 +60,7 @@ import {
   treeQuery,
   viewerQuery,
 } from "../github/queries";
-import {
-  CommentRail,
-  DEFAULT_FILTERS,
-  placementCounts,
-  RailHeader,
-  type ThreadState,
-} from "../review";
+import { CommentRail, DEFAULT_FILTERS, placementCounts, RailHeader, type ThreadState } from "../review";
 import { relativeTime } from "../review/model";
 import { useReviewMode } from "../review/ReviewMode";
 import { AppShell } from "../ui/AppShell";
