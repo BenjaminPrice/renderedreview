@@ -143,11 +143,12 @@ describe("GitHub Flavored Markdown", () => {
     );
   });
 
+  // GitHub keeps bare `#fn-a` hrefs and relies on page script; the prefixed hrefs work without it.
   test("footnotes use GitHub's ids", () => {
     const out = html("Claim.[^a]\n\n[^a]: Source.");
-    expect(out).toContain('<a href="#fn-a" id="user-content-fnref-a" data-footnote-ref');
+    expect(out).toContain('<a href="#user-content-fn-a" id="user-content-fnref-a" data-footnote-ref');
     expect(out).toContain('<li id="user-content-fn-a">');
-    expect(out).toContain('<a href="#fnref-a" data-footnote-backref=""');
+    expect(out).toContain('<a href="#user-content-fnref-a" data-footnote-backref=""');
   });
 
   test("permitted HTML survives", () => {

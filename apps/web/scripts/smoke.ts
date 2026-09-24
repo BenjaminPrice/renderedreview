@@ -4,6 +4,7 @@
 import { spawn } from "node:child_process";
 import assert from "node:assert/strict";
 import { once } from "node:events";
+import { checkCsp } from "./check-csp.ts";
 
 const entry = new URL("../.output/server/index.mjs", import.meta.url);
 const port = String(3100 + Math.floor(Math.random() * 800));
@@ -33,6 +34,8 @@ try {
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { status: "ok" });
   console.log(`ok: /health answered on PORT=${port}`);
+
+  await checkCsp(`http://127.0.0.1:${port}/`);
 } finally {
   server.child.kill();
 }

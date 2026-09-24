@@ -11,6 +11,14 @@ permissions:
 jobs:
   ci:
     runs-on: ubuntu-latest
+    services:
+      # PostgreSQL for the database adapter contract tests.
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: jetify-com/devbox-install-action@8c6a66ed6273138b1915457069de78cb52fe3bd7 # v0.15.0
@@ -22,7 +30,22 @@ jobs:
       - run: devbox run -- pnpm lint
       - run: devbox run -- pnpm typecheck
       - run: devbox run -- pnpm test
+        env:
+          TEST_POSTGRES_URL: postgres://postgres:postgres@localhost:5432/postgres
       - run: devbox run -- pnpm build
       - name: Check committed action bundle matches build
         run: git diff --exit-code -- packages/github-action/dist
       - run: devbox run -- pnpm --filter @rendered-review/web smoke
+
+  # Builds the Cloudflare Workers target and serves it in local workerd (no Cloudflare account needed).
+  workers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: jetify-com/devbox-install-action@8c6a66ed6273138b1915457069de78cb52fe3bd7 # v0.15.0
+        with:
+          devbox-version: 0.17.2
+          enable-cache: true
+      - run: devbox run -- pnpm install --frozen-lockfile
+      - run: devbox run -- pnpm --filter @rendered-review/web build:workers
+      - run: devbox run -- pnpm --filter @rendered-review/web smoke:workers

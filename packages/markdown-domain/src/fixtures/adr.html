@@ -1,27 +1,27 @@
-<h1 data-rr-id="0">ADR 7: Use PostgreSQL for the control plane</h1>
+<h1 id="user-content-adr-7-use-postgresql-for-the-control-plane" data-rr-id="0">ADR 7: Use PostgreSQL for the control plane</h1>
 <ul data-rr-id="1">
 <li data-rr-id="2">Status: accepted</li>
 <li data-rr-id="3">Deciders: platform team</li>
 <li data-rr-id="4">Date: 2026-01-15</li>
 </ul>
-<h2 data-rr-id="5">Context and Problem Statement</h2>
+<h2 id="user-content-context-and-problem-statement" data-rr-id="5">Context and Problem Statement</h2>
 <p data-rr-id="6">We need durable storage for installations and review sessions. Candidates
 were evaluated against operational cost and portability.</p>
-<h2 data-rr-id="7">Decision Drivers</h2>
+<h2 id="user-content-decision-drivers" data-rr-id="7">Decision Drivers</h2>
 <ul data-rr-id="8">
 <li data-rr-id="9">Managed offerings on every major cloud</li>
 <li data-rr-id="10">Strong transactional semantics</li>
 <li data-rr-id="11">Familiar to the team</li>
 </ul>
-<h2 data-rr-id="12">Considered Options</h2>
+<h2 id="user-content-considered-options" data-rr-id="12">Considered Options</h2>
 <ol data-rr-id="13">
 <li data-rr-id="14">PostgreSQL</li>
 <li data-rr-id="15">SQLite with replication</li>
 <li data-rr-id="16">A document store</li>
 </ol>
-<h2 data-rr-id="17">Decision Outcome</h2>
+<h2 id="user-content-decision-outcome" data-rr-id="17">Decision Outcome</h2>
 <p data-rr-id="18">Chosen option: <strong data-rr-id="19">PostgreSQL</strong>, because it satisfies every driver.</p>
-<h3 data-rr-id="20">Consequences</h3>
+<h3 id="user-content-consequences" data-rr-id="20">Consequences</h3>
 <ul data-rr-id="21">
 <li data-rr-id="22">
 <p data-rr-id="23">Good, because migrations are well understood.</p>
