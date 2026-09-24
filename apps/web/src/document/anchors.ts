@@ -12,6 +12,22 @@ import { highlightRanges } from "./selection";
 const NAMES = ["rr-comment", "rr-comment-resolved", "rr-comment-active"] as const;
 const NONE: ReadonlyMap<string, Range[]> = new Map();
 
+const sameRange = (a: Range, b: Range) =>
+  a.startContainer === b.startContainer &&
+  a.startOffset === b.startOffset &&
+  a.endContainer === b.endContainer &&
+  a.endOffset === b.endOffset;
+
+/** Whether two ranges maps cover the same DOM positions, so nothing needs repainting. */
+function sameRanges(a: ReadonlyMap<string, Range[]>, b: ReadonlyMap<string, Range[]>) {
+  if (a.size !== b.size) return false;
+  for (const [id, rs] of b) {
+    const old = a.get(id);
+    if (old?.length !== rs.length || rs.some((r, i) => !sameRange(r, old[i]!))) return false;
+  }
+  return true;
+}
+
 /** Where a click landed in the text, if the browser can tell. */
 function caretAt(x: number, y: number): [Node, number] | null {
   const p = document.caretPositionFromPoint?.(x, y);
@@ -44,16 +60,16 @@ export function useAnchors(
   const [ranges, setRanges] = useState(NONE);
   useEffect(() => {
     if (!article || !rendered || source === undefined || !highlightsSupported()) return setRanges(NONE);
-    const measure = () =>
-      setRanges(
-        new Map(
-          placements.flatMap(({ thread, range }) => {
-            if (!range || !filters.has(threadState(thread))) return [];
-            const found = highlightRanges(article, rendered, source, range.textPosition);
-            return found.length ? [[thread.id, found]] : [];
-          }),
-        ),
+    const measure = () => {
+      const next = new Map(
+        placements.flatMap(({ thread, range }) => {
+          if (!range || !filters.has(threadState(thread))) return [];
+          const found = highlightRanges(article, rendered, source, range.textPosition);
+          return found.length ? [[thread.id, found] as const] : [];
+        }),
       );
+      setRanges((prev) => (sameRanges(prev, next) ? prev : next));
+    };
     measure();
     // Re-rendered document parts (a diagram's source view, lazy content) invalidate the ranges.
     const observer = new MutationObserver(measure);
