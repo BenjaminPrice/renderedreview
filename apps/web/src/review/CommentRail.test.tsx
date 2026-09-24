@@ -140,6 +140,7 @@ describe("threads and filters", () => {
       kind: "annotation" as const,
       sourceRange: { startLine: 3, startColumn: 12, endLine: 3, endColumn: 35 },
       textQuote: { exact: "retries failed requests" },
+      textPosition: { start: 26, end: 49 },
     };
     await renderPage([
       { thread: placed, blocks: [block(1)], range },
@@ -157,7 +158,12 @@ describe("threads and filters", () => {
   it("shows a thread re-anchored from an earlier revision at its new lines, marked moved", async () => {
     const moved = appThread([issueComment("Moved one")]);
     const sourceRange = { startLine: 5, startColumn: 12, endLine: 5, endColumn: 35 };
-    const range = { kind: "annotation" as const, sourceRange, textQuote: { exact: "retries failed requests" } };
+    const range = {
+      kind: "annotation" as const,
+      sourceRange,
+      textQuote: { exact: "retries failed requests" },
+      textPosition: { start: 40, end: 63 },
+    };
     const reanchor = {
       state: "moved" as const,
       evidence: "quote-context" as const,

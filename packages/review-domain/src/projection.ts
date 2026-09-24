@@ -267,6 +267,8 @@ export interface AnnotationRange {
   kind: "annotation";
   sourceRange: { startLine: number; startColumn: number; endLine: number; endColumn: number };
   textQuote: { exact: string; prefix?: string; suffix?: string };
+  /** Raw source offsets of the same words in the displayed blob (`end` exclusive). */
+  textPosition: { start: number; end: number };
 }
 
 export interface ThreadPlacement {
@@ -321,11 +323,15 @@ export function placeThreads(
       if (!head || !blob) return { thread, blocks: lineBlocks(a.fallback) };
       const { exact, prefix, suffix } = selector(a.annotation, "TextQuoteSelector");
       const textQuote = { exact, ...(prefix !== undefined && { prefix }), ...(suffix !== undefined && { suffix }) };
-      const at = (range: AnnotationRange["sourceRange"], extra: Partial<ThreadPlacement> = {}): ThreadPlacement => {
+      const at = (
+        range: AnnotationRange["sourceRange"],
+        textPosition: AnnotationRange["textPosition"],
+        extra: Partial<ThreadPlacement> = {},
+      ): ThreadPlacement => {
         return {
           thread,
           blocks: blocksForLines(head, range.startLine, rangeLines(range).endLine),
-          range: { kind: "annotation", sourceRange: range, textQuote },
+          range: { kind: "annotation", sourceRange: range, textQuote, textPosition },
           ...extra,
         };
       };
@@ -344,7 +350,7 @@ export function placeThreads(
             blocks: blocksForLines(head, r.sourceRange!.startLine, rangeLines(r.sourceRange!).endLine),
             reanchor: r,
           };
-        if (r.sourceRange) return at(r.sourceRange, { reanchor: r });
+        if (r.sourceRange) return at(r.sourceRange, r.textPosition!, { reanchor: r });
         return a.fallback
           ? { thread, blocks: lineBlocks(a.fallback), reanchor: r }
           : { thread, blocks: [], reason: unplacedReason(r), reanchor: r };
@@ -352,7 +358,9 @@ export function placeThreads(
       const check = verifyContent(a.annotation, blob.source, head);
       if (!check.ok) return { thread, blocks: lineBlocks(a.fallback), damaged: check.reason };
       const { startLine, startColumn, endLine, endColumn } = sourceRange(a.annotation);
-      return at({ startLine, startColumn, endLine, endColumn });
+      // Verified to match the source range above.
+      const { start, end } = selector(a.annotation, "TextPositionSelector");
+      return at({ startLine, startColumn, endLine, endColumn }, { start, end });
     });
 }
 
