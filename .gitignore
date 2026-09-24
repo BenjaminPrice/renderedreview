@@ -11,6 +11,7 @@ coverage/
 .direnv/
 .env.local
 .env.*.local
+.dev.vars*
 .DS_Store
 .ai
 .claude/

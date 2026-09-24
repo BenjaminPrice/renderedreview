@@ -1,3 +1,7 @@
 packages:
   - apps/*
   - packages/*
+# workerd downloads its binary in a postinstall script; wrangler/vite-plugin bundle with esbuild.
+allowBuilds:
+  esbuild: true
+  workerd: true
