@@ -1,14 +1,21 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Public GitHub access from the browser: direct first, same-origin proxy when direct access fails.
+// GitHub access from the browser. Signed out: direct first, same-origin proxy when direct access
+// fails. Signed in: the authenticated same-origin endpoint, which reads with the user's token.
 import { openBrowserCache } from "@rendered-review/browser-cache";
 import {
   createGitHubClient,
+  ForbiddenError,
   type GitHubClient,
   GitHubError,
   NetworkError,
   RateLimitError,
+  type ReviewThread,
 } from "@rendered-review/github-integration";
 import { apiBase, PROXY_PREFIX } from "./proxy";
+import { PRIVATE_REPO_UNSUPPORTED, REQUESTED_WITH, USER_PREFIX } from "./user-proxy";
+
+/** Whose GitHub access a read uses: the signed-in user's, or public (anonymous/operator) access. */
+export type Access = "user" | "public";
 
 /** Local cache for public content. Memory-only where IndexedDB is missing (SSR). */
 export const browserCache = openBrowserCache();
@@ -77,3 +84,54 @@ export async function withPublicGitHub<T>(host: string, call: (client: GitHubCli
     return call(entry.proxy);
   }
 }
+
+// Everything read with the user's access is per user, so it stays in memory for this tab (unless
+// the user opts in to persisting private content), even for public repositories: the browser
+// cannot know whether a repository is (still) public, and this rule needs no visibility tracking.
+const userCache = browserCache.responseCache({ private: true });
+
+/** Rewrites GitHub API URLs to the authenticated endpoint and marks the call as same-origin script. */
+const userFetch =
+  (host: string): typeof fetch =>
+  (input, init) => {
+    const url = String(input instanceof Request ? input.url : input);
+    const base = `${apiBase(host)}/`;
+    const headers = new Headers(init?.headers);
+    headers.set("X-Requested-With", REQUESTED_WITH);
+    return fetch(url.startsWith(base) ? `${USER_PREFIX}${host}/${url.slice(base.length)}` : url, { ...init, headers });
+  };
+
+const userClients = new Map<string, GitHubClient>();
+
+/** Runs `call` with `access`: the user's through the authenticated endpoint, or the public path. */
+export function withGitHub<T>(access: Access, host: string, call: (client: GitHubClient) => Promise<T>): Promise<T> {
+  if (access === "public") return withPublicGitHub(host, call);
+  let client = userClients.get(host);
+  if (!client) userClients.set(host, (client = createGitHubClient({ host, cache: userCache, fetch: userFetch(host) })));
+  return call(client);
+}
+
+/** Review threads with resolution state, read with the user's access. */
+export async function userReviewThreads(
+  host: string,
+  owner: string,
+  repo: string,
+  number: number,
+): Promise<ReviewThread[]> {
+  const url = `${apiBase(host)}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls/${number}/review-threads`;
+  const res = await userFetch(host)(url).catch((cause: unknown) => {
+    throw new NetworkError(url, cause);
+  });
+  if (!res.ok) {
+    const { message } = (await res.json().catch(() => ({}))) as { message?: string };
+    throw new GitHubError(message ?? `GitHub responded ${res.status}`, res.status, url);
+  }
+  return res.json() as Promise<ReviewThread[]>;
+}
+
+/** The user's session or GitHub token is gone: they have to sign in again. */
+export const isSignInRequired = (error: unknown) => error instanceof GitHubError && error.status === 401;
+
+/** A signed-in read reached a private repository, which is not supported yet. */
+export const isPrivateRepoUnsupported = (error: unknown) =>
+  error instanceof ForbiddenError && error.message === PRIVATE_REPO_UNSUPPORTED;
