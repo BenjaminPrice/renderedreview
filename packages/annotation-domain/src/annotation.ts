@@ -16,6 +16,8 @@ export interface RenderedReviewAnnotationV1 {
   motivation: "commenting" | "replying" | "suggesting" | "resolving";
   replyTo?: string;
   threadId?: string;
+  /** With motivation `resolving`: `reopened` reopens the thread; absent means resolved. */
+  resolution?: "resolved" | "reopened";
   createdBy?: "rendered-review";
 }
 
@@ -33,6 +35,8 @@ const MOTIVATIONS = new Set(["commenting", "replying", "suggesting", "resolving"
 const SELECTOR_TYPES = ["TextQuoteSelector", "TextPositionSelector", "MarkdownSourceRangeSelector"] as const;
 // Host name with optional port; never a scheme, path, or credentials (it is used to build permalinks).
 const HOST = /^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?(?::\d{1,5})?$/i;
+// eslint-disable-next-line no-control-regex
+const UNSAFE_PATH_CHAR = /[\\\u0000-\u001f\u007f]/;
 const REPOSITORY = /^[\w.-]+\/[\w.-]+$/;
 // SHA-1 or SHA-256 object ids, lowercase hex as GitHub returns them.
 const OID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
@@ -106,7 +110,11 @@ export function validateAnnotation(value: unknown): ValidationResult {
     str(t.repository, "target.repository", REPOSITORY, 201);
     int(t.pullRequest, "target.pullRequest", 1);
     const path = str(t.path, "target.path");
-    if (path.startsWith("/")) fail("target.path must be repository-relative");
+    // Used to build links and pick documents: plain repository-relative segments only.
+    if (UNSAFE_PATH_CHAR.test(path) || path.split("/").some((seg) => seg === "" || seg === "." || seg === ".."))
+      fail(
+        "target.path must be repository-relative, without empty, . or .. segments, backslashes or control characters",
+      );
     str(t.commitOid, "target.commitOid", OID);
     str(t.blobOid, "target.blobOid", OID);
     if (!Array.isArray(t.selectors)) fail("target.selectors must be an array");
@@ -127,6 +135,8 @@ export function validateAnnotation(value: unknown): ValidationResult {
       fail("motivation must be commenting, replying, suggesting or resolving");
     optional(a.replyTo, (v) => str(v, "replyTo"));
     optional(a.threadId, (v) => str(v, "threadId"));
+    if (a.resolution !== undefined && a.resolution !== "resolved" && a.resolution !== "reopened")
+      fail('resolution must be "resolved" or "reopened"');
     if (a.createdBy !== undefined && a.createdBy !== "rendered-review") fail('createdBy must be "rendered-review"');
     return { ok: true, annotation: value as RenderedReviewAnnotationV1 };
   } catch (error) {
