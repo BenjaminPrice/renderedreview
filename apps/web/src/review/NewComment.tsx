@@ -10,6 +10,7 @@ import { signIn } from "../ui/Viewer";
 import { useUnsentComment } from "./drafts";
 import { Markdown } from "./Markdown";
 import { publishErrorMessage } from "./publish";
+import { PublishFailure } from "./PublishFailure";
 import { initials } from "./ThreadCard";
 
 export function NewConversationComment({
@@ -30,7 +31,7 @@ export function NewConversationComment({
   );
   const [preview, setPreview] = useState(false);
   const [sending, setSending] = useState(false);
-  const [failure, setFailure] = useState<string>();
+  const [failure, setFailure] = useState<{ message: string; cause: unknown }>();
   // Keyed by count, so the same message twice is announced twice.
   const [announcement, setAnnouncement] = useState({ text: "", n: 0 });
   // Synchronous guard: a second click or shortcut can arrive before the disabled state renders.
@@ -55,7 +56,7 @@ export function NewConversationComment({
       setPreview(false);
       setAnnouncement((a) => ({ text: "Comment posted", n: a.n + 1 }));
     } catch (e) {
-      setFailure(publishErrorMessage(e as Error));
+      setFailure({ message: publishErrorMessage(e as Error), cause: e });
     } finally {
       inFlight.current = false;
       setSending(false);
@@ -120,7 +121,7 @@ export function NewConversationComment({
             )}
             {failure && (
               <p className="rr-composer-error" role="alert">
-                {failure}
+                <PublishFailure error={failure} />
               </p>
             )}
             <div className="rr-composer-actions">
