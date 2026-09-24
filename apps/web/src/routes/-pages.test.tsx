@@ -15,6 +15,8 @@ import { Route as RootRoute } from "./__root";
 const fixture = (name: string) => readFileSync(`${import.meta.dirname}/../document/fixtures/${name}`, "utf8");
 const API = "https://api.github.com/repos/mdn/content";
 const GHES = "ghe.example.com";
+// Its own host for the cache test: clients remember an exhausted limit per host.
+const CACHED_HOST = "cache.example.com";
 
 type Reply = Response | Promise<Response>;
 const json = (body: string, init?: ResponseInit) =>
@@ -42,7 +44,7 @@ afterEach(() => {
 function renderApp(path: string) {
   RootRoute.update({ component: Outlet });
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  queryClient.setQueryData(allowedHostsQuery.queryKey, { hosts: ["github.com", GHES], proxyFirst: [] });
+  queryClient.setQueryData(allowedHostsQuery.queryKey, { hosts: ["github.com", GHES, CACHED_HOST], proxyFirst: [] });
   const router = createRouter({
     routeTree,
     context: { queryClient },
@@ -134,6 +136,42 @@ describe("pull request page states", () => {
     renderApp(`/${GHES}/team/handbook/pull/12`);
     expect(await heading("GitHub rate limit reached")).toBeTruthy();
     expect(screen.getByText(/Try again after/)).toBeTruthy();
+    // Inside the app shell, with its way home.
+    expect(screen.getByRole("link", { name: "Rendered Review home" })).toBeTruthy();
+  });
+
+  it("keeps showing a recently viewed pull request from the cache when rate-limited", async () => {
+    const api = `https://${CACHED_HOST}/api/v3/repos/mdn/content`;
+    const responses: Record<string, string> = {
+      [`${api}/pulls/45377`]: fixture("pull.json"),
+      [`${api}/pulls/45377/files?per_page=100`]: fixture("files.json"),
+      [`${api}/pulls/45377/comments?per_page=100`]: fixture("review-comments.json"),
+      [`${api}/pulls/45377/reviews?per_page=100`]: fixture("reviews.json"),
+      [`${api}/issues/45377/comments?per_page=100`]: fixture("issue-comments.json"),
+      [`${api}/git/blobs/d8730ec82103b7ac29d4cdc0bdd9dfd575c49441`]: fixture(
+        "blob-d8730ec82103b7ac29d4cdc0bdd9dfd575c49441.md",
+      ),
+    };
+    stubGitHub((url) =>
+      responses[url] === undefined ? undefined : json(responses[url], { headers: { etag: '"e"' } }),
+    );
+    renderApp(`/${CACHED_HOST}/mdn/content/pull/45377`);
+    await screen.findByRole("article", { name: "Rendered document" });
+    cleanup();
+
+    // A reload once the limit is exhausted: a fresh query cache, every GitHub call refused.
+    const reset = Math.floor(Date.now() / 1000) + 3600;
+    stubGitHub(() =>
+      json('{"message":"API rate limit exceeded"}', {
+        status: 403,
+        headers: { "x-ratelimit-limit": "60", "x-ratelimit-remaining": "0", "x-ratelimit-reset": String(reset) },
+      }),
+    );
+    renderApp(`/${CACHED_HOST}/mdn/content/pull/45377`);
+    expect(await screen.findByRole("article", { name: "Rendered document" })).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 1, name: /Remove HTTP status 102 page/ })).toBeTruthy();
+    const time = new Date(reset * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    expect(screen.getByText(`GitHub rate limit reached — showing cached data; retry after ${time}.`)).toBeTruthy();
   });
 
   it("says when no Markdown changed, linking to the changes on GitHub", async () => {
