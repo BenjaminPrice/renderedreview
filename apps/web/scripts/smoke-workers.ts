@@ -42,6 +42,11 @@ try {
   assert.match(await pr.text(), /<title>octocat\/hello-world#1 · Rendered Review<\/title>/);
   console.log("ok: public PR route renders");
 
+  // No GitHub App configured: sign-in is off and its routes do not exist.
+  const auth = await get("/api/auth/viewer");
+  assert.equal(auth.status, 404);
+  console.log("ok: /api/auth is off without GitHub App credentials");
+
   const sw = await get("/sw.js");
   assert.equal(sw.status, 200);
   console.log("ok: /sw.js served from static assets");
