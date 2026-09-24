@@ -48,6 +48,7 @@ import {
   type ThreadState,
 } from "../review";
 import { AppShell } from "../ui/AppShell";
+import { GuestNotice } from "../ui/GuestNotice";
 import { signIn } from "../ui/Viewer";
 import { parsePrParams, validatePrSearch } from "../pr-url";
 
@@ -165,6 +166,10 @@ function ReviewPage({ pr, id, files }: { pr: PullRequest; id: PrIdentity; files:
   useLineTarget(article, doc.rendered);
 
   const { state } = prState(pr);
+  // Guests reading GitHub directly (not through the token-backed proxy) get the sign-in suggestion.
+  const viewer = useQuery(viewerQuery).data;
+  const proxied = useQuery(allowedHostsQuery).data?.proxyFirst.includes(id.host);
+  const guest = viewer?.signInEnabled && !viewer.signedIn && proxied === false;
   const link = entry && { ...id, sha: doc.sha, path: entry.path };
 
   return (
@@ -299,6 +304,7 @@ function ReviewPage({ pr, id, files }: { pr: PullRequest; id: PrIdentity; files:
       }
     >
       <RateLimitBanner />
+      {guest && <GuestNotice host={id.host} />}
       {overview ? (
         <PrOverview
           pr={pr}
