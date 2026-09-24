@@ -2,11 +2,12 @@
 // Same-origin fallback for public GitHub reads the browser could not make directly (CORS, network,
 // anonymous rate limit). Forwards only allowlisted read-only REST paths, anonymously. Never an open
 // proxy. Web Request/Response/fetch only, so it runs on Node and Workers alike.
+import type { AppConfig } from "@rendered-review/runtime";
 
 export const PROXY_PREFIX = "/api/github/public/";
 
-// ponytail: fixed allowlist; read GitHub Enterprise Server hosts from runtime config once it exists.
-export const ALLOWED_HOSTS = ["github.com"];
+/** GitHub hosts this deployment serves: github.com, plus the configured Enterprise Server host. */
+export const allowedHosts = (config: AppConfig) => [...new Set(["github.com", new URL(config.github.url).host])];
 
 const REPO = String.raw`(?:repos/(?!\.\.?/)[\w.-]{1,100}/(?!\.\.?/)[\w.-]{1,100}|repositories/\d{1,12})`;
 const OID = "[0-9a-f]{40}(?:[0-9a-f]{24})?";
@@ -45,7 +46,7 @@ const reject = (status: number, message: string) =>
 
 export async function proxyPublicGitHub(
   request: Request,
-  { allowedHosts = ALLOWED_HOSTS, fetch: fetchFn = fetch }: { allowedHosts?: string[]; fetch?: typeof fetch } = {},
+  { allowedHosts, fetch: fetchFn = fetch }: { allowedHosts: string[]; fetch?: typeof fetch },
 ): Promise<Response> {
   if (request.method !== "GET") return reject(405, "Method not allowed");
   const url = new URL(request.url);

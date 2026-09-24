@@ -1,9 +1,20 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { ForbiddenError, NotFoundError, RateLimitError } from "@rendered-review/github-integration";
-import { useQuery } from "@tanstack/react-query";
+import { queryOptions, useQuery } from "@tanstack/react-query";
 import { createFileRoute, notFound, stripSearchParams } from "@tanstack/react-router";
-import { changedFilesQuery, prIdentity, pullRequestQuery } from "../github/queries";
+import { createServerFn } from "@tanstack/react-start";
+import { allowedHosts } from "../github/proxy";
+import { changedFilesQuery, type PrIdentity, prIdentity, pullRequestQuery } from "../github/queries";
 import { isMarkdownPath, parsePrParams, validatePrSearch } from "../pr-url";
+
+const getAllowedHosts = createServerFn({ method: "GET" }).handler(({ context }) => allowedHosts(context.config));
+
+/** Deployment config; fetched once per session. */
+export const allowedHostsQuery = queryOptions({
+  queryKey: ["allowed-hosts"],
+  queryFn: () => getAllowedHosts(),
+  staleTime: Infinity,
+});
 
 export const Route = createFileRoute("/$host/$owner/$repo/pull/$number")({
   params: {
@@ -14,19 +25,31 @@ export const Route = createFileRoute("/$host/$owner/$repo/pull/$number")({
     },
     stringify: (params) => ({ ...params, number: String(params.number) }),
   },
+  loader: async ({ params, context }) => {
+    const hosts = await context.queryClient.ensureQueryData(allowedHostsQuery);
+    if (!hosts.includes(params.host)) throw notFound({ data: { unsupportedHost: params.host } });
+  },
   validateSearch: validatePrSearch,
   // Keep shared links clean: the default sidebar mode is implied.
   search: { middlewares: [stripSearchParams({ files: "changed" })] },
   head: ({ params }) => ({ meta: [{ title: `${params.owner}/${params.repo}#${params.number} · Rendered Review` }] }),
   component: PullRequestPage,
-  notFoundComponent: () => <Message title="Not found">This is not a valid pull request link.</Message>,
+  notFoundComponent: ({ data }) => {
+    const host = (data as { unsupportedHost?: string } | undefined)?.unsupportedHost;
+    return host ? (
+      <Message title="Unsupported GitHub host">This server does not serve pull requests from {host}.</Message>
+    ) : (
+      <Message title="Not found">This is not a valid pull request link.</Message>
+    );
+  },
 });
 
 function PullRequestPage() {
   const params = Route.useParams();
   const pr = useQuery(pullRequestQuery(params));
   const identity = pr.data && prIdentity(params.host, pr.data);
-  const files = useQuery({ ...changedFilesQuery(identity!), enabled: !!identity });
+  // Placeholder identity while the PR loads; the query stays disabled until the real one exists.
+  const files = useQuery({ ...changedFilesQuery(identity ?? ({} as PrIdentity)), enabled: !!identity });
 
   const error = pr.error ?? files.error;
   if (error) return <ErrorState error={error} />;

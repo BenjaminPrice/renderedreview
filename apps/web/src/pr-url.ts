@@ -17,10 +17,17 @@ export interface PrSearch {
   thread?: string | number;
 }
 
-const HOST = /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+(?::\d{1,5})?$/;
+const HOST = /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/;
 // GitHub owner and repository names: letters, digits, `-`, `_`, `.`; never `.` or `..`.
 const NAME = /^(?!\.\.?$)[\w.-]{1,100}$/;
 const NUMBER = /^[1-9]\d{0,9}$/;
+
+/** `name` or `name:port`, port 1–65535 without leading zeros. */
+function validHost(host: string): boolean {
+  const [name = "", port, extra] = host.split(":");
+  if (extra !== undefined || !HOST.test(name)) return false;
+  return port === undefined || (NUMBER.test(port) && Number(port) <= 65535);
+}
 
 /** Validates raw route params; `undefined` means the route does not exist. */
 export function parsePrParams(raw: {
@@ -30,7 +37,7 @@ export function parsePrParams(raw: {
   number: string;
 }): PrParams | undefined {
   const host = raw.host.toLowerCase();
-  if (!HOST.test(host) || !NAME.test(raw.owner) || !NAME.test(raw.repo) || !NUMBER.test(raw.number)) return undefined;
+  if (!validHost(host) || !NAME.test(raw.owner) || !NAME.test(raw.repo) || !NUMBER.test(raw.number)) return undefined;
   const number = Number(raw.number);
   if (number > 2 ** 31 - 1) return undefined;
   return { host, owner: raw.owner, repo: raw.repo, number };

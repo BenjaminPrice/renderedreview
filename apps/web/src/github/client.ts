@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Public GitHub access from the browser: direct first, same-origin proxy when direct access fails.
+import { openBrowserCache } from "@rendered-review/browser-cache";
 import {
-  type CacheEntry,
   createGitHubClient,
   type GitHubClient,
   NetworkError,
   RateLimitError,
-  type ResponseCache,
 } from "@rendered-review/github-integration";
 import { apiBase, PROXY_PREFIX } from "./proxy";
 
-// ponytail: in-memory ETag cache; swap for the IndexedDB cache when it lands.
-const cache: ResponseCache = new Map<string, CacheEntry>();
+/** Local cache for public content. Memory-only where IndexedDB is missing (SSR). */
+export const browserCache = openBrowserCache();
+const cache = browserCache.responseCache({ private: false });
 
 export type FallbackReason = "network" | "rate-limit";
 
