@@ -1428,3 +1428,14 @@ samp {
 .rr-markdown [data-rr-anchor][data-rr-active] {
   outline: 2px solid var(--rr-hl-comment-line);
 }
+/* Keyboard focus on an anchored block: the standard focus ring replaces the anchor outline (WCAG 2.4.7). Keep last. */
+.rr-markdown [data-rr-anchor]:focus-visible {
+  outline: 2px solid var(--rr-focus);
+  outline-offset: 4px;
+}
+
+/* Shell without a sidebar or comment rail (home page): the document column takes the width. */
+.rr-body:not(:has(> .rr-sidebar)),
+.rr-canvas:not(:has(> .rr-rail)) {
+  grid-template-columns: minmax(0, 1fr);
+}

@@ -42,6 +42,22 @@ interface HostClients {
   proxyUntil: number;
 }
 
+let limitedUntil: Date | undefined;
+const limitListeners = new Set<() => void>();
+function noteRateLimit(resetAt: Date) {
+  limitedUntil = resetAt;
+  limitListeners.forEach((listener) => listener());
+}
+
+/** When GitHub's rate limit last hit resets: pages show cached data until then. Subscribe with `useSyncExternalStore`. */
+export const rateLimit = {
+  subscribe(listener: () => void) {
+    limitListeners.add(listener);
+    return () => limitListeners.delete(listener);
+  },
+  resetAt: () => limitedUntil,
+};
+
 const clients = new Map<string, HostClients>();
 
 function clientsFor(host: string): HostClients {
@@ -50,7 +66,14 @@ function clientsFor(host: string): HostClients {
     entry = {
       // No retries on the direct path: a CORS failure would only repeat, and the proxy retries.
       direct: createGitHubClient({ host, cache, maxRetries: 0 }),
-      proxy: createGitHubClient({ host, cache, fetch: proxiedFetch(host) }),
+      // The last resort: once it is rate-limited too, answer from the cache however old.
+      proxy: createGitHubClient({
+        host,
+        cache,
+        fetch: proxiedFetch(host),
+        staleOnRateLimit: true,
+        onMetric: (m) => m.outcome === "stale" && m.rateLimit && noteRateLimit(m.rateLimit.resetAt),
+      }),
       proxyUntil: 0,
     };
     clients.set(host, entry);
@@ -66,7 +89,12 @@ export function preferProxy(host: string) {
 /** Runs `call` against GitHub directly, retrying through the proxy for fallback-eligible failures. */
 export async function withPublicGitHub<T>(host: string, call: (client: GitHubClient) => Promise<T>): Promise<T> {
   const entry = clientsFor(host);
-  if (Date.now() < entry.proxyUntil) return call(entry.proxy);
+  const viaProxy = () =>
+    call(entry.proxy).catch((error: unknown) => {
+      if (error instanceof RateLimitError) noteRateLimit(error.resetAt);
+      throw error;
+    });
+  if (Date.now() < entry.proxyUntil) return viaProxy();
   try {
     return await call(entry.direct);
   } catch (error) {
@@ -74,6 +102,6 @@ export async function withPublicGitHub<T>(host: string, call: (client: GitHubCli
     if (!reason) throw error;
     console.info(`github public fallback: ${reason}`);
     if (error instanceof RateLimitError) entry.proxyUntil = error.resetAt.getTime();
-    return call(entry.proxy);
+    return viaProxy();
   }
 }

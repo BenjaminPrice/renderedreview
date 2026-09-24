@@ -36,6 +36,13 @@ try {
   console.log(`ok: /health answered on PORT=${port}`);
 
   await checkCsp(`http://127.0.0.1:${port}/`);
+
+  // Not-found page states carry a 404 status, not 200.
+  for (const path of ["/github.com/o/r/pull/not-a-number", "/gitlab.example.com/o/r/pull/1"]) {
+    const res = await fetch(`http://127.0.0.1:${port}${path}`);
+    assert.equal(res.status, 404, path);
+  }
+  console.log("ok: invalid and unsupported-host PR links answer 404");
 } finally {
   server.child.kill();
 }
