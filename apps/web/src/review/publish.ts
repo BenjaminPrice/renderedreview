@@ -69,7 +69,13 @@ export function useGitHubPublisher(id: PrIdentity): Publisher {
         return result.results.map((r) =>
           r.ok
             ? { draftId: r.draftId, ok: true }
-            : { draftId: r.draftId, ok: false, message: publishErrorMessage(r.error), retryAs: r.error.retryAs, cause: r.error },
+            : {
+                draftId: r.draftId,
+                ok: false,
+                message: publishErrorMessage(r.error),
+                retryAs: r.error.retryAs,
+                cause: r.error,
+              },
         );
       } catch (error) {
         // Refused before publishing anything: a changed submission gets a new id anyway.

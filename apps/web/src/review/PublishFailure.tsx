@@ -9,7 +9,9 @@ export function PublishFailure({ error }: { error: { message: string; cause?: un
   if (refusal?.code !== "oauth-org-restricted") return error.message;
   return (
     <>
-      <strong>{refusal.org ? `The ${refusal.org} organization` : "This organization"} restricts third-party apps.</strong>{" "}
+      <strong>
+        {refusal.org ? `The ${refusal.org} organization` : "This organization"} restricts third-party apps.
+      </strong>{" "}
       An organization owner needs to approve Rendered Review, or install the Rendered Review GitHub App on the
       repository. <ExternalLink href={refusal.approvalUrl}>Request approval</ExternalLink>
     </>

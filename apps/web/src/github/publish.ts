@@ -318,7 +318,11 @@ async function submitReview(
     } catch (error) {
       native = { ok: false, error: fromGitHub(error, deps.approvalUrl).body };
       for (const d of lines)
-        outcomes.set(d.id, { draftId: d.id, ok: false, error: fromGitHub(error, deps.approvalUrl, "review-line").body });
+        outcomes.set(d.id, {
+          draftId: d.id,
+          ok: false,
+          error: fromGitHub(error, deps.approvalUrl, "review-line").body,
+        });
     }
   }
   // One at a time: GitHub asks for serial writes to avoid secondary rate limits.
@@ -328,7 +332,11 @@ async function submitReview(
       const comment = await publishDraft(client, t, d, pr.head.sha);
       outcomes.set(d.id, { draftId: d.id, ok: true, commentId: comment.id, url: comment.htmlUrl });
     } catch (error) {
-      outcomes.set(d.id, { draftId: d.id, ok: false, error: fromGitHub(error, deps.approvalUrl, d.representation).body });
+      outcomes.set(d.id, {
+        draftId: d.id,
+        ok: false,
+        error: fromGitHub(error, deps.approvalUrl, d.representation).body,
+      });
     }
   }
   const results = review.drafts.map((d) => outcomes.get(d.id)!);

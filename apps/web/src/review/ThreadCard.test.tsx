@@ -458,8 +458,10 @@ describe("an organization restricting the OAuth App", () => {
     withActions(thread("t1", lineAnchor(3), "unresolved"), { setResolved });
     await userEvent.click(screen.getByRole("button", { name: /^Resolve/ }));
     const alert = await screen.findByRole("alert");
-    expect(within(alert).getByRole("link", { name: /Request approval/ }).getAttribute("href")).toBe(
-      "https://docs.github.com/x",
-    );
+    expect(
+      within(alert)
+        .getByRole("link", { name: /Request approval/ })
+        .getAttribute("href"),
+    ).toBe("https://docs.github.com/x");
   });
 });

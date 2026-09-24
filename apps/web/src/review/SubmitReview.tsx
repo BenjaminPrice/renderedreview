@@ -43,7 +43,10 @@ export function SubmitReview({ drafts, headOid, publisher, onPublished, onClose 
   const [verdict, setVerdict] = useState<Verdict>("COMMENT");
   const [staleConfirmed, setStaleConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [report, setReport] = useState<{ published: number; failed: { draft?: Draft; message: string; cause?: unknown }[] }>();
+  const [report, setReport] = useState<{
+    published: number;
+    failed: { draft?: Draft; message: string; cause?: unknown }[];
+  }>();
 
   useEffect(() => {
     const d = dialog.current;
