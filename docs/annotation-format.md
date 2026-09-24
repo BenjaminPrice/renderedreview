@@ -129,9 +129,11 @@ plus one Markdown source range selector:
   so a range ending at column 1 does not include that line. The end must not precede the start.
 
 A reader checks an annotation against the blob it names: the source range lies inside the blob,
-the text position is exactly the source range's span, and `exact` equals the source text of that
-span, or, when the span contains inline markup (emphasis markers, link syntax, escapes), occurs in
-the rendered text of the innermost rendered element whose source contains the whole span.
+the text position is exactly the source range's span, and `exact` equals the rendered text that
+span claims: every rendered character whose source lies inside the span, from the first to the
+last, without generated labels (alert titles, footnote back-links) and with the whitespace between
+blocks kept, then normalized. Markup such as emphasis markers, link syntax and escapes is not part
+of it. A selection across blocks is widened to whole blocks, so its `exact` is those blocks' text.
 Otherwise the metadata is damaged.
 
 Text is compared after one normalization only: CRLF and lone CR become LF, then Unicode NFC. No

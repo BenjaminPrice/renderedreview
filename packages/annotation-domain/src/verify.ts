@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-import { normalizeText, type RenderedMarkdown } from "@rendered-review/markdown-domain";
+import { normalizeText, type RenderedMarkdown, renderedText } from "@rendered-review/markdown-domain";
 import type { AnnotationSelector, RenderedReviewAnnotationV1 } from "./annotation.js";
 
 export type ContentCheck = { ok: true } | { ok: false; reason: string };
@@ -14,12 +14,10 @@ const selector = <T extends AnnotationSelector["type"]>(a: RenderedReviewAnnotat
  * 1. The source range lies inside the blob.
  * 2. The text position (0-based UTF-16 offsets into the raw blob, end exclusive) is exactly the
  *    source range's span.
- * 3. The quote is the normalized source text of that span, or, when the span covers inline markup
- *    (`**`, link syntax, escapes), the quote occurs in the normalized rendered text of the innermost
- *    rendered element whose source range contains the whole span.
- *
- * ponytail: a quote spanning several top-level blocks that is not a verbatim source slice has no
- * enclosing element and fails; compare against `sourceToRendered` runs if that proves too strict.
+ * 3. The quote is the rendered text that span claims, joined as `selectionToSource` joins it
+ *    (`renderedText`): markup, generated labels and escapes are not part of it, whitespace between
+ *    blocks is. So any claim the selection conversion makes, in one block or widened across
+ *    blocks, verifies against its own blob.
  */
 export function verifyContent(
   annotation: RenderedReviewAnnotationV1,
@@ -47,8 +45,6 @@ export function verifyContent(
   const position = selector(annotation, "TextPositionSelector");
   if (position.start !== from || position.end !== to)
     return { ok: false, reason: "The text position does not match the source range" };
-  if (normalizeText(source.slice(from, to)) === exact) return { ok: true };
-  const enclosing = rendered.nodes.filter((n) => n.range.start.offset <= from && to <= n.range.end.offset).at(-1);
-  if (enclosing?.text.includes(exact)) return { ok: true };
+  if (renderedText(rendered, source, { start: from, end: to }) === exact) return { ok: true };
   return { ok: false, reason: "The quoted text does not match the document at the source range" };
 }
