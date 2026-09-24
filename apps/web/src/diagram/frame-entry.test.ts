@@ -1,37 +1,51 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// @vitest-environment jsdom
-// The frame's side of the protocol. In jsdom the test window is its own parent, so the test posts
-// as the page would and reads what the renderer posts back.
-import { afterEach, expect, it, vi } from "vitest";
+// The renderer Worker's side of the protocol, with a stand-in for the Worker's global scope.
+import { expect, it, vi } from "vitest";
 import { serveRenderer } from "./frame-entry";
 
-const posted = () => vi.mocked(window.postMessage).mock.calls.map(([data]) => data);
-const send = (data: unknown, source: MessageEventSource | null = window) =>
-  window.dispatchEvent(new MessageEvent("message", { data, source }));
-
-afterEach(() => vi.restoreAllMocks());
+function scope() {
+  const target = new EventTarget();
+  const posted: unknown[] = [];
+  return {
+    posted,
+    send: (data: unknown) => target.dispatchEvent(new MessageEvent("message", { data })),
+    scope: {
+      postMessage: (message: unknown) => void posted.push(message),
+      addEventListener: (type: "message", listener: (event: MessageEvent) => void) =>
+        target.addEventListener(type, listener as EventListener),
+    },
+  };
+}
 
 it("announces readiness once loaded, then answers each render in order", async () => {
-  vi.spyOn(window, "postMessage").mockImplementation(() => {});
-  const stop = serveRenderer(async () => async ({ source, theme }) => {
-    if (source === "bad") throw new Error("Syntax error");
-    return `<svg data-theme="${theme}">${source}</svg>`;
-  });
-  expect((globalThis as { rrRenderer?: boolean }).rrRenderer).toBe(true);
-  await vi.waitFor(() => expect(posted()).toEqual([{ ready: true }]));
+  const { posted, send, scope: worker } = scope();
+  serveRenderer(
+    async () =>
+      async ({ source, theme }) => {
+        if (source === "bad") throw new Error("Syntax error");
+        return `<svg data-theme="${theme}">${source}</svg>`;
+      },
+    worker,
+  );
+  await vi.waitFor(() => expect(posted).toEqual([{ ready: true }]));
   send({ id: 1, source: "a", theme: "dark" });
   send({ id: 2, source: "bad", theme: "light" });
-  send({ id: 3, source: "ignored", theme: "light" }, null);
-  await vi.waitFor(() => expect(posted()).toHaveLength(3));
-  expect(posted().slice(1)).toEqual([
+  send({ id: 3, source: 42, theme: "light" });
+  await vi.waitFor(() => expect(posted).toHaveLength(3));
+  expect(posted.slice(1)).toEqual([
     { id: 1, svg: '<svg data-theme="dark">a</svg>' },
     { id: 2, error: "Syntax error" },
   ]);
-  stop();
 });
 
 it("announces a failed load", async () => {
-  vi.spyOn(window, "postMessage").mockImplementation(() => {});
-  serveRenderer(() => Promise.reject(new Error("no wasm")));
-  await vi.waitFor(() => expect(posted()).toEqual([{ ready: false }]));
+  const { posted, scope: worker } = scope();
+  serveRenderer(() => Promise.reject(new Error("no wasm")), worker);
+  await vi.waitFor(() => expect(posted).toEqual([{ ready: false }]));
+});
+
+it("does nothing outside a Worker, so renderer modules can be imported by tests", () => {
+  const load = vi.fn();
+  serveRenderer(load);
+  expect(load).not.toHaveBeenCalled();
 });

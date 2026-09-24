@@ -8,28 +8,9 @@ import { nitro } from "nitro/vite";
 import { build, defineConfig, type Plugin } from "vite";
 
 // Not precached: diagram renderer scripts (Mermaid's browser build and the `*-frame.ts` bundles,
-// up to megabytes each) run only in the renderer frames, which the worker does not control, and
-// are fetched only when a document has such a diagram.
+// up to a megabyte each) run only in the renderer frames, and are fetched only when a document
+// has such a diagram.
 const ON_DEMAND = /(^|\/)(mermaid\.min|[\w-]+-frame)-[^/]+\.js$/;
-
-// Renderer frames have an opaque origin (see src/diagram/frame.ts), so their script requests
-// carry `Origin: null`. Built, a renderer is one classic script; the development server serves it
-// as modules, which load only with a CORS grant. Granted to module script loads only, in
-// development only.
-function rendererFrameModules(): Plugin {
-  return {
-    name: "rendered-review:renderer-frame-modules",
-    apply: "serve",
-    configureServer(server) {
-      server.middlewares.use((req, res, next) => {
-        if (req.headers.origin === "null" && req.headers["sec-fetch-dest"] === "script") {
-          res.setHeader("access-control-allow-origin", "null");
-        }
-        next();
-      });
-    },
-  };
-}
 
 // Builds src/sw/sw.ts into /sw.js with the client build's file list inlined. Start allows
 // only one client entry, so the worker is a separate nested build. Its version is a hash
@@ -85,6 +66,5 @@ export default defineConfig(({ mode }) => ({
       : [nitro({ plugins: [fileURLToPath(import.meta.resolve("@rendered-review/runtime-node/startup"))] })]),
     viteReact(),
     serviceWorker(),
-    rendererFrameModules(),
   ],
 }));

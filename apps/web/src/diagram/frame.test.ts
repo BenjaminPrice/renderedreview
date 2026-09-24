@@ -58,42 +58,20 @@ it.each([
   expect(frame(script).status).toBe(400);
 });
 
-const rendererFrame = (script: string | null) =>
-  rendererFrameResponse(
-    new Request(
-      `https://rr.example${RENDERER_FRAME_PATH}${script === null ? "" : `?script=${encodeURIComponent(script)}`}`,
-    ),
-    "n0nce",
-  );
-
-it("serves bundled renderers sandboxed, allowing WebAssembly but no network", async () => {
-  const response = rendererFrame("/assets/graphviz-frame-Ab_1.js");
+it("hosts bundled renderers in a Worker, allowing WebAssembly but no network", async () => {
+  const response = rendererFrameResponse(new Request(`https://rr.example${RENDERER_FRAME_PATH}`), "n0nce");
   expect(response.status).toBe(200);
   const csp = directives(response.headers.get("content-security-policy")!);
   expect(csp["sandbox"]).toEqual(["allow-scripts"]);
   expect(csp["default-src"]).toEqual(["'none'"]);
   // WebAssembly compilation only: no string-to-code evaluation.
   expect(csp["script-src"]).toEqual(["'nonce-n0nce'", "'wasm-unsafe-eval'"]);
+  // The Worker runs the renderer script the page hands over, from a blob URL made in the frame.
+  expect(csp["worker-src"]).toEqual(["blob:"]);
   expect(csp["frame-ancestors"]).toEqual(["'self'"]);
   expect(Object.keys(csp)).not.toContain("connect-src");
   const html = await response.text();
-  // A classic script: an opaque-origin page cannot load module scripts without CORS headers.
-  expect(html).toContain('<script nonce="n0nce" src="/assets/graphviz-frame-Ab_1.js"></script>');
-  // Announces a failed load, since the bundle announces only success.
-  expect(html).toMatch(/<script nonce="n0nce">[^<]*ready: false[^<]*<\/script>/);
+  // Only the host script: the renderer itself never runs in the frame's own thread.
+  expect(html.match(/<script/g)).toHaveLength(1);
+  expect(html).toMatch(/<script nonce="n0nce">[^<]*new Worker[^<]*<\/script>/);
 });
-
-it("loads the development server's renderer entry as a module", async () => {
-  const response = rendererFrame("/src/diagram/graphviz-frame.ts?worker_file&type=module");
-  expect(response.status).toBe(200);
-  expect(await response.text()).toContain(
-    '<script type="module" nonce="n0nce" src="/src/diagram/graphviz-frame.ts?worker_file&amp;type=module"></script>',
-  );
-});
-
-it.each([null, "https://evil.example/x.js", "/x.js?a=b", "/x.ts?worker_file&type=module&x", "/a/../x.js"])(
-  "refuses renderer script %s",
-  (script) => {
-    expect(rendererFrame(script).status).toBe(400);
-  },
-);

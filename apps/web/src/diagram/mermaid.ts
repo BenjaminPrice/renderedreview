@@ -4,7 +4,7 @@
 // which the page itself never executes.
 import scriptUrl from "mermaid/dist/mermaid.min.js?url";
 import { version } from "mermaid/package.json";
-import { frameRenderer } from "./frame-client";
+import { frameHost, frameRenderer } from "./frame-client";
 
 const mermaid = frameRenderer({
   id: "mermaid",
@@ -13,7 +13,7 @@ const mermaid = frameRenderer({
   version: `${version}+1`,
   label: "Mermaid",
   // Served by routes/frames.mermaid.ts.
-  src: `/frames/mermaid?script=${encodeURIComponent(scriptUrl)}`,
+  host: frameHost(`/frames/mermaid?script=${encodeURIComponent(scriptUrl)}`),
 });
 
 export const mermaidRenderer = mermaid.renderer;
