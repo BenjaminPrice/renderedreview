@@ -322,6 +322,26 @@ describe("comment", () => {
     });
   });
 
+  it.each([
+    ["not a GitHub login", "Call for Code"],
+    ["longer than a GitHub login", "a".repeat(40)],
+  ])("names no organization when the one in the message is %s", async (_, org) => {
+    const { call } = setup({
+      publicToken: "oauth-token",
+      installed: false,
+      routes: {
+        "POST /pulls/7/comments": () =>
+          Response.json({ message: ORG_RESTRICTED.replace("Call-for-Code", org) }, { status: 403 }),
+      },
+    });
+    const body = await json(await call("comment", comment()));
+    expect(body).toMatchObject({
+      code: "oauth-org-restricted",
+      message: "This organization restricts third-party apps",
+    });
+    expect(body).not.toHaveProperty("org");
+  });
+
   it("reports GitHub's rate limit with its reset time", async () => {
     const { call } = setup({
       routes: {
@@ -587,6 +607,24 @@ describe("resolve", () => {
     expect(await json(res)).toEqual({ thread: { nodeId: "PRRT_1", isResolved: resolved } });
     expect(queries.map((q) => q.variables)).toEqual([{ id: "PRRT_1" }, { id: "PRRT_1" }]);
     expect(queries[1]!.query).toMatch(new RegExp(`^mutation\\(\\$id: ID!\\) \\{ ${mutation}\\(`));
+  });
+
+  it("names an organization's OAuth App restriction reported as a GraphQL FORBIDDEN error", async () => {
+    const { routes } = graphql({ repositoryId: REPO_ID, number: 7 });
+    const threadQuery = routes["POST /graphql"];
+    const { call } = setup({
+      publicToken: "oauth-token",
+      installed: false,
+      routes: {
+        "POST /graphql": (init) =>
+          (init.body as string).includes("mutation")
+            ? Response.json({ data: null, errors: [{ type: "FORBIDDEN", message: ORG_RESTRICTED }] })
+            : threadQuery(init),
+      },
+    });
+    const res = await call("resolve", { threadNodeId: "PRRT_1", resolved: true });
+    expect(res.status).toBe(403);
+    expect(await json(res)).toMatchObject({ code: "oauth-org-restricted", org: "Call-for-Code" });
   });
 
   it("refuses a thread from another pull request", async () => {

@@ -7,6 +7,7 @@
 import { extractAnnotation, type RenderedReviewAnnotationV1 } from "@rendered-review/annotation-domain";
 import {
   createGitHubClient,
+  ForbiddenError,
   type GitHubClient,
   GitHubError,
   type LineRange,
@@ -75,8 +76,10 @@ const refuse = (...args: ConstructorParameters<typeof Refusal>): never => {
 const invalid = (message: string) => refuse(400, "invalid-request", message);
 
 const ORG_DOCS = "https://docs.github.com/articles/restricting-access-to-your-organization-s-data/";
-/** GitHub has no error code for it: the phrase is the stable part of its 403 message. */
-const ORG_RESTRICTED = /the `([^`]+)` organization has enabled OAuth App access restrictions/;
+/** GitHub has no error code for it: the phrase is the stable part of its message. */
+const ORG_RESTRICTED = /organization has enabled OAuth App access restrictions/;
+/** The organization it names, when that is a GitHub login. */
+const ORG_LOGIN = /the `([A-Za-z0-9-]{1,39})` organization/;
 
 /**
  * A GitHub failure as a typed refusal. `retryAs`: offered when GitHub rejects a native line location.
@@ -89,12 +92,16 @@ function fromGitHub(error: unknown, approvalUrl?: string, representation?: Repre
       resetAt: error.resetAt.toISOString(),
     });
   if (error.status === 401) return new Refusal(401, "reauth", "Sign in with GitHub again");
-  const org = error.status === 403 && ORG_RESTRICTED.exec(error.message)?.[1];
-  if (org)
-    return new Refusal(403, "oauth-org-restricted", `The ${org} organization restricts third-party apps`, {
-      org,
-      approvalUrl: approvalUrl ?? ORG_DOCS,
-    });
+  // REST answers 403; GraphQL (resolve) answers 200 with a FORBIDDEN error.
+  if ((error.status === 403 || error instanceof ForbiddenError) && ORG_RESTRICTED.test(error.message)) {
+    const org = ORG_LOGIN.exec(error.message)?.[1];
+    return new Refusal(
+      403,
+      "oauth-org-restricted",
+      `${org ? `The ${org} organization` : "This organization"} restricts third-party apps`,
+      { ...(org && { org }), approvalUrl: approvalUrl ?? ORG_DOCS },
+    );
+  }
   if (error.status >= 400 && error.status < 500) {
     const retry = error.status === 422 && representation === "review-line" && { retryAs: "review-file" };
     return new Refusal(error.status, "github-rejected", error.message, retry || {});
