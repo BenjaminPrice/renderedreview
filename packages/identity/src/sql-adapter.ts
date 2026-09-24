@@ -59,7 +59,9 @@ export function sqlAdapter(db: SqlDatabase, cipher: TokenCipher) {
     if (!row || model !== "account") return row;
     const out = { ...row };
     for (const column of TOKEN_COLUMNS) {
-      if (typeof out[column] === "string") out[column] = await cipher.decrypt(out[column]);
+      // A token that no configured key opens (key dropped after rotation, corrupted row) is
+      // unusable: treat it as absent, so the user signs in again and gets a fresh one stored.
+      if (typeof out[column] === "string") out[column] = await cipher.decrypt(out[column]).catch(() => null);
     }
     return out;
   };
