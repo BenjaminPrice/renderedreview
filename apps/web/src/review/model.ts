@@ -40,11 +40,16 @@ export function originalRevision({ thread, reanchor }: ThreadPlacement): string 
   return a.annotation.target.commitOid;
 }
 
-export function filterCounts(threads: NativeThread[]): Record<ThreadState, number> {
+function countStates(states: ThreadState[]): Record<ThreadState, number> {
   const counts = { current: 0, resolved: 0, outdated: 0, historical: 0 };
-  for (const t of threads) counts[threadState(t)]++;
+  for (const state of states) counts[state]++;
   return counts;
 }
+
+export const filterCounts = (threads: NativeThread[]) => countStates(threads.map(threadState));
+
+/** Filter counts for a displayed document's threads, where placement can make a thread historical. */
+export const placementCounts = (placements: ThreadPlacement[]) => countStates(placements.map(placementState));
 
 export { isEdited } from "@rendered-review/review-domain";
 

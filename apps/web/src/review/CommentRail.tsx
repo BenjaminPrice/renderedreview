@@ -1,7 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // The comment rail for one rendered document: threads aligned to their anchors (pinned), a packed
 // list (slide-over), margin markers (collapsed) and optional connector lines.
-import { rangeLines, type RepositoryRef, type ThreadPlacement } from "@rendered-review/review-domain";
+import {
+  type NativeThread,
+  rangeLines,
+  type RepositoryRef,
+  type ThreadPlacement,
+} from "@rendered-review/review-domain";
 import {
   Fragment,
   type ReactNode,
@@ -15,10 +20,10 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { useShell } from "../ui/AppShell";
-import { layoutCards, THREAD_STATES, threadState, type ThreadState, type Wire } from "./model";
+import { layoutCards, originalRevision, placementState, THREAD_STATES, type ThreadState, type Wire } from "./model";
 import { ConnectorLayer, drawIn, drawOut, MarginMarkers, type Marker } from "./overlays";
 import type { ThreadActions } from "./thread-actions";
-import { ThreadCard, threadDomId } from "./ThreadCard";
+import { ThreadCard, type ThreadCardProps, threadDomId } from "./ThreadCard";
 
 const CARD_GAP = 10;
 const MARKER_HEIGHT = 24;
@@ -49,6 +54,8 @@ export interface CommentRailProps {
   extras?: { id: string; blockId: number; element: ReactNode }[];
   /** Reply and resolve controls for every thread card. */
   threadActions?: ThreadActions;
+  /** In-app link to the revision a thread was written on, for threads not shown as written. */
+  originalLink?: (thread: NativeThread, commitOid: string) => ThreadCardProps["original"];
 }
 
 export function CommentRail(props: CommentRailProps) {
@@ -65,7 +72,7 @@ export function CommentRail(props: CommentRailProps) {
   const [doc, setDoc] = useState<HTMLElement | null>(null);
   useEffect(() => setDoc(docContainerRef.current), [docContainerRef]);
 
-  const visible = placements.filter((p) => filters.has(threadState(p.thread)));
+  const visible = placements.filter((p) => filters.has(placementState(p)));
   const unanchored = visible.filter((p) => !p.blocks.length);
   // Unanchored threads are listed after the aligned ones so they don't push every card off its anchor.
   // rr ids are in document order, so this is also reading and tab order.
@@ -93,7 +100,7 @@ export function CommentRail(props: CommentRailProps) {
       anchor: find(a.blockId)?.getBoundingClientRect(),
       card: document.getElementById(threadDomId(a.id)),
       count: a.placement?.thread.comments.length ?? 0,
-      state: a.placement && threadState(a.placement.thread),
+      state: a.placement && placementState(a.placement),
     }));
 
     if (!pinned) {
@@ -238,26 +245,31 @@ export function CommentRail(props: CommentRailProps) {
   });
   useEffect(() => onActiveChange(active), [active]);
 
-  const card = (p: ThreadPlacement) => (
-    <ThreadCard
-      key={p.thread.id}
-      thread={p.thread}
-      repository={repository}
-      active={p.thread.id === active}
-      unplaced={!p.blocks.length}
-      reason={p.reason}
-      // A moved thread keeps its original quote visible: the highlighted words may differ.
-      verified={!!p.range && p.reanchor?.state !== "moved"}
-      damaged={p.damaged}
-      moved={
-        p.reanchor?.state === "moved"
-          ? { ...rangeLines(p.reanchor.sourceRange!), approximate: p.reanchor.approximate }
-          : undefined
-      }
-      onActivate={() => p.thread.id !== active && activate(p.thread.id)}
-      actions={props.threadActions}
-    />
-  );
+  const card = (p: ThreadPlacement) => {
+    const commitOid = originalRevision(p);
+    return (
+      <ThreadCard
+        key={p.thread.id}
+        thread={p.thread}
+        repository={repository}
+        active={p.thread.id === active}
+        unplaced={!p.blocks.length}
+        reason={p.reason}
+        // A moved thread keeps its original quote visible: the highlighted words may differ.
+        verified={!!p.range && p.reanchor?.state !== "moved"}
+        damaged={p.damaged}
+        moved={
+          p.reanchor?.state === "moved"
+            ? { ...rangeLines(p.reanchor.sourceRange!), approximate: p.reanchor.approximate }
+            : undefined
+        }
+        historical={placementState(p) === "historical"}
+        original={commitOid ? props.originalLink?.(p.thread, commitOid) : undefined}
+        onActivate={() => p.thread.id !== active && activate(p.thread.id)}
+        actions={props.threadActions}
+      />
+    );
+  };
 
   return (
     <div className="rr-rail-body">
