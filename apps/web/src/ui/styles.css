@@ -1879,13 +1879,23 @@ samp {
 }
 
 /* The Overview spans the document column; its band is full width, its body reading width. */
+/* `ch` follows font size, so the reading width is fixed in px here, in the document font, and the
+   Overview's smaller UI font doesn't make its column narrower than a document's. */
+@property --rr-doc-measure {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
 .rr-doc:has(> .rr-overview) {
+  --rr-doc-measure: var(--rr-measure);
   max-width: none;
   padding: 0 0 160px;
+}
+.rr-overview {
   font: var(--rr-text-ui) / 1.5 var(--rr-font-ui);
 }
 .rr-pr-band {
-  padding: 26px max(var(--rr-gutter), calc((100% - var(--rr-measure)) / 2)) 18px;
+  padding: 26px max(var(--rr-gutter), calc((100% - var(--rr-doc-measure, var(--rr-measure))) / 2)) 18px;
   background: var(--rr-surface-sunken);
   border-bottom: 1px solid var(--rr-border);
 }
@@ -1961,7 +1971,7 @@ samp {
   color: var(--rr-text);
 }
 .rr-overview-body {
-  max-width: calc(var(--rr-measure) + 2 * var(--rr-gutter));
+  max-width: calc(var(--rr-doc-measure, var(--rr-measure)) + 2 * var(--rr-gutter));
   margin: 0 auto;
   padding: 24px var(--rr-gutter) 0;
 }
