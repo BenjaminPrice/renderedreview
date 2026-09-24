@@ -22,6 +22,7 @@ const hosted: Env = {
   BILLING_PROVIDER: "stripe",
   BILLING_API_KEY: "billing-api-key-value",
   BILLING_WEBHOOK_SECRET: "billing-webhook-secret-value",
+  GITHUB_PUBLIC_READ_TOKEN: "public-read-token-value",
 };
 
 function problems(env: Env): string[] {
@@ -64,6 +65,15 @@ describe("loadConfig", () => {
     expect(config.accessPolicy).toBe("allowlist");
     expect(config.allowlist).toEqual(["acme", "octo/docs"]);
     expect(config.billing).toBeUndefined();
+  });
+
+  it("accepts an optional public read token in every hosting mode", () => {
+    const token = { GITHUB_PUBLIC_READ_TOKEN: " github_pat_x " };
+    expect(loadConfig({ HOSTING_MODE: "community", ACCESS_POLICY: "disabled", ...token }).github.publicReadToken).toBe(
+      "github_pat_x",
+    );
+    expect(loadConfig(hosted).github.publicReadToken).toBe("public-read-token-value");
+    expect(loadConfig({ HOSTING_MODE: "community", ACCESS_POLICY: "disabled" }).github.publicReadToken).toBeUndefined();
   });
 
   it("defaults ACCESS_POLICY by hosting mode, and an explicit value overrides it", () => {
@@ -170,6 +180,7 @@ describe("redactConfig", () => {
       "billing-api-key-value",
       "billing-webhook-secret-value",
       "better-auth-secret-value-at-least-32-chars",
+      "public-read-token-value",
     ]) {
       expect(dump).not.toContain(secret);
     }

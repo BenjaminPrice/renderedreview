@@ -42,7 +42,7 @@ afterEach(() => {
 function renderApp(path: string) {
   RootRoute.update({ component: Outlet });
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  queryClient.setQueryData(allowedHostsQuery.queryKey, ["github.com", GHES]);
+  queryClient.setQueryData(allowedHostsQuery.queryKey, { hosts: ["github.com", GHES], proxyFirst: [] });
   const router = createRouter({
     routeTree,
     context: { queryClient },

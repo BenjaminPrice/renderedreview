@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { ForbiddenError, NetworkError, NotFoundError, RateLimitError } from "@rendered-review/github-integration";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fallbackReason, proxiedFetch, withPublicGitHub } from "./client";
+import { fallbackReason, preferProxy, proxiedFetch, withPublicGitHub } from "./client";
 
 describe("fallbackReason", () => {
   it("falls back on network/CORS failures and rate limits only", () => {
@@ -90,6 +90,37 @@ describe("withPublicGitHub", () => {
     expect(urls()).toHaveLength(2);
     const fetch = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
     expect(new Headers(fetch.mock.calls[1]![1].headers).get("if-none-match")).toBe('"t"');
+  });
+
+  it("goes straight to the proxy for a host the server reads with a token", async () => {
+    const { urls } = stubFetch(() => Response.json(TREE));
+    preferProxy("token.example.com");
+    expect(await getTree("token.example.com")).toBe("ok");
+    expect(urls()).toEqual([`/api/github/public/token.example.com/repos/a/b/git/trees/${OID}`]);
+  });
+
+  it.each([
+    [
+      "an anonymous GraphQL 403",
+      "graphql-403.example.com",
+      () =>
+        Response.json(
+          { message: "Forbidden" },
+          { status: 403, headers: { "x-ratelimit-limit": "0", "x-ratelimit-remaining": "0" } },
+        ),
+    ],
+    [
+      "a GraphQL rate limit",
+      "graphql-limit.example.com",
+      () => Response.json({ errors: [{ type: "RATE_LIMITED", message: "limit" }] }),
+    ],
+  ])("keeps REST reads direct after %s", async (_, host, graphql) => {
+    const { urls } = stubFetch(() => Response.json(TREE));
+    const fetch = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+    fetch.mockImplementationOnce(async () => graphql());
+    await withPublicGitHub(host, (c) => c.listReviewThreads("a", "b", 1)).catch(() => {});
+    expect(await getTree(host)).toBe("ok");
+    expect(urls()).toEqual([`https://${host}/api/graphql`, `https://${host}/api/v3/repos/a/b/git/trees/${OID}`]);
   });
 
   it("does not fall back on 404", async () => {
