@@ -264,6 +264,28 @@ it("anchors are keyboard operable", async () => {
   await vi.waitFor(() => expect(document.activeElement).toBe(card));
 });
 
+it("puts each margin marker right after its anchor in tab order", async () => {
+  localStorage.setItem("rr-rail", "collapsed");
+  suggestionOnHead();
+  renderPage(`?doc=${encodeURIComponent(INDEX)}`);
+  const anchor = anchorOf(await threadCard(/GitHub line comment · L30/))!;
+  const marker = await screen.findByRole("button", { name: /1 comment, current\. Open in comment rail/ });
+  const article = screen.getByRole("article", { name: "Rendered document" });
+
+  anchor.focus();
+  await userEvent.tab();
+  expect(document.activeElement).toBe(marker);
+  await userEvent.tab({ shift: true });
+  expect(document.activeElement).toBe(anchor);
+  // Past the marker, Tab carries on in the document after the anchor.
+  await userEvent.tab();
+  await userEvent.tab();
+  expect(article.contains(document.activeElement)).toBe(true);
+  expect(anchor.compareDocumentPosition(document.activeElement!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  await userEvent.tab({ shift: true });
+  expect(document.activeElement).toBe(marker);
+});
+
 it("selects the thread from the thread param on load, and updates the param when another is activated", async () => {
   suggestionOnHead();
   const router = renderPage(`?doc=${encodeURIComponent(INDEX)}&thread=${SUGGESTION}`);
