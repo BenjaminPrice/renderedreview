@@ -140,8 +140,6 @@ describe("pull request page states", () => {
     expect(await screen.findByRole("heading", { name: "No Markdown changed in this pull request" })).toBeTruthy();
     const link = screen.getByRole("link", { name: "review the changes on GitHub (opens in new tab)" });
     expectNewTab(link);
-    expect(link.getAttribute("href")).toBe(
-      "https://github.com/mdn/content/pull/45377/files",
-    );
+    expect(link.getAttribute("href")).toBe("https://github.com/mdn/content/pull/45377/files");
   });
 });

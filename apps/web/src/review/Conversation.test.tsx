@@ -111,9 +111,7 @@ describe("ReviewSummaries", () => {
     expect(within(articles[0]!).getByText("Ship it")).toBeTruthy();
     const link = within(articles[0]!).getByRole("link", { name: "View on GitHub (opens in new tab)" });
     expectNewTab(link);
-    expect(link.getAttribute("href")).toBe(
-      "https://github.com/acme/docs/pull/7#pullrequestreview-1",
-    );
+    expect(link.getAttribute("href")).toBe("https://github.com/acme/docs/pull/7#pullrequestreview-1");
   });
 
   it("shows an empty state", () => {

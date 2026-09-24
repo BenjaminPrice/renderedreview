@@ -34,9 +34,7 @@ describe("location labels", () => {
     expect(loc.textContent).toBe(`From ${OLD.slice(0, 7)} · L3–L5`);
     const original = screen.getByRole("link", { name: "View in original (opens in new tab)" });
     expectNewTab(original);
-    expect(original.getAttribute("href")).toBe(
-      `https://github.com/acme/docs/blob/${OLD}/docs/guide.md#L3-L5`,
-    );
+    expect(original.getAttribute("href")).toBe(`https://github.com/acme/docs/blob/${OLD}/docs/guide.md#L3-L5`);
   });
 
   it("links every thread to GitHub", () => {

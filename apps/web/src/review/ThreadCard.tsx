@@ -160,7 +160,10 @@ export function ThreadCard({ thread, repository, active, unplaced, onActivate }:
         </span>
         <span className="rr-spacer" />
         {a.type === "outdated" && (
-          <ExternalLink className="rr-btn rr-btn-sm rr-btn-ghost" href={blobUrl(repository, a.commitOid, thread.path, a)}>
+          <ExternalLink
+            className="rr-btn rr-btn-sm rr-btn-ghost"
+            href={blobUrl(repository, a.commitOid, thread.path, a)}
+          >
             View in original
           </ExternalLink>
         )}

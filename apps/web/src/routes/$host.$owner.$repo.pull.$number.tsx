@@ -11,13 +11,7 @@ import { queryOptions, useQuery } from "@tanstack/react-query";
 import { createFileRoute, notFound, stripSearchParams } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
 import { useEffect, useEffectEvent, useMemo, useState } from "react";
-import {
-  MAX_RENDER_CHARS,
-  nodeElement,
-  RawDocument,
-  RenderedDocument,
-  useDocument,
-} from "../document/document";
+import { MAX_RENDER_CHARS, nodeElement, RawDocument, RenderedDocument, useDocument } from "../document/document";
 import { allDocs, changedDocs, selectedPath, sourceUrl } from "../document/docs";
 import { Sidebar } from "../document/Sidebar";
 import { ExternalLink } from "../ui/ExternalLink";

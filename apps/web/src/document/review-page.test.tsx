@@ -88,9 +88,7 @@ it("shows the PR in the top bar and lists changed docs with letter statuses", as
   expect(screen.getByText("Merged")).toBeTruthy();
   const openInGitHub = screen.getByRole("link", { name: "Open in GitHub (opens in new tab)" });
   expectNewTab(openInGitHub);
-  expect(openInGitHub.getAttribute("href")).toBe(
-    "https://github.com/mdn/content/pull/45377",
-  );
+  expect(openInGitHub.getAttribute("href")).toBe("https://github.com/mdn/content/pull/45377");
 
   const deleted = fileLink(/102\/index\.md, deleted/);
   const modified = fileLink(/status\/index\.md, modified/);
@@ -110,9 +108,7 @@ it("opens the first changed doc; a deleted doc renders read-only from the base r
   expect(screen.getByText(/Deleted in this pull request\. Showing the base revision/)).toBeTruthy();
   const source = screen.getByRole("link", { name: "Source (opens in new tab)" });
   expectNewTab(source);
-  expect(source.getAttribute("href")).toBe(
-    `https://github.com/mdn/content/blob/${BASE}/${DELETED}`,
-  );
+  expect(source.getAttribute("href")).toBe(`https://github.com/mdn/content/blob/${BASE}/${DELETED}`);
 });
 
 it("binds the selected doc to the URL and marks changed sections of a modified doc", async () => {
