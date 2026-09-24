@@ -41,8 +41,8 @@ afterEach(() => {
 });
 
 interface Serve {
-  /** Body of `/api/auth/viewer`; `undefined`: this deployment has no sign-in (404). */
-  viewer?: string;
+  /** Body of `/api/auth/viewer`; `null`: this deployment has no sign-in (404). */
+  viewer?: string | null;
   /** Anonymous rate-limit headers on every GitHub response. */
   quota?: { limit: number; remaining: number; reset: number };
   /** Answer every GitHub call with a rate-limit error instead. */
@@ -67,7 +67,7 @@ function serve(host: string, { viewer = "null", quota, limited }: Serve = {}) {
     headers["x-ratelimit-reset"] = String(quota.reset);
   }
   reply = (url) => {
-    if (url === "/api/auth/viewer") return viewer === undefined ? notFound() : json(viewer);
+    if (url === "/api/auth/viewer") return viewer === null ? notFound() : json(viewer);
     if (limited)
       return json('{"message":"API rate limit exceeded"}', {
         status: 403,
@@ -124,7 +124,7 @@ describe("guest sign-in notice", () => {
   });
 
   it("is not shown when this deployment has no sign-in", async () => {
-    serve("no-sign-in.example.com", { viewer: undefined });
+    serve("no-sign-in.example.com", { viewer: null });
     await renderPr("no-sign-in.example.com");
     expect(notice()).toBeNull();
   });
@@ -202,7 +202,9 @@ describe("guest sign-in notice", () => {
     const reset = inAnHour();
     serve(host, { limited: reset });
     await renderPr(host);
-    expect(screen.getByText(`GitHub rate limit reached — showing cached data; retry after ${hhmm(reset)}.`)).toBeTruthy();
+    expect(
+      screen.getByText(`GitHub rate limit reached — showing cached data; retry after ${hhmm(reset)}.`),
+    ).toBeTruthy();
     expect(notice()).toBeNull();
     expect(lowAnnouncement()).toBeUndefined();
   });

@@ -10,6 +10,8 @@ type Store = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 const THEME = "rr-theme";
 const RAIL = "rr-rail";
 const CONNECTORS = "rr-connectors";
+const GUEST_NOTICE = "rr-guest-notice-dismissed";
+const GUEST_NOTICE_MS = 7 * 24 * 3600_000;
 
 // Inlined in <head> so a saved theme or collapsed rail applies before first paint (no flash
 // after SSR). "system" needs no script: the tokens use light-dark() with color-scheme.
@@ -67,3 +69,9 @@ export function saveRail(mode: RailMode, s?: Store | null) {
 export const readConnectors = (s?: Store | null) => read(CONNECTORS, s) === "on";
 
 export const saveConnectors = (on: boolean, s?: Store | null) => write(CONNECTORS, on ? "on" : "off", s);
+
+/** The guest sign-in suggestion stays hidden for a week after it is dismissed. */
+export const guestNoticeDismissed = (s?: Store | null, now = Date.now()) =>
+  Number(read(GUEST_NOTICE, s)) > now - GUEST_NOTICE_MS;
+
+export const dismissGuestNotice = (s?: Store | null, now = Date.now()) => write(GUEST_NOTICE, String(now), s);
