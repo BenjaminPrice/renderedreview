@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useState } from "react";
+import { parsePullRequestUrl } from "../pr-url";
 import { OFFLINE_HEADER, OFFLINE_SHELL } from "../sw/policy";
 
 export const Route = createFileRoute("/")({
@@ -9,9 +11,33 @@ export const Route = createFileRoute("/")({
 });
 
 function Home() {
+  const navigate = useNavigate();
+  const [invalid, setInvalid] = useState(false);
+
+  function onSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const params = parsePullRequestUrl(String(new FormData(event.currentTarget).get("url")));
+    setInvalid(!params);
+    if (params) void navigate({ to: "/$host/$owner/$repo/pull/$number", params });
+  }
+
   return (
     <main>
       <h1>Rendered Review</h1>
+      <form onSubmit={onSubmit}>
+        <label htmlFor="pr-url">GitHub pull request URL</label>{" "}
+        <input
+          id="pr-url"
+          name="url"
+          inputMode="url"
+          required
+          placeholder="https://github.com/owner/repo/pull/123"
+          aria-invalid={invalid}
+          aria-describedby={invalid ? "pr-url-error" : undefined}
+        />{" "}
+        <button type="submit">Open</button>
+        {invalid && <p id="pr-url-error">That is not a GitHub pull request URL.</p>}
+      </form>
     </main>
   );
 }

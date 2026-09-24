@@ -35,6 +35,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@rendered-review/github-integration':
+        specifier: workspace:*
+        version: link:../../packages/github-integration
       '@rendered-review/runtime':
         specifier: workspace:*
         version: link:../../packages/runtime
