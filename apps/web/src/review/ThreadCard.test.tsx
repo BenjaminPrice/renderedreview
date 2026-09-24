@@ -95,9 +95,7 @@ describe("resolved threads", () => {
       thread("t1", lineAnchor(3), "resolved", [comment({ body: "Fix this" }), comment({ body: "Done" })]),
     );
     const summary = screen.getByText("Resolved").closest("summary")!;
-    expect(summary.getAttribute("aria-label")).toBe(
-      "Resolved thread by alice, 2 comments. GitHub line comment · L3",
-    );
+    expect(summary.getAttribute("aria-label")).toBe("Resolved thread by alice, 2 comments. GitHub line comment · L3");
     expect((el as HTMLDetailsElement).open).toBe(false);
     await userEvent.click(summary);
     expect((el as HTMLDetailsElement).open).toBe(true);
