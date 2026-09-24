@@ -32,7 +32,7 @@ const MARKER_GAP = 4;
 export interface CommentRailProps {
   /**
    * Threads of the displayed document, from `placeThreads`. Threads without blocks are listed
-   * unanchored. Annotation ranges are highlighted by their blocks until word-level highlighting exists.
+   * unanchored.
    */
   placements: ThreadPlacement[];
   repository: RepositoryRef;
@@ -44,6 +44,8 @@ export interface CommentRailProps {
   docContainerRef: RefObject<HTMLElement | null>;
   /** Element of a rendered block. Defaults to `[data-rr-id="<id>"]` inside the document container. */
   getAnchorElement?: (rrId: number) => Element | null;
+  /** Highlighted words of word-level anchors, by thread id: their cards and connectors align to the words. */
+  wordRanges?: ReadonlyMap<string, Range[]>;
   /** Controlled active thread; highlight its anchor with the same id. Uncontrolled when omitted. */
   activeThreadId?: string | null;
   onActiveThreadChange?: (threadId: string | null) => void;
@@ -95,13 +97,17 @@ export function CommentRail(props: CommentRailProps) {
     const origin = doc.getBoundingClientRect();
     // Right edge of the text column; the document's right padding is the marker and connector gutter.
     const textRight = origin.width - parseFloat(getComputedStyle(doc).paddingRight);
-    const rows = aligned.map((a) => ({
-      id: a.id,
-      anchor: find(a.blockId)?.getBoundingClientRect(),
-      card: document.getElementById(threadDomId(a.id)),
-      count: a.placement?.thread.comments.length ?? 0,
-      state: a.placement && placementState(a.placement),
-    }));
+    const rows = aligned.map((a) => {
+      // Word-level anchors align to their words' line; connectors still start in the gutter.
+      const words = props.wordRanges?.get(a.id)?.[0]?.getBoundingClientRect();
+      return {
+        id: a.id,
+        anchor: words ?? find(a.blockId)?.getBoundingClientRect(),
+        card: document.getElementById(threadDomId(a.id)),
+        count: a.placement?.thread.comments.length ?? 0,
+        state: a.placement && placementState(a.placement),
+      };
+    });
 
     if (!pinned) {
       box.style.height = "";
@@ -155,7 +161,7 @@ export function CommentRail(props: CommentRailProps) {
     );
     setMarkers([]);
     // `anchored` is derived from these props each render.
-  }, [doc, getAnchorElement, pinned, active, placements, filters, props.extras]);
+  }, [doc, getAnchorElement, pinned, active, placements, filters, props.extras, props.wordRanges]);
 
   useLayoutEffect(relayout, [relayout]);
 
