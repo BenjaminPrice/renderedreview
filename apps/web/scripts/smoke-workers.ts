@@ -2,7 +2,7 @@
 // Smoke test for the built Worker (run after `pnpm build:workers`): serves it in local workerd via
 // `wrangler dev`, which needs no Cloudflare account. Two runs: public-only (no GitHub App: health,
 // home, PR routes, sign-in off), then with fake GitHub App credentials and a fresh local D1 (sign-in on).
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -88,6 +88,11 @@ const fakeApp = {
 };
 const state = mkdtempSync(join(tmpdir(), "rr-smoke-d1-"));
 try {
+  execFileSync(process.execPath, [wrangler, "d1", "migrations", "apply", "DB", "--local", "--persist-to", state], {
+    cwd,
+    env,
+    stdio: "inherit",
+  });
   const vars = Object.entries(fakeApp).flatMap(([name, value]) => ["--var", `${name}:${value}`]);
   await serve([...vars, "--persist-to", state], async (origin) => {
     const viewer = await fetch(`${origin}/api/auth/viewer`);
