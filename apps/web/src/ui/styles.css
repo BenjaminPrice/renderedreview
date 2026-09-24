@@ -1313,3 +1313,21 @@ samp {
   content: "" / "Modified in this pull request.";
   background: repeating-linear-gradient(var(--rr-modified-fg) 0 6px, transparent 6px 10px);
 }
+
+/* Blocks a GitHub line comment applies to. Line comments have no text selection, so the whole block is marked. */
+.rr-markdown [data-rr-anchor] {
+  cursor: pointer;
+  border-radius: 2px;
+  background: var(--rr-hl-block);
+  box-shadow: 0 0 0 4px var(--rr-hl-block);
+  outline: 1px dashed var(--rr-border-strong);
+  outline-offset: 4px;
+}
+.rr-markdown [data-rr-anchor="resolved"] {
+  background: none;
+  box-shadow: none;
+  outline-style: dotted;
+}
+.rr-markdown [data-rr-anchor][data-rr-active] {
+  outline: 2px solid var(--rr-hl-comment-line);
+}

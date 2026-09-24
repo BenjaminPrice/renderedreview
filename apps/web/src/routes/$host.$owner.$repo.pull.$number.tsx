@@ -6,15 +6,44 @@ import {
   type PullRequest,
   RateLimitError,
 } from "@rendered-review/github-integration";
+import { placeThreads, projectReview, type ThreadPlacement } from "@rendered-review/review-domain";
 import { queryOptions, useQuery } from "@tanstack/react-query";
 import { createFileRoute, notFound, stripSearchParams } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
-import { useMemo, useRef, useState } from "react";
-import { ExternalIcon, MAX_RENDER_CHARS, RawDocument, RenderedDocument, useDocument } from "../document/document";
+import { useEffect, useEffectEvent, useMemo, useState } from "react";
+import {
+  ExternalIcon,
+  MAX_RENDER_CHARS,
+  nodeElement,
+  RawDocument,
+  RenderedDocument,
+  useDocument,
+} from "../document/document";
 import { allDocs, changedDocs, selectedPath, sourceUrl } from "../document/docs";
 import { Sidebar } from "../document/Sidebar";
 import { allowedHosts } from "../github/proxy";
-import { changedFilesQuery, type PrIdentity, prIdentity, pullRequestQuery, treeQuery } from "../github/queries";
+import {
+  changedFilesQuery,
+  issueCommentsQuery,
+  type PrIdentity,
+  prIdentity,
+  pullRequestQuery,
+  reviewCommentsQuery,
+  reviewsQuery,
+  reviewThreadsQuery,
+  treeQuery,
+} from "../github/queries";
+import {
+  CommentRail,
+  ConversationPanel,
+  DEFAULT_FILTERS,
+  filterCounts,
+  RailHeader,
+  ReviewSummaries,
+  threadDomId,
+  threadState,
+  type ThreadState,
+} from "../review";
 import { AppShell } from "../ui/AppShell";
 import { parsePrParams, validatePrSearch } from "../pr-url";
 
@@ -81,8 +110,35 @@ function ReviewPage({ pr, id, files }: { pr: PullRequest; id: PrIdentity; files:
   const entry = changedEntry ?? all?.find((d) => d.path === path);
   const doc = useDocument(id, entry);
   const [view, setView] = useState<"rendered" | "raw">("rendered");
-  // The rendered article; the comment rail positions threads against it.
-  const docRef = useRef<HTMLElement>(null);
+  // The rendered article, as state so the rail and anchors follow it across loads and view switches.
+  const [article, setArticle] = useState<HTMLElement | null>(null);
+  // The rail draws markers and connectors in the positioned document column around it.
+  const docColumn = useMemo(() => ({ current: article?.parentElement ?? null }), [article]);
+
+  const review = useReview(id);
+  const repository = useMemo(() => ({ host: id.host, owner: id.owner, name: id.repo }), [id]);
+  const placements = useMemo(() => {
+    if (!review.data || !entry) return [];
+    const rendered = view === "rendered" ? doc.rendered : undefined;
+    // Deleted docs show the base revision, so only LEFT-side (base) lines can be placed.
+    return placeThreads(
+      review.data.threads,
+      entry.path,
+      entry.status === "deleted" ? { base: rendered } : { head: rendered },
+    );
+  }, [review.data, entry, view, doc.rendered]);
+  const unresolved = useMemo(() => new Map(Object.entries(review.data?.unresolvedByPath ?? {})), [review.data]);
+  const [filters, setFilters] = useState<ReadonlySet<ThreadState>>(DEFAULT_FILTERS);
+
+  // The active thread lives in the URL (`thread`: root comment id) so it can be shared.
+  const navigate = Route.useNavigate();
+  const threads = review.data?.threads;
+  const active = threads?.find((t) => t.id === search.thread || t.comments.some((c) => c.id === search.thread));
+  const setActive = (threadId: string | null) => {
+    const root = threads?.find((t) => t.id === threadId)?.comments[0];
+    void navigate({ search: (s) => ({ ...s, thread: root?.id }), replace: true });
+  };
+  useAnchors(article, placements, filters, active?.id ?? null, setActive);
 
   const dir = entry ? entry.path.slice(0, entry.path.lastIndexOf("/") + 1) : "";
   const link = entry && { ...id, sha: doc.sha, path: entry.path };
@@ -104,6 +160,7 @@ function ReviewPage({ pr, id, files }: { pr: PullRequest; id: PrIdentity; files:
           truncated={tree.data?.truncated}
           allError={!!tree.error}
           selected={path}
+          unresolved={unresolved}
           otherCount={otherCount}
           filesUrl={`${pr.htmlUrl}/files`}
         />
@@ -153,8 +210,42 @@ function ReviewPage({ pr, id, files }: { pr: PullRequest; id: PrIdentity; files:
           </a>
         )
       }
-      railHeader={null}
-      rail={<p className="rr-rail-empty">Comments on this document will appear here.</p>}
+      commentCount={review.data && entry ? placements.length : undefined}
+      railHeader={
+        review.data &&
+        entry && (
+          <RailHeader
+            counts={filterCounts(placements.map((p) => p.thread))}
+            filters={filters}
+            onFiltersChange={setFilters}
+          />
+        )
+      }
+      rail={
+        review.error ? (
+          <p className="rr-rail-empty">Could not load comments: {review.error.message}</p>
+        ) : !review.data ? (
+          <p className="rr-rail-empty">Loading comments…</p>
+        ) : (
+          <>
+            {entry && (
+              <CommentRail
+                placements={placements}
+                repository={repository}
+                filters={filters}
+                docContainerRef={docColumn}
+                activeThreadId={active?.id ?? null}
+                onActiveThreadChange={setActive}
+              />
+            )}
+            {/* Pull-request-level content has no anchor in a document; it follows the document's threads. */}
+            <div className="rr-rail-group">
+              <ReviewSummaries reviews={review.data.summaries} />
+              <ConversationPanel entries={review.data.conversation} repository={repository} />
+            </div>
+          </>
+        )
+      }
     >
       {!path ? (
         <DocMessage title="No Markdown changed in this pull request">
@@ -183,7 +274,7 @@ function ReviewPage({ pr, id, files }: { pr: PullRequest; id: PrIdentity; files:
           {view === "raw" ? (
             <RawDocument source={doc.source} changes={doc.changes} link={link} />
           ) : doc.rendered ? (
-            <RenderedDocument rendered={doc.rendered} changes={doc.changes} containerRef={docRef} />
+            <RenderedDocument rendered={doc.rendered} changes={doc.changes} containerRef={setArticle} />
           ) : (
             <DocMessage title="This document is too large to render">
               It has {doc.source.length.toLocaleString()} characters; the limit is {MAX_RENDER_CHARS.toLocaleString()}.{" "}
@@ -196,6 +287,84 @@ function ReviewPage({ pr, id, files }: { pr: PullRequest; id: PrIdentity; files:
       )}
     </AppShell>
   );
+}
+
+/** GitHub-native review content for the PR. Thread resolution is optional (anonymous access can't read it). */
+function useReview(id: PrIdentity) {
+  const comments = useQuery(reviewCommentsQuery(id));
+  const reviews = useQuery(reviewsQuery(id));
+  const issueComments = useQuery(issueCommentsQuery(id));
+  const threads = useQuery(reviewThreadsQuery(id));
+  const data = useMemo(
+    () =>
+      comments.data && reviews.data && issueComments.data && !threads.isPending
+        ? projectReview({
+            repository: { host: id.host, owner: id.owner, name: id.repo },
+            reviewComments: comments.data,
+            reviewThreads: threads.data ?? undefined,
+            reviews: reviews.data,
+            issueComments: issueComments.data,
+          })
+        : undefined,
+    [id, comments.data, reviews.data, issueComments.data, threads.isPending, threads.data],
+  );
+  return { data, error: comments.error ?? reviews.error ?? issueComments.error };
+}
+
+/**
+ * Marks the rendered blocks of visible threads: `aria-details` points at their cards, and
+ * `data-rr-anchor` / `data-rr-active` drive the highlight. Clicking a block, or Enter/Space on it,
+ * activates its thread. Attributes are set on React-rendered elements, so they are removed again
+ * before every update.
+ */
+function useAnchors(
+  article: HTMLElement | null,
+  placements: ThreadPlacement[],
+  filters: ReadonlySet<ThreadState>,
+  activeId: string | null,
+  activate: (threadId: string) => void,
+) {
+  const onActivate = useEffectEvent(activate);
+  useEffect(() => {
+    if (!article) return;
+    const threadsOf = new Map<HTMLElement, ThreadPlacement["thread"][]>();
+    for (const { thread, blocks } of placements) {
+      if (!filters.has(threadState(thread))) continue;
+      for (const block of blocks) {
+        const el = nodeElement(article, block.id);
+        if (el) threadsOf.set(el, [...(threadsOf.get(el) ?? []), thread]);
+      }
+    }
+    for (const [el, threads] of threadsOf) {
+      el.setAttribute("aria-details", threads.map((t) => threadDomId(t.id)).join(" "));
+      el.dataset.rrAnchor = threadState(threads[0]!);
+      if (threads.some((t) => t.id === activeId)) el.dataset.rrActive = "";
+      el.tabIndex = 0;
+    }
+    const handle = (event: MouseEvent | KeyboardEvent) => {
+      const target = event.target as HTMLElement;
+      const anchor = target.closest<HTMLElement>("[data-rr-anchor]");
+      const threads = anchor && threadsOf.get(anchor);
+      if (!threads) return;
+      if (event instanceof KeyboardEvent) {
+        if (target !== anchor || (event.key !== "Enter" && event.key !== " ")) return;
+        event.preventDefault();
+      } else if (target.closest("a, button, summary, input")) return; // links inside keep working
+      onActivate(threads[0]!.id);
+    };
+    article.addEventListener("click", handle);
+    article.addEventListener("keydown", handle);
+    return () => {
+      article.removeEventListener("click", handle);
+      article.removeEventListener("keydown", handle);
+      for (const el of threadsOf.keys()) {
+        el.removeAttribute("aria-details");
+        el.removeAttribute("data-rr-anchor");
+        el.removeAttribute("data-rr-active");
+        el.removeAttribute("tabindex");
+      }
+    };
+  }, [article, placements, filters, activeId]);
 }
 
 function PrTitle({ pr, id, docCount }: { pr: PullRequest; id: PrIdentity; docCount: number }) {

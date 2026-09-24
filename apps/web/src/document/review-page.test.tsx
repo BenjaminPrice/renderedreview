@@ -199,7 +199,12 @@ function editComments(edit: (comments: RawComment[]) => void) {
   responses[`${API}/pulls/45377/comments?per_page=100`] = JSON.stringify(comments);
 }
 const suggestionOnHead = () =>
-  editComments((cs) => Object.assign(cs.find((c) => c.id === SUGGESTION)!, { line: 30, commit_id: HEAD }));
+  editComments((cs) =>
+    Object.assign(
+      cs.find((c) => c.id === SUGGESTION)!,
+      { line: 30, commit_id: HEAD },
+    ),
+  );
 
 const rail = () => screen.getByRole("complementary", { name: /Comments/ });
 const threadCard = async (name: RegExp) =>
