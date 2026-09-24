@@ -162,3 +162,16 @@ it("shows a size-limit state for documents too large to render, with raw still a
   await userEvent.click(screen.getByRole("button", { name: "View raw" }));
   expect(screen.getByRole("link", { name: "Line 1 on GitHub" })).toBeTruthy();
 });
+
+it("shows the old path of a renamed doc", async () => {
+  const files = JSON.parse(fixture("files.json")) as { filename: string; status: string; previous_filename?: string }[];
+  const index = files.find((f) => f.filename === INDEX)!;
+  Object.assign(index, { status: "renamed", previous_filename: "files/en-us/web/http/status/index.md" });
+  responses[`${API}/pulls/45377/files?per_page=100`] = JSON.stringify(files);
+  renderPage();
+  const renamed = await screen.findByRole("link", {
+    name: /status\/index\.md, renamed, from files\/en-us\/web\/http\/status\/index\.md/,
+  });
+  expect(within(renamed).getByText("R")).toBeTruthy();
+  expect(within(renamed).getByText("from files/en-us/web/http/status/index.md")).toBeTruthy();
+});
