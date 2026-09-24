@@ -18,6 +18,7 @@ const API = "https://api.github.com/repos/mdn/content";
 const GHES = "ghe.example.com";
 // Its own host for the cache test: clients remember an exhausted limit per host.
 const CACHED_HOST = "cache.example.com";
+const DELETED = "files/en-us/web/http/reference/status/102/index.md";
 
 type Reply = Response | Promise<Response>;
 const json = (body: string, init?: ResponseInit) =>
@@ -156,7 +157,7 @@ describe("pull request page states", () => {
     stubGitHub((url) =>
       responses[url] === undefined ? undefined : json(responses[url], { headers: { etag: '"e"' } }),
     );
-    renderApp(`/${CACHED_HOST}/mdn/content/pull/45377`);
+    renderApp(`/${CACHED_HOST}/mdn/content/pull/45377?doc=${encodeURIComponent(DELETED)}`);
     await screen.findByRole("article", { name: "Rendered document" });
     cleanup();
 
@@ -168,7 +169,7 @@ describe("pull request page states", () => {
         headers: { "x-ratelimit-limit": "60", "x-ratelimit-remaining": "0", "x-ratelimit-reset": String(reset) },
       }),
     );
-    renderApp(`/${CACHED_HOST}/mdn/content/pull/45377`);
+    renderApp(`/${CACHED_HOST}/mdn/content/pull/45377?doc=${encodeURIComponent(DELETED)}`);
     expect(await screen.findByRole("article", { name: "Rendered document" })).toBeTruthy();
     expect(screen.getByRole("heading", { level: 1, name: /Remove HTTP status 102 page/ })).toBeTruthy();
     const time = new Date(reset * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });

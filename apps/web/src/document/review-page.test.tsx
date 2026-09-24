@@ -84,7 +84,7 @@ const sidebar = () => screen.getByRole("navigation", { name: "Documents" });
 const fileLink = (name: RegExp) => within(sidebar()).getByRole("link", { name });
 
 it("shows the PR in the top bar and lists changed docs with letter statuses", async () => {
-  renderPage();
+  renderPage(`?doc=${encodeURIComponent(DELETED)}`);
   expect(await screen.findByRole("heading", { level: 1, name: /Remove HTTP status 102 page/ })).toBeTruthy();
   expect(screen.getByText("Merged")).toBeTruthy();
   const openInGitHub = screen.getByRole("link", { name: "Open in GitHub (opens in new tab)" });
@@ -101,8 +101,8 @@ it("shows the PR in the top bar and lists changed docs with letter statuses", as
   expectNewTab(within(sidebar()).getByRole("link", { name: "view on GitHub (opens in new tab)" }));
 });
 
-it("opens the first changed doc; a deleted doc renders read-only from the base revision", async () => {
-  renderPage();
+it("opens a linked deleted doc read-only from the base revision", async () => {
+  renderPage(`?doc=${encodeURIComponent(DELETED)}`);
   const article = await screen.findByRole("article", { name: "Rendered document" });
   // The deleted page's title comes from its front matter.
   expect(within(article).getAllByRole("definition")[0]!.textContent).toBe("102 Processing");
@@ -143,7 +143,7 @@ it("shows GitHub alerts as titled callouts without the marker", async () => {
 });
 
 it("scrolls the document back to the top when another doc is opened", async () => {
-  renderPage();
+  renderPage(`?doc=${encodeURIComponent(DELETED)}`);
   await screen.findByRole("article", { name: "Rendered document" });
   const scroller = document.querySelector<HTMLElement>(".rr-scroll")!;
   scroller.scrollTop = 500;
@@ -202,7 +202,7 @@ it("shows a size-limit state for documents too large to render, with raw still a
   const huge = "f".repeat(40);
   responses[`${API}/pulls/45377/files?per_page=100`] = fixture("files.json").replace(DELETED_BLOB, huge);
   responses[`${API}/git/blobs/${huge}`] = "x".repeat(MAX_RENDER_CHARS + 1);
-  renderPage();
+  renderPage(`?doc=${encodeURIComponent(DELETED)}`);
   expect(await screen.findByRole("heading", { name: "This document is too large to render" })).toBeTruthy();
   await userEvent.click(screen.getByRole("button", { name: "View raw" }));
   expect(screen.getByRole("link", { name: "Line 1 on GitHub (opens in new tab)" })).toBeTruthy();
@@ -395,7 +395,7 @@ it("places a deleted doc's LEFT-side threads on its base revision", async () => 
       body: "Keep a note of why this was removed.",
     }),
   );
-  renderPage();
+  renderPage(`?doc=${encodeURIComponent(DELETED)}`);
   const card = await threadCard(/GitHub line comment · L11 \(base\)/);
   const anchor = anchorOf(card)!;
   expect(screen.getByRole("article", { name: "Rendered document" }).contains(anchor)).toBe(true);
@@ -438,7 +438,7 @@ function editPull(change: (pr: Record<string, unknown>) => void) {
 }
 
 it("shows a Pull request block above the documents that opens the Overview", async () => {
-  const router = renderPage();
+  const router = renderPage(`?doc=${encodeURIComponent(DELETED)}`);
   await screen.findByRole("article", { name: "Rendered document" });
   const entry = await vi.waitFor(() => {
     const link = prEntry();
@@ -458,7 +458,7 @@ it("shows a Pull request block above the documents that opens the Overview", asy
 });
 
 it("opens the Overview from the keyboard", async () => {
-  const router = renderPage();
+  const router = renderPage(`?doc=${encodeURIComponent(DELETED)}`);
   await screen.findByRole("article", { name: "Rendered document" });
   prEntry().focus();
   await userEvent.keyboard("{Enter}");
@@ -618,6 +618,24 @@ it("shows a PR breadcrumb in Overview and a file breadcrumb in a document", asyn
   expect(within(fileCrumbs).getByText(INDEX.split("/").pop()!).closest("[aria-current=page]")).toBeTruthy();
   await userEvent.click(within(fileCrumbs).getByRole("link", { name: "#45377" }));
   expect(router.state.location.search).toMatchObject({ view: "overview" });
+});
+
+it("lands on the Overview when the link selects nothing, keeping the URL clean", async () => {
+  const router = renderPage();
+  expect(await overview()).toBeTruthy();
+  expect(prEntry().getAttribute("aria-current")).toBe("page");
+  expect(within(sidebar()).queryAllByRole("link", { current: "page" })).toHaveLength(1);
+  expect(screen.queryByRole("article", { name: "Rendered document" })).toBeNull();
+  expect(router.state.location.searchStr).toBe("");
+});
+
+it("opens a document thread's document when the link names only the thread", async () => {
+  suggestionOnHead();
+  renderPage(`?thread=${SUGGESTION}`);
+  const card = await threadCard(/GitHub line comment · L30/);
+  await vi.waitFor(() => expect(document.activeElement).toBe(card));
+  expect(fileLink(/status\/index\.md, modified/).getAttribute("aria-current")).toBe("page");
+  expect(prEntry().getAttribute("aria-current")).toBeNull();
 });
 
 it("lands on the Overview when no Markdown changed", async () => {
