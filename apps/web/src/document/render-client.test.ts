@@ -85,4 +85,11 @@ describe("renderClient", () => {
     void render(job("b.md"), new AbortController().signal);
     expect(workers).toHaveLength(2);
   });
+
+  it("rejects, instead of throwing, where Workers cannot start", async () => {
+    const render = renderClient(() => {
+      throw new ReferenceError("Worker is not defined");
+    });
+    await expect(render(job("a.md"), new AbortController().signal)).rejects.toThrow("Worker is not defined");
+  });
 });

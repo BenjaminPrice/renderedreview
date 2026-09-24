@@ -43,9 +43,9 @@ export function renderClient(create: () => WorkerLike) {
 
   return function render(job: RenderJob, signal: AbortSignal): Promise<RenderedMarkdown> {
     if (signal.aborted) return Promise.reject(signal.reason);
-    worker ??= start();
     const id = ++nextId;
     return new Promise<RenderedMarkdown>((resolve, reject) => {
+      worker ??= start(); // Throws, so rejects, where Workers are unavailable.
       pending.set(id, { job, resolve, reject });
       worker!.postMessage({ id, job });
       signal.addEventListener(
