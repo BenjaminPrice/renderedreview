@@ -314,3 +314,135 @@ describe("comment", () => {
     expect(logged).not.toMatch(/secret words|app-token/);
   });
 });
+
+describe("review", () => {
+  const line = {
+    id: "d1",
+    representation: "review-line",
+    body: "On the diff",
+    path: "docs/a.md",
+    line: 3,
+    side: "RIGHT",
+  };
+  const file = { id: "d2", representation: "review-file", body: "Whole file", path: "docs/b.md" };
+  const talk = { id: "d3", representation: "conversation", body: "Unchanged file" };
+  const review = (extra: object = {}) => ({
+    expectedHeadOid: HEAD,
+    submissionId: "s-1",
+    event: "COMMENT",
+    body: "Summary",
+    drafts: [line, file, talk],
+    ...extra,
+  });
+  const routes = (overrides: Record<string, Route> = {}) => ({
+    "POST /pulls/7/reviews": () => Response.json({ id: 55, state: "COMMENTED" }),
+    "POST /pulls/7/comments": created({ id: 901 }),
+    "POST /issues/7/comments": created({ id: 902 }),
+    ...overrides,
+  });
+
+  it("publishes line drafts and the summary as one native review, the rest by their own representation", async () => {
+    const { call, sent, writes } = setup({ routes: routes() });
+    const res = await call("review", review());
+    expect(res.status).toBe(200);
+    expect(writes().map(([url]) => String(url).replace(/.*\/pulls\/7|.*\/issues\/7/, ""))).toEqual([
+      "/reviews",
+      "/comments",
+      "/comments",
+    ]);
+    expect(sent(0)).toEqual({
+      commit_id: HEAD,
+      event: "COMMENT",
+      body: "Summary",
+      comments: [{ path: "docs/a.md", body: "On the diff", line: 3, side: "RIGHT" }],
+    });
+    expect(sent(1)).toEqual({ body: "Whole file", commit_id: HEAD, path: "docs/b.md", subject_type: "file" });
+    expect(sent(2)).toEqual({ body: "Unchanged file" });
+    expect(await json(res)).toEqual({
+      ok: true,
+      review: { ok: true, reviewId: 55 },
+      results: [
+        { draftId: "d1", ok: true, reviewId: 55 },
+        { draftId: "d2", ok: true, commentId: 901, url: "https://github.com/x" },
+        { draftId: "d3", ok: true, commentId: 902, url: "https://github.com/x" },
+      ],
+    });
+  });
+
+  it("submits an approval with no comments", async () => {
+    const { call, sent } = setup({ routes: routes() });
+    const res = await call("review", review({ event: "APPROVE", body: undefined, drafts: [] }));
+    expect(res.status).toBe(200);
+    expect(sent(0)).toEqual({ commit_id: HEAD, event: "APPROVE", comments: [] });
+  });
+
+  it("skips the native review when there is nothing to put in it", async () => {
+    const { call, writes } = setup({ routes: routes() });
+    const body = await json(await call("review", review({ body: undefined, drafts: [talk] })));
+    expect(body).toMatchObject({ ok: true, results: [{ draftId: "d3", ok: true }] });
+    expect(body).not.toHaveProperty("review");
+    expect(writes()).toHaveLength(1);
+  });
+
+  it("reports every draft's outcome when some fail, dropping none", async () => {
+    const { call } = setup({
+      routes: routes({
+        "POST /pulls/7/reviews": () => Response.json({ message: "Validation Failed" }, { status: 422 }),
+        "POST /issues/7/comments": () => Response.json({ message: "boom" }, { status: 500 }),
+      }),
+    });
+    const body = await json(await call("review", review()));
+    expect(body).toMatchObject({
+      ok: false,
+      review: { ok: false, error: { code: "github-rejected" } },
+      results: [
+        { draftId: "d1", ok: false, error: { code: "github-rejected", retryAs: "review-file" } },
+        { draftId: "d2", ok: true, commentId: 901 },
+        { draftId: "d3", ok: false, error: { code: "github-error" } },
+      ],
+    });
+  });
+
+  it("publishes a submission once, even when it is sent twice", async () => {
+    const { call, writes } = setup({ routes: routes() });
+    const [a, b] = await Promise.all([call("review", review()), call("review", review())]);
+    const again = await call("review", review());
+    const bodies = await Promise.all([a, b, again].map(json));
+    expect(bodies[1]).toEqual(bodies[0]);
+    expect(bodies[2]).toEqual(bodies[0]);
+    expect(writes()).toHaveLength(3);
+  });
+
+  it("lets a submission refused before publishing be sent again", async () => {
+    const stale = setup({ head: OTHER, routes: routes() });
+    expect((await stale.call("review", review({ submissionId: "s-stale" }))).status).toBe(409);
+    expect((await stale.call("review", review({ submissionId: "s-stale" }))).status).toBe(409);
+    expect(stale.writes()).toHaveLength(0);
+  });
+
+  it.each([
+    ["no submission id", review({ submissionId: undefined })],
+    ["an unknown event", review({ event: "MERGE" })],
+    ["duplicate draft ids", review({ drafts: [line, line] })],
+    ["a draft without an id", review({ drafts: [{ ...talk, id: undefined }] })],
+    ["too many drafts", review({ drafts: Array.from({ length: 51 }, (_, i) => ({ ...talk, id: `d${i}` })) })],
+    ["a line draft without a line", review({ drafts: [{ ...line, line: undefined }] })],
+  ])("rejects a submission with %s before calling GitHub", async (_, body) => {
+    const { call, fetch } = setup({ routes: routes() });
+    const res = await call("review", body);
+    expect(res.status).toBe(400);
+    expect(await json(res)).toMatchObject({ code: "invalid-request" });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("names the draft whose annotation targets another pull request, publishing nothing", async () => {
+    const { call, writes } = setup({ routes: routes() });
+    const res = await call(
+      "review",
+      review({ drafts: [line, { ...talk, body: withMarker("x", annotation({ pullRequest: 8 })) }] }),
+    );
+    expect(res.status).toBe(400);
+    expect(await json(res)).toMatchObject({ code: "annotation-mismatch", draftId: "d3" });
+    expect(writes()).toHaveLength(0);
+  });
+});

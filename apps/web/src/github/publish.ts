@@ -47,7 +47,7 @@ export type PublishErrorCode =
   | "github-rejected"
   | "github-error";
 
-const PATH = new RegExp(String.raw`^(${REPO_SEGMENT})/(${REPO_SEGMENT})/pulls/(\d{1,10})/(comment)$`);
+const PATH = new RegExp(String.raw`^(${REPO_SEGMENT})/(${REPO_SEGMENT})/pulls/(\d{1,10})/(comment|review)$`);
 const OID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 const PRIVATE = { "cache-control": "private, no-store", vary: "Cookie" };
 
@@ -223,6 +223,97 @@ function publishDraft(client: GitHubClient, t: Target, d: Draft, commitId: strin
   return client.createReviewComment(t.owner, t.repo, t.number, { body: d.body, commitId, path: d.path!, ...d.range });
 }
 
+type Result = { status: number; body: unknown };
+type ReviewEvent = "COMMENT" | "APPROVE" | "REQUEST_CHANGES";
+const EVENTS = new Set<unknown>(["COMMENT", "APPROVE", "REQUEST_CHANGES"]);
+const MAX_DRAFTS = 50;
+const SUBMISSION_ID = /^[\w-]{1,100}$/;
+
+/** Runs `check` for one draft of a submission, naming the draft in any refusal. */
+function forDraft<T>(draftId: string, check: () => T): T {
+  try {
+    return check();
+  } catch (error) {
+    if (error instanceof Refusal)
+      throw new Refusal(error.status, error.code, error.message, { ...error.extra, draftId });
+    throw error;
+  }
+}
+
+// ponytail: per-process memory of recent submissions; a retry landing on another instance
+// publishes again. A shared store (KV, database) when there is more than one instance.
+const SUBMISSION_TTL_MS = 10 * 60_000;
+const submissions = new Map<string, { result: Promise<Result>; until: number }>();
+
+/** Answers a repeated submission with the first one's outcome instead of publishing twice. */
+function once(key: string, run: () => Promise<Result>): Promise<Result> {
+  const now = Date.now();
+  const hit = submissions.get(key);
+  if (hit && hit.until > now) return hit.result;
+  if (submissions.size >= 10_000) submissions.clear();
+  const result = run();
+  submissions.set(key, { result, until: now + SUBMISSION_TTL_MS });
+  // Refused before anything was published (stale head, access): the same submission may be sent again.
+  result.catch(() => submissions.delete(key));
+  return result;
+}
+
+type Outcome =
+  ({ draftId: string } & ({ ok: true } & Record<string, unknown>)) | { draftId: string; ok: false; error: unknown };
+
+/**
+ * Line drafts and the summary become one native review; file and conversation drafts are
+ * published one by one (GitHub's review endpoint takes neither). Every draft gets an outcome.
+ */
+async function submitReview(
+  t: Target,
+  deps: Deps,
+  review: {
+    expected: string;
+    event: ReviewEvent;
+    summary?: ReturnType<typeof commentBody>;
+    drafts: (Draft & { id: string })[];
+  },
+): Promise<Result> {
+  const { client, pr } = await connect(t, "review", deps);
+  checkHead(pr, review.expected);
+  checkTarget(review.summary?.annotation, t.host, pr);
+  for (const d of review.drafts) forDraft(d.id, () => checkTarget(d.annotation, t.host, pr));
+
+  const outcomes = new Map<string, Outcome>();
+  const lines = review.drafts.filter((d) => d.representation === "review-line");
+  let native: { ok: true; reviewId: number } | { ok: false; error: unknown } | undefined;
+  if (lines.length || review.summary || review.event !== "COMMENT") {
+    try {
+      const { id } = await client.createReview(t.owner, t.repo, t.number, {
+        commitId: pr.head.sha,
+        event: review.event,
+        ...(review.summary && { body: review.summary.body }),
+        comments: lines.map((d) => ({ path: d.path!, body: d.body, ...d.range! })),
+      });
+      native = { ok: true, reviewId: id };
+      for (const d of lines) outcomes.set(d.id, { draftId: d.id, ok: true, reviewId: id });
+    } catch (error) {
+      native = { ok: false, error: fromGitHub(error).body };
+      for (const d of lines)
+        outcomes.set(d.id, { draftId: d.id, ok: false, error: fromGitHub(error, "review-line").body });
+    }
+  }
+  // One at a time: GitHub asks for serial writes to avoid secondary rate limits.
+  for (const d of review.drafts) {
+    if (d.representation === "review-line") continue;
+    try {
+      const comment = await publishDraft(client, t, d, pr.head.sha);
+      outcomes.set(d.id, { draftId: d.id, ok: true, commentId: comment.id, url: comment.htmlUrl });
+    } catch (error) {
+      outcomes.set(d.id, { draftId: d.id, ok: false, error: fromGitHub(error, d.representation).body });
+    }
+  }
+  const results = review.drafts.map((d) => outcomes.get(d.id)!);
+  const ok = (native?.ok ?? true) && results.every((r) => r.ok);
+  return { status: 200, body: { ok, ...(native && { review: native }), results } };
+}
+
 export async function publishToGitHub(request: Request, deps: Deps): Promise<Response> {
   try {
     const { status, body } = await handle(request, deps);
@@ -235,7 +326,7 @@ export async function publishToGitHub(request: Request, deps: Deps): Promise<Res
   }
 }
 
-async function handle(request: Request, deps: Deps): Promise<{ status: number; body: unknown }> {
+async function handle(request: Request, deps: Deps): Promise<Result> {
   const { identity } = deps;
   if (!identity) throw new Refusal(404, "not-found", "Not found");
   if (request.method !== "POST") throw new Refusal(405, "invalid-request", "Method not allowed");
@@ -280,6 +371,26 @@ async function handle(request: Request, deps: Deps): Promise<{ status: number; b
         throw fromGitHub(e, d.representation);
       });
       return { status: 201, body: { comment } };
+    }
+    case "review": {
+      const expected = oid(input.expectedHeadOid, "expectedHeadOid");
+      const { submissionId, event, drafts } = input;
+      if (typeof submissionId !== "string" || !SUBMISSION_ID.test(submissionId)) invalid("submissionId is required");
+      if (!EVENTS.has(event)) invalid("event must be COMMENT, APPROVE or REQUEST_CHANGES");
+      if (!Array.isArray(drafts) || drafts.length > MAX_DRAFTS)
+        invalid(`drafts must list at most ${MAX_DRAFTS} drafts`);
+      const ids = new Set<string>();
+      const checked = (drafts as unknown[]).map((v) => {
+        if (!isObject(v) || typeof v.id !== "string" || !SUBMISSION_ID.test(v.id))
+          return invalid("Every draft needs an id");
+        if (ids.has(v.id)) invalid("Draft ids must be unique");
+        ids.add(v.id);
+        return { id: v.id, ...forDraft(v.id, () => draft(v)) };
+      });
+      const summary = input.body === undefined || input.body === "" ? undefined : commentBody(input.body);
+      return once(`${t.userId} ${t.host}/${t.owner}/${t.repo}#${t.number} ${submissionId}`, () =>
+        submitReview(t, deps, { expected, event: event as ReviewEvent, summary, drafts: checked }),
+      );
     }
   }
   return refuse(404, "not-found", "Not found");
