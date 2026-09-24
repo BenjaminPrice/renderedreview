@@ -12,7 +12,6 @@ import { createFileRoute, notFound, stripSearchParams } from "@tanstack/react-ro
 import { createServerFn } from "@tanstack/react-start";
 import { useEffect, useEffectEvent, useMemo, useState } from "react";
 import {
-  ExternalIcon,
   MAX_RENDER_CHARS,
   nodeElement,
   RawDocument,
@@ -21,6 +20,7 @@ import {
 } from "../document/document";
 import { allDocs, changedDocs, selectedPath, sourceUrl } from "../document/docs";
 import { Sidebar } from "../document/Sidebar";
+import { ExternalLink } from "../ui/ExternalLink";
 import { preferProxy } from "../github/client";
 import { allowedHosts, proxyFirstHosts } from "../github/proxy";
 import {
@@ -152,10 +152,9 @@ function ReviewPage({ pr, id, files }: { pr: PullRequest; id: PrIdentity; files:
     <AppShell
       title={<PrTitle pr={pr} id={id} docCount={changed.length} />}
       actions={
-        <a className="rr-btn rr-btn-ghost" href={pr.htmlUrl}>
+        <ExternalLink className="rr-btn rr-btn-ghost" href={pr.htmlUrl}>
           Open in GitHub
-          <ExternalIcon />
-        </a>
+        </ExternalLink>
       }
       sidebar={
         <Sidebar
@@ -209,10 +208,9 @@ function ReviewPage({ pr, id, files }: { pr: PullRequest; id: PrIdentity; files:
       }
       toolbarEnd={
         link && (
-          <a className="rr-btn rr-btn-sm rr-btn-ghost" href={sourceUrl(link, link.sha, link.path)}>
+          <ExternalLink className="rr-btn rr-btn-sm rr-btn-ghost" href={sourceUrl(link, link.sha, link.path)}>
             Source
-            <ExternalIcon />
-          </a>
+          </ExternalLink>
         )
       }
       commentCount={review.data && entry ? placements.length : undefined}
@@ -255,7 +253,7 @@ function ReviewPage({ pr, id, files }: { pr: PullRequest; id: PrIdentity; files:
       {!path ? (
         <DocMessage title="No Markdown changed in this pull request">
           Browse the repository&apos;s documents under All docs, or{" "}
-          <a href={`${pr.htmlUrl}/files`}>review the changes on GitHub</a>.
+          <ExternalLink href={`${pr.htmlUrl}/files`}>review the changes on GitHub</ExternalLink>.
         </DocMessage>
       ) : !entry ? (
         tree.isPending && !tree.error ? (

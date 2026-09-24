@@ -1123,6 +1123,18 @@ samp {
   font: var(--rr-text-sm) / 1.45 var(--rr-font-ui);
 }
 
+/* External links in rendered documents and comments open in a new tab (the renderer sets target).
+   The icon and its alt text are generated content, so no text joins the source-mapped DOM. */
+.rr-markdown a[target="_blank"]::after,
+.rr-md a[target="_blank"]::after {
+  content: "\2197" / " (opens in new tab)";
+  margin-left: 1px;
+  font-size: 0.8em;
+}
+.rr-md .rr-diff-head a::after {
+  content: none;
+}
+
 /* Changed sections: solid bar = added, dashed = modified; the alt text names the change for
    screen readers without adding text to the document DOM (selections map DOM text to source). */
 .rr-markdown [data-rr-change],

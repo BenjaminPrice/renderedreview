@@ -6,6 +6,7 @@ import { toString } from "hast-util-to-string";
 import { toJsxRuntime } from "hast-util-to-jsx-runtime";
 import { useMemo, type ReactNode } from "react";
 import { Fragment, jsx, jsxs } from "react/jsx-runtime";
+import { ExternalLink } from "../ui/ExternalLink";
 
 export interface Suggestion {
   /** Lines the suggestion replaces, when known. */
@@ -68,9 +69,9 @@ function ProposedChange({ original, proposed, href }: { original: string[] | nul
     <div className="rr-diff" role="group" aria-label="Suggested change">
       <div className="rr-diff-head">
         <span>Suggested change</span>
-        <a href={href} target="_blank" rel="noreferrer">
+        <ExternalLink href={href}>
           Apply on GitHub
-        </a>
+        </ExternalLink>
       </div>
       {original?.map((l, i) => row("del", l, i))}
       {proposed.split("\n").map((l, i) => row("add", l, i))}

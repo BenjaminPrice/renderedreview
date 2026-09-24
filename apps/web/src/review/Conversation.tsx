@@ -2,6 +2,7 @@
 // PR-level content that has no place in a document: conversation comments and review summaries.
 import type { Review } from "@rendered-review/github-integration";
 import type { ConversationEntry, InferredLocation, RepositoryRef } from "@rendered-review/review-domain";
+import { ExternalLink } from "../ui/ExternalLink";
 import { Markdown } from "./Markdown";
 import { blobUrl } from "./model";
 import { Badge, CommentHead, type ReviewIconName } from "./ThreadCard";
@@ -30,9 +31,9 @@ export function ConversationPanel({
             {inferred.map((l) => (
               <p key={`${l.sha}:${l.path}:${l.startLine}-${l.endLine}`} className="rr-inferred">
                 <Badge tone="neutral">Inferred location</Badge>
-                <a href={blobUrl(repository, l.sha, l.path, l)} target="_blank" rel="noreferrer">
+                <ExternalLink href={blobUrl(repository, l.sha, l.path, l)}>
                   {l.path} · {lines(l)} @ <code>{l.sha.slice(0, 7)}</code>
-                </a>
+                </ExternalLink>
               </p>
             ))}
             <Markdown source={comment.body} />
@@ -40,9 +41,9 @@ export function ConversationPanel({
           <div className="rr-t-foot">
             <span className="rr-t-loc">PR conversation comment</span>
             <span className="rr-spacer" />
-            <a className="rr-btn rr-btn-sm rr-btn-ghost" href={comment.htmlUrl} target="_blank" rel="noreferrer">
+            <ExternalLink className="rr-btn rr-btn-sm rr-btn-ghost" href={comment.htmlUrl}>
               View on GitHub
-            </a>
+            </ExternalLink>
           </div>
         </article>
       ))}
@@ -85,9 +86,9 @@ export function ReviewSummaries({ reviews }: { reviews: Review[] }) {
             <div className="rr-t-foot">
               <span className="rr-t-loc">Review summary</span>
               <span className="rr-spacer" />
-              <a className="rr-btn rr-btn-sm rr-btn-ghost" href={r.htmlUrl} target="_blank" rel="noreferrer">
+              <ExternalLink className="rr-btn rr-btn-sm rr-btn-ghost" href={r.htmlUrl}>
                 View on GitHub
-              </a>
+              </ExternalLink>
             </div>
           </article>
         );
