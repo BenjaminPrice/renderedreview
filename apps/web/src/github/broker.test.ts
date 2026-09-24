@@ -92,10 +92,14 @@ describe("forRepository (comment, review, resolve)", () => {
 
   it("asks the user to sign in again without a usable GitHub App token", async () => {
     const deps = { installed: async () => true, fetch: publicRepo() };
-    expect(await forRepository(write(), { ...deps, identity: writer(null, "oauth-token") })).toEqual({ kind: "reauth" });
-    expect(await forRepository(write(), { ...deps, identity: writer("expired", null), fetch: repoReply(401) })).toEqual({
+    expect(await forRepository(write(), { ...deps, identity: writer(null, "oauth-token") })).toEqual({
       kind: "reauth",
     });
+    expect(await forRepository(write(), { ...deps, identity: writer("expired", null), fetch: repoReply(401) })).toEqual(
+      {
+        kind: "reauth",
+      },
+    );
   });
 
   it("reports a repository GitHub will not show the user", async () => {

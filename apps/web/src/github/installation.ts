@@ -14,7 +14,7 @@ const b64url = (bytes: Uint8Array) =>
 const json64 = (value: object) => b64url(new TextEncoder().encode(JSON.stringify(value)));
 
 // DER tag-length-value.
-function der(tag: number, content: Uint8Array): Uint8Array {
+function der(tag: number, content: Uint8Array): Uint8Array<ArrayBuffer> {
   const n = content.length;
   // RSA keys stay far below 64 KiB, so two length bytes are enough.
   const length = n < 0x80 ? [n] : n < 0x100 ? [0x81, n] : [0x82, n >> 8, n & 0xff];
