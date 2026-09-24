@@ -204,7 +204,7 @@ export function RenderedDocument({
         jsxs,
         passNode: true,
         components: {
-          table: ({ node: _, ...attributes }) => <table {...attributes} tabIndex={0} />,
+          table: (props) => <table {...props} node={undefined} tabIndex={0} />,
           // Fences in a registered diagram format render as diagrams; the rest stay code.
           pre: ({ node, children, ...attributes }) => {
             const fence = node && rendered.nodes[node.properties.dataRrId as number];

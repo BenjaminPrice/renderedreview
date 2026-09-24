@@ -18,9 +18,9 @@ it("gives focused comment anchors the focus ring, after every other anchor outli
 });
 
 it("underlines links in running text, which colour alone does not set apart (WCAG 1.4.1)", () => {
-  expect(rules.some(([selector, body]) => /(^|,)\s*p a\b/.test(selector) && /text-decoration:\s*underline/.test(body))).toBe(
-    true,
-  );
+  expect(
+    rules.some(([selector, body]) => /(^|,)\s*p a\b/.test(selector) && /text-decoration:\s*underline/.test(body)),
+  ).toBe(true);
 });
 
 it("reflows to one column on narrow viewports and at 200% zoom (WCAG 1.4.10)", () => {
