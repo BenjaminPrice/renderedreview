@@ -6,7 +6,13 @@ export const Route = createFileRoute("/api/github/public/$")({
   // ANY so non-GET methods get an explicit 405 instead of the app shell.
   server: {
     handlers: {
-      ANY: ({ request, context }) => proxyPublicGitHub(request, { allowedHosts: allowedHosts(context.config) }),
+      ANY: ({ request, context: { config } }) => {
+        const token = config.github.publicReadToken;
+        return proxyPublicGitHub(request, {
+          allowedHosts: allowedHosts(config),
+          readToken: token ? { host: new URL(config.github.url).host, token } : undefined,
+        });
+      },
     },
   },
 });
