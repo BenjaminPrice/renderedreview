@@ -30,7 +30,7 @@ function rangeOf(article: HTMLElement, needle: string, nth = 0): Range {
   for (let i = 0; i <= nth; i++) at = flat.indexOf(needle, at + 1);
   if (at < 0) throw new Error(`"${needle}" not found`);
   const locate = (g: number, end: boolean): [Text, number] => {
-    const hit = texts.findLast(([t, from]) => (end ? from < g : from <= g) && g <= from + t.length)!;
+    const hit = texts.filter(([t, from]) => (end ? from < g : from <= g) && g <= from + t.length).at(-1)!;
     return [hit[0], g - hit[1]];
   };
   const range = document.createRange();

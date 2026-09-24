@@ -2055,3 +2055,13 @@ samp {
   opacity: 0.6;
   cursor: not-allowed;
 }
+.rr-pending-quote {
+  margin: 10px 12px 6px;
+  padding: 1px 0 1px 8px;
+  border-left: 2px solid var(--rr-hl-comment-line);
+  color: var(--rr-text-muted);
+  white-space: pre-wrap;
+}
+.rr-pending-note {
+  margin: 0 12px 8px;
+}
