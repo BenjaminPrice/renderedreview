@@ -952,7 +952,8 @@ samp {
   display: flex;
 }
 .rr-seg-fill button {
-  flex: 1;
+  flex: 1 1 auto;
+  padding: 0 6px;
 }
 
 /* Sidebar */
