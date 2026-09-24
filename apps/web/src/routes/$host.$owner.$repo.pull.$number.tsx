@@ -6,7 +6,7 @@ import {
   type PullRequest,
   RateLimitError,
 } from "@rendered-review/github-integration";
-import { blocksForLines, type RenderedMarkdown, type SourceSelection } from "@rendered-review/markdown-domain";
+import { blocksForLines, type RenderedMarkdown } from "@rendered-review/markdown-domain";
 import { placeThreads, projectReview, reviewers, type ThreadPlacement } from "@rendered-review/review-domain";
 import { queryOptions, useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link, notFound, stripSearchParams, useLocation } from "@tanstack/react-router";
@@ -22,7 +22,8 @@ import {
   PrOverview,
   prState,
 } from "../document/Overview";
-import { PendingComment, SelectionPopover } from "../document/SelectionPopover";
+import { usePendingHighlight } from "../document/highlight";
+import { SelectionPopover } from "../document/SelectionPopover";
 import { Sidebar } from "../document/Sidebar";
 import { ExternalLink } from "../ui/ExternalLink";
 import { isPrivateRepoUnsupported, isSignInRequired, preferProxy, rateLimit } from "../github/client";
@@ -48,6 +49,7 @@ import {
   threadState,
   type ThreadState,
 } from "../review";
+import { useReviewMode } from "../review/ReviewMode";
 import { AppShell } from "../ui/AppShell";
 import { GuestNotice } from "../ui/GuestNotice";
 import { signIn } from "../ui/Viewer";
@@ -151,8 +153,6 @@ function ReviewPage({ pr, id, files }: { pr: PullRequest; id: PrIdentity; files:
   }, [review.data, entry, view, doc.rendered]);
   const unresolved = useMemo(() => new Map(Object.entries(review.data?.unresolvedByPath ?? {})), [review.data]);
   const [filters, setFilters] = useState<ReadonlySet<ThreadState>>(DEFAULT_FILTERS);
-  // The selection a comment is being composed on, for the document it was made in.
-  const [pending, setPending] = useState<{ path: string; selection: SourceSelection } | null>(null);
 
   const navigate = Route.useNavigate();
   const setActive = (threadId: string | null) => {
@@ -171,6 +171,8 @@ function ReviewPage({ pr, id, files }: { pr: PullRequest; id: PrIdentity; files:
   const { state } = prState(pr);
   // Guests reading GitHub directly (not through the token-backed proxy) get the sign-in suggestion.
   const viewer = useQuery(viewerQuery).data;
+  const reviewMode = useReviewMode({ pr, id, files, entry, doc, viewer });
+  usePendingHighlight(article, view === "rendered" ? doc.rendered : undefined, doc.source, reviewMode.highlighted);
   const proxied = useQuery(allowedHostsQuery).data?.proxyFirst.includes(id.host);
   const guest = viewer?.signInEnabled && !viewer.signedIn && proxied === false;
   const link = entry && { ...id, sha: doc.sha, path: entry.path };
@@ -179,9 +181,12 @@ function ReviewPage({ pr, id, files }: { pr: PullRequest; id: PrIdentity; files:
     <AppShell
       title={<PrTitle pr={pr} id={id} docCount={changed.length} />}
       actions={
-        <ExternalLink className="rr-btn rr-btn-ghost" href={pr.htmlUrl}>
-          Open in GitHub
-        </ExternalLink>
+        <>
+          <ExternalLink className="rr-btn rr-btn-ghost" href={pr.htmlUrl}>
+            Open in GitHub
+          </ExternalLink>
+          {reviewMode.reviewButton}
+        </>
       }
       sidebar={
         <Sidebar
@@ -295,9 +300,7 @@ function ReviewPage({ pr, id, files }: { pr: PullRequest; id: PrIdentity; files:
         ) : (
           entry && (
             <>
-              {pending?.path === entry.path && (
-                <PendingComment selection={pending.selection} onCancel={() => setPending(null)} />
-              )}
+              {reviewMode.status}
               <CommentRail
                 placements={placements}
                 repository={repository}
@@ -305,7 +308,9 @@ function ReviewPage({ pr, id, files }: { pr: PullRequest; id: PrIdentity; files:
                 docContainerRef={docColumn}
                 activeThreadId={active?.id ?? null}
                 onActiveThreadChange={setActive}
+                extras={reviewMode.extras}
               />
+              {reviewMode.unplacedDrafts}
             </>
           )
         )
@@ -362,7 +367,7 @@ function ReviewPage({ pr, id, files }: { pr: PullRequest; id: PrIdentity; files:
                 article={article}
                 rendered={doc.rendered}
                 source={doc.source}
-                onCompose={(selection) => setPending({ path: entry.path, selection })}
+                onCompose={(selection) => reviewMode.compose(entry.path, selection)}
               />
             </>
           ) : (
