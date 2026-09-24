@@ -64,6 +64,8 @@ beforeEach(() => {
     addEventListener() {},
     removeEventListener() {},
   }));
+  // The shell's top bar asks who is signed in; no sign-in here.
+  vi.stubGlobal("fetch", async () => new Response("Not Found", { status: 404 }));
 });
 
 afterEach(() => {
