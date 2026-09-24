@@ -53,10 +53,6 @@ export function allDocs(headTree: Tree, changed: DocEntry[]): DocEntry[] {
     .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
 }
 
-/** The document to show: the `doc` search param, else the first changed document. */
-export const selectedPath = (doc: string | undefined, changed: DocEntry[]): string | undefined =>
-  doc ?? changed[0]?.path;
-
 export type ChangeKind = "added" | "modified";
 
 /** A 1-based, inclusive range of head lines. */
