@@ -36,7 +36,7 @@ The hosted environments start in public-only mode (`HOSTING_MODE=community`, `AC
 
 Nothing here is automated; each step needs a Cloudflare account.
 
-1. Create the databases and paste each printed `database_id` into the matching environment in `apps/web/wrangler.jsonc` (replacing the all-zero placeholder):
+1. Create the databases and paste each printed `database_id` into the matching environment's `d1_databases` entry in `apps/web/wrangler.jsonc` (replacing the all-zero placeholder), then commit the change. Database IDs are not secrets, and the deploy workflow reads the committed file. If `wrangler d1 create` offers to add the database to your configuration, decline: it appends a top-level entry with a different binding name instead of filling in the environment.
 
    ```sh
    cd apps/web
