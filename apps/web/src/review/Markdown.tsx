@@ -110,7 +110,12 @@ export function Markdown({
                 </p>
               </>
             );
-          return <pre {...props}>{children}</pre>;
+          // Focusable, so keyboard readers can scroll wide code sideways.
+          return (
+            <pre {...props} tabIndex={0}>
+              {children}
+            </pre>
+          );
         },
         p: ({ node, children, ...props }) =>
           dropManualApply && toString(node!) === MANUAL_APPLY ? null : <p {...props}>{children}</p>,

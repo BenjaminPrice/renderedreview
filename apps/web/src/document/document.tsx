@@ -248,11 +248,19 @@ export function RenderedDocument({
         jsxs,
         passNode: true,
         components: {
+          table: (props) => <table {...props} node={undefined} tabIndex={0} />,
           // Fences in a registered diagram format render as diagrams; the rest stay code.
           pre: ({ node, children, ...attributes }) => {
             const fence = node && rendered.nodes[node.properties.dataRrId as number];
             const entry = fence?.type === "code" ? registry.match(fence.lang) : undefined;
-            if (!node || !fence || !entry) return <pre {...attributes}>{children}</pre>;
+            // ponytail: every code block and table is a tab stop, so wide ones scroll from the
+            // keyboard; make only overflowing ones focusable if the extra stops bother readers.
+            if (!node || !fence || !entry)
+              return (
+                <pre {...attributes} tabIndex={0}>
+                  {children}
+                </pre>
+              );
             const code = node.children[0] as Element | undefined; // pre > code
             return (
               <DiagramBlock
@@ -275,7 +283,8 @@ export function RenderedDocument({
     [blobOid, changes, host, owner, repo, sha, path],
   );
   return (
-    <article ref={containerRef} className="rr-markdown" aria-label="Rendered document" onClick={onClick}>
+    // Focusable, so keyboard readers can scroll it and select text in it (see SelectionPopover).
+    <article ref={containerRef} className="rr-markdown" aria-label="Rendered document" tabIndex={0} onClick={onClick}>
       <DiagramSourceContext value={source}>{content}</DiagramSourceContext>
     </article>
   );

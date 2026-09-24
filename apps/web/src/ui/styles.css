@@ -102,6 +102,10 @@ a {
 a:hover {
   text-decoration: underline;
 }
+/* Links in running text: colour alone does not set them apart from it (WCAG 1.4.1). */
+p a:not(.rr-btn) {
+  text-decoration: underline;
+}
 button {
   font: inherit;
   color: inherit;
@@ -2419,4 +2423,76 @@ samp {
 }
 .rr-dialog .rr-composer-error {
   margin: 0 12px;
+}
+
+/* =====================================================================
+   NARROW VIEWPORTS (phones, and desktop windows at 200% zoom): one column,
+   no sideways scrolling (WCAG 1.4.10). The sidebar sits above the document
+   and a pinned rail follows it, its cards stacked as in the slide-over.
+   ===================================================================== */
+@media (max-width: 40rem) {
+  .rr-app {
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  .rr-topbar,
+  .rr-toolbar {
+    flex-wrap: wrap;
+    row-gap: 6px;
+    padding: 6px 12px;
+    min-height: var(--rr-toolbar-h);
+  }
+  .rr-body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  .rr-sidebar {
+    max-height: 30vh;
+    border-right: 0;
+    border-bottom: 1px solid var(--rr-border);
+  }
+  .rr-main {
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  .rr-canvas {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .rr-doc {
+    padding: 20px 40px 40px 16px;
+  }
+  .rr-rail {
+    border-left: 0;
+    border-top: 1px solid var(--rr-border);
+  }
+  .rr-rail-aligned {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+    height: auto !important;
+    padding: 0 12px;
+  }
+  .rr-rail-aligned > .rr-thread {
+    position: static;
+  }
+  :root[data-rail="slide"] .rr-rail {
+    top: 0;
+  }
+  .rr-pr-title,
+  .rr-pr-meta {
+    white-space: normal;
+    flex-wrap: wrap;
+  }
+  .rr-rev-select {
+    max-width: 100%;
+  }
+  .rr-crumbs,
+  .rr-desc-head {
+    flex-wrap: wrap;
+  }
+  .rr-branch {
+    height: auto;
+    overflow-wrap: anywhere;
+  }
+  .rr-md {
+    overflow-wrap: anywhere;
+  }
 }

@@ -36,6 +36,7 @@ export interface SubmitReviewProps {
 
 export function SubmitReview({ drafts, headOid, publisher, onPublished, onClose }: SubmitReviewProps) {
   const dialog = useRef<HTMLDialogElement>(null);
+  const summaryBox = useRef<HTMLTextAreaElement>(null);
   const ids = { title: useId(), summary: useId() };
   const [summary, setSummary] = useState("");
   const [verdict, setVerdict] = useState<Verdict>("COMMENT");
@@ -46,6 +47,8 @@ export function SubmitReview({ drafts, headOid, publisher, onPublished, onClose 
   useEffect(() => {
     const d = dialog.current;
     if (d && !d.open) d.showModal();
+    // Browsers would focus the first control (Cancel); start where the reviewer types.
+    summaryBox.current?.focus();
   }, []);
 
   const stale = drafts.filter((d) => d.headOid !== headOid);
@@ -85,6 +88,7 @@ export function SubmitReview({ drafts, headOid, publisher, onPublished, onClose 
           Summary (optional)
         </label>
         <textarea
+          ref={summaryBox}
           id={ids.summary}
           className="rr-composer-text"
           value={summary}

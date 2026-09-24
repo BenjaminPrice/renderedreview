@@ -20,6 +20,11 @@ const TABLE = [
   "| Success | https://preview.example.dev | d4abcf8 | 2026-09-24T07:11:31Z | [Visit](https://dash.example) |",
 ].join("\n");
 
+it("lets keyboard readers scroll wide code blocks", () => {
+  render(<Markdown source={"```\nconst veryLongLine = 1;\n```\n"} />);
+  expect(screen.getByText("const veryLongLine = 1;").closest("pre")!.tabIndex).toBe(0);
+});
+
 describe("comment tables", () => {
   it("scroll horizontally in a keyboard-focusable, labelled region", () => {
     render(<Markdown source={TABLE} />);

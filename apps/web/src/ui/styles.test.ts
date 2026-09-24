@@ -16,3 +16,16 @@ it("gives focused comment anchors the focus ring, after every other anchor outli
   // Same specificity as `[data-rr-anchor][data-rr-active]`, so it must come last to override it.
   expect(focus).toBe(anchorRules.length - 1);
 });
+
+it("underlines links in running text, which colour alone does not set apart (WCAG 1.4.1)", () => {
+  expect(
+    rules.some(([selector, body]) => /(^|,)\s*p a\b/.test(selector) && /text-decoration:\s*underline/.test(body)),
+  ).toBe(true);
+});
+
+it("reflows to one column on narrow viewports and at 200% zoom (WCAG 1.4.10)", () => {
+  const css = readFileSync(`${import.meta.dirname}/styles.css`, "utf8");
+  const narrow = /@media \(max-width: 40rem\) \{([\s\S]*?)\n\}/.exec(css)?.[1] ?? "";
+  for (const layout of [".rr-body", ".rr-canvas"])
+    expect(narrow, layout).toMatch(new RegExp(`\\${layout} \\{[^}]*grid-template-columns: minmax\\(0, 1fr\\);`));
+});
