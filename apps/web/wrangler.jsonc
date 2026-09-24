@@ -45,12 +45,11 @@
       "name": "rendered-review-preview",
       "workers_dev": true,
       "vars": { "HOSTING_MODE": "community", "ACCESS_POLICY": "disabled" },
-      // Replace with the ID printed by `wrangler d1 create rendered-review-preview`.
       "d1_databases": [
         {
           "binding": "DB",
           "database_name": "rendered-review-preview",
-          "database_id": "00000000-0000-0000-0000-000000000000",
+          "database_id": "e2e9a72c-7fc0-401b-8358-da57c8874d7e",
           "migrations_dir": "../../packages/control-plane/migrations",
         },
       ],
@@ -60,12 +59,11 @@
       // Served from renderedreview.dev, a custom domain attached in the dashboard.
       "workers_dev": false,
       "vars": { "HOSTING_MODE": "community", "ACCESS_POLICY": "disabled" },
-      // Replace with the ID printed by `wrangler d1 create rendered-review-production`.
       "d1_databases": [
         {
           "binding": "DB",
           "database_name": "rendered-review-production",
-          "database_id": "00000000-0000-0000-0000-000000000000",
+          "database_id": "dbf3b76a-c3b0-408b-ae1c-21cd10bfcf8d",
           "migrations_dir": "../../packages/control-plane/migrations",
         },
       ],
