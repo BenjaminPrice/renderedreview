@@ -2,7 +2,7 @@
 // @vitest-environment happy-dom
 // The comment rail inside the app shell: filters, connector preference and visibility, margin markers.
 import type { SourceNode } from "@rendered-review/markdown-domain";
-import type { ThreadPlacement } from "@rendered-review/review-domain";
+import type { ReanchorResult, ThreadPlacement } from "@rendered-review/review-domain";
 import { act, cleanup, fireEvent, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useRef, useState } from "react";
@@ -97,7 +97,7 @@ describe("threads and filters", () => {
   });
 
   it("files threads whose words are only in an earlier revision under Historical", async () => {
-    const reanchor = { state: "historical-only", evidence: "none", confidence: 0, candidates: [] } as const;
+    const reanchor: ReanchorResult = { state: "historical-only", evidence: "none", confidence: 0, candidates: [] };
     const reason = "The quoted text is only in an earlier revision";
     await renderPage([...placements, { thread: appThread([issueComment("Gone one")]), blocks: [], reason, reanchor }]);
     expect(chip(/^Historical/).textContent).toBe("Historical 1");

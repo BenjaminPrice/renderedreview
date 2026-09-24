@@ -1249,6 +1249,19 @@ samp {
   background: var(--rr-deleted-bg);
   font: var(--rr-text-sm) / 1.45 var(--rr-font-ui);
 }
+/* Historical revision banner: the mockup's modified-tint banner. */
+.rr-history-banner {
+  border: 1px solid var(--rr-border);
+  background: var(--rr-modified-bg);
+}
+.rr-history-banner .rr-badge {
+  color: var(--rr-modified-fg);
+}
+/* Revision selector: long commit titles truncate. */
+.rr-rev-select {
+  max-width: 22rem;
+  text-overflow: ellipsis;
+}
 /* Guest sign-in suggestion: quiet by default, a warning (icon and bold count too) once few requests are left. */
 .rr-guest {
   display: flex;

@@ -2,6 +2,7 @@
 // Loads, renders and marks up one PR document. The comment rail consumes `useDocument`'s
 // result and the article element (`containerRef`), and finds rendered blocks with `nodeElement`.
 import { blocksForLines, renderMarkdown, type RenderedMarkdown } from "@rendered-review/markdown-domain";
+import { NotFoundError } from "@rendered-review/github-integration";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "@tanstack/react-router";
 import type { Element, Root } from "hast";
@@ -14,6 +15,7 @@ import { DiagramRegistryContext } from "../diagram/registry";
 import { isMarkdownPath } from "../pr-url";
 import { blobQuery, fileAtCommitQuery, type PrIdentity } from "../github/queries";
 import { type ChangeKind, changedLines, type DocEntry, type LineChange, sourceUrl } from "./docs";
+import type { RevisionSource } from "./revisions";
 
 // ponytail: fixed size cap on the main thread; move parsing to a cancellable Web Worker and
 // set the threshold from browser benchmarks when large documents matter.
@@ -98,6 +100,55 @@ export function useDocument(id: PrIdentity, entry: DocEntry | undefined): Loaded
     error: head.error,
   };
 }
+
+export interface RevisionDocument extends LoadedDocument {
+  /** Where the document was at that commit (its old path, if since renamed). */
+  path: string;
+  /** Identifies the content for caches: its blob OID, or commit and path when read by path. */
+  key: string;
+  /** The blob OID, when it was read by it. */
+  blobOid?: string;
+}
+
+/** A document as it was at an earlier commit, read-only: no change markers. */
+export function useRevisionDocument(
+  id: PrIdentity,
+  entry: DocEntry | undefined,
+  revision: RevisionSource | undefined,
+): RevisionDocument | undefined {
+  const { commitOid = "", blobOid, path = "", fallbackPath } = revision ?? {};
+  const byBlob = useQuery({ ...blobQuery(id, blobOid ?? ""), enabled: !!blobOid });
+  const byPath = useQuery({ ...fileAtCommitQuery(id, commitOid, path), enabled: !!revision && !blobOid });
+  const renamed = !!fallbackPath && byPath.error instanceof NotFoundError;
+  const byOldPath = useQuery({ ...fileAtCommitQuery(id, commitOid, fallbackPath ?? ""), enabled: renamed });
+  const read = blobOid ? byBlob : renamed ? byOldPath : byPath;
+  const shownPath = renamed ? fallbackPath! : path;
+  const key = blobOid ?? `${commitOid}:${shownPath}`;
+  const source = read.data;
+  const tooLarge = (source?.length ?? 0) > MAX_RENDER_CHARS;
+  const result = useMemo(
+    () =>
+      entry && source !== undefined && !tooLarge
+        ? renderBlob(id, commitOid, { ...entry, oid: key, path: shownPath }, source)
+        : undefined,
+    [id, commitOid, entry, key, shownPath, source, tooLarge],
+  );
+  if (!revision) return undefined;
+  return {
+    source,
+    rendered: result instanceof Error ? undefined : result,
+    renderError: result instanceof Error ? result : undefined,
+    tooLarge,
+    changes: NO_CHANGES,
+    sha: commitOid,
+    error: read.error,
+    path: shownPath,
+    key,
+    ...(blobOid && { blobOid }),
+  };
+}
+
+const NO_CHANGES: LineChange[] = [];
 
 /** The rendered element for a source node, if it is on screen in `container`. */
 export const nodeElement = (container: HTMLElement, id: number): HTMLElement | null =>

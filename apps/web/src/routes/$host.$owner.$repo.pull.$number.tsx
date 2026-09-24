@@ -7,12 +7,29 @@ import {
   RateLimitError,
 } from "@rendered-review/github-integration";
 import { blocksForLines, type RenderedMarkdown } from "@rendered-review/markdown-domain";
-import { placeThreads, projectReview, reviewers, type ThreadPlacement } from "@rendered-review/review-domain";
-import { queryOptions, useQuery } from "@tanstack/react-query";
-import { createFileRoute, Link, notFound, stripSearchParams, useLocation } from "@tanstack/react-router";
+import {
+  historicalThreads,
+  type NativeThread,
+  placeThreads,
+  projectReview,
+  reviewers,
+  type ThreadPlacement,
+} from "@rendered-review/review-domain";
+import { queryOptions, useQueries, useQuery } from "@tanstack/react-query";
+import { createFileRoute, Link, notFound, stripSearchParams, useLocation, useRouter } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
 import { useEffect, useEffectEvent, useMemo, useState, useSyncExternalStore } from "react";
-import { MAX_RENDER_CHARS, nodeElement, RawDocument, RenderedDocument, useDocument } from "../document/document";
+import {
+  MAX_RENDER_CHARS,
+  nodeElement,
+  RawDocument,
+  RenderedDocument,
+  type LoadedDocument,
+  useDocument,
+  useInAppLinks,
+  useRevisionDocument,
+} from "../document/document";
+import { revisionOptions, revisionSource } from "../document/revisions";
 import { allDocs, changedDocs, sourceUrl } from "../document/docs";
 import {
   DocsWithComments,
@@ -29,10 +46,12 @@ import { ExternalLink } from "../ui/ExternalLink";
 import { isPrivateRepoUnsupported, isSignInRequired, preferProxy, rateLimit } from "../github/client";
 import { allowedHosts, proxyFirstHosts } from "../github/proxy";
 import {
+  blobQuery,
   changedFilesQuery,
   issueCommentsQuery,
   type PrIdentity,
   prIdentity,
+  pullRequestCommitsQuery,
   pullRequestQuery,
   reviewCommentsQuery,
   reviewsQuery,
@@ -43,12 +62,13 @@ import {
 import {
   CommentRail,
   DEFAULT_FILTERS,
-  filterCounts,
+  placementCounts,
   RailHeader,
   threadDomId,
   threadState,
   type ThreadState,
 } from "../review";
+import { relativeTime } from "../review/model";
 import { useReviewMode } from "../review/ReviewMode";
 import { AppShell } from "../ui/AppShell";
 import { GuestNotice } from "../ui/GuestNotice";
@@ -133,7 +153,22 @@ function ReviewPage({ pr, id, files }: { pr: PullRequest; id: PrIdentity; files:
   });
   const all = useMemo(() => tree.data && allDocs(tree.data, changed), [tree.data, changed]);
   const entry = changedEntry ?? all?.find((d) => d.path === path);
-  const doc = useDocument(id, entry);
+  const current = useDocument(id, entry);
+  // `rev` names an earlier commit: the document as it was then, read-only. Its source depends on
+  // the comments (an annotation's blob survives renames), so it waits for them.
+  const revision = useMemo(
+    () =>
+      search.rev && entry && threads && search.rev !== current.sha
+        ? revisionSource(threads, entry, search.rev, id.baseSha)
+        : undefined,
+    [search.rev, entry, threads, current.sha, id.baseSha],
+  );
+  const past = useRevisionDocument(id, entry, revision);
+  const historical = !!search.rev && search.rev !== current.sha;
+  // Never the current document under a historical banner: loading until the revision is known.
+  const doc: LoadedDocument =
+    past ?? (historical ? { tooLarge: false, changes: [], sha: search.rev!, error: review.error ?? null } : current);
+  const commits = useQuery({ ...pullRequestCommitsQuery(id), enabled: !!entry });
   const [view, setView] = useState<"rendered" | "raw">("rendered");
   // The rendered article, as state so the rail and anchors follow it across loads and view switches.
   const [article, setArticle] = useState<HTMLElement | null>(null);
@@ -141,9 +176,9 @@ function ReviewPage({ pr, id, files }: { pr: PullRequest; id: PrIdentity; files:
   const docColumn = useMemo(() => ({ current: article?.parentElement ?? null }), [article]);
 
   const repository = useMemo(() => ({ host: id.host, owner: id.owner, name: id.repo }), [id]);
-  const placements = useMemo(() => {
-    if (!review.data || !entry) return [];
-    const rendered = view === "rendered" ? doc.rendered : undefined;
+  const rendered = view === "rendered" ? doc.rendered : undefined;
+  const firstPlacements = useMemo(() => {
+    if (!review.data || !entry || historical) return [];
     // Deleted docs show the base revision, so only LEFT-side (base) lines can be placed.
     return placeThreads(
       review.data.threads,
@@ -152,7 +187,27 @@ function ReviewPage({ pr, id, files }: { pr: PullRequest; id: PrIdentity; files:
         ? { base: rendered }
         : { head: rendered, blob: doc.source === undefined ? undefined : { oid: entry.oid, source: doc.source } },
     );
-  }, [review.data, entry, view, doc.rendered, doc.source]);
+  }, [review.data, entry, historical, rendered, doc.source]);
+  const original = useOriginals(id, firstPlacements);
+  const placements = useMemo(() => {
+    if (!review.data || !entry) return [];
+    if (past) {
+      // Only the threads written on this revision, placed where they were written. A renamed
+      // document's comments may name its old path.
+      const onDoc = review.data.threads
+        .filter((t) => t.path === entry.path || t.path === entry.previousPath)
+        .map((t) => ({ ...t, path: entry.path }));
+      const threads = historicalThreads(onDoc, { commitOid: past.sha, blobOid: past.blobOid });
+      const blob = past.source === undefined ? undefined : { oid: past.blobOid ?? "", source: past.source };
+      return placeThreads(threads, entry.path, { head: rendered, blob });
+    }
+    if (!original.size) return firstPlacements;
+    return placeThreads(review.data.threads, entry.path, {
+      head: rendered,
+      blob: doc.source === undefined ? undefined : { oid: entry.oid, source: doc.source },
+      original,
+    });
+  }, [review.data, entry, past, rendered, doc.source, firstPlacements, original]);
   const unresolved = useMemo(() => new Map(Object.entries(review.data?.unresolvedByPath ?? {})), [review.data]);
   const [filters, setFilters] = useState<ReadonlySet<ThreadState>>(DEFAULT_FILTERS);
 
@@ -167,17 +222,45 @@ function ReviewPage({ pr, id, files }: { pr: PullRequest; id: PrIdentity; files:
   const scrollTop = useEffectEvent(() => {
     if (!search.thread) document.querySelector(".rr-scroll")?.scrollTo(0, 0);
   });
-  useEffect(() => scrollTop(), [path]);
+  useEffect(() => scrollTop(), [path, search.rev]);
   useLineTarget(article, doc.rendered);
 
   const { state } = prState(pr);
   // Guests reading GitHub directly (not through the token-backed proxy) get the sign-in suggestion.
   const viewer = useQuery(viewerQuery).data;
-  const reviewMode = useReviewMode({ pr, id, files, entry, doc, viewer });
-  usePendingHighlight(article, view === "rendered" ? doc.rendered : undefined, doc.source, reviewMode.highlighted);
+  const reviewMode = useReviewMode({ pr, id, files, entry, doc: current, viewer });
+  usePendingHighlight(
+    article,
+    view === "rendered" && !historical ? doc.rendered : undefined,
+    doc.source,
+    reviewMode.highlighted,
+  );
   const proxied = useQuery(allowedHostsQuery).data?.proxyFirst.includes(id.host);
   const guest = viewer?.signInEnabled && !viewer.signedIn && proxied === false;
-  const link = entry && { ...id, sha: doc.sha, path: entry.path };
+  const link = entry && { ...id, sha: doc.sha, path: past?.path ?? entry.path };
+  const router = useRouter();
+  const onInAppLink = useInAppLinks();
+  // "View in original": this document at the commit the thread was written on, focused on it.
+  const originalLink = (thread: NativeThread, commitOid: string) => ({
+    href: router.buildLocation({
+      from: Route.fullPath,
+      to: ".",
+      search: (s) => ({ ...s, doc: entry?.path, rev: commitOid, thread: thread.comments[0]!.id }),
+    }).href,
+    onClick: onInAppLink,
+  });
+  const revisions =
+    entry &&
+    threads &&
+    revisionOptions({
+      entry,
+      current: current.sha,
+      base: id.baseSha,
+      threads,
+      commits: commits.data ?? [],
+      selected: historical ? search.rev : undefined,
+    });
+  const commit = historical ? commits.data?.find((c) => c.oid === search.rev) : undefined;
 
   return (
     <AppShell
@@ -230,12 +313,30 @@ function ReviewPage({ pr, id, files }: { pr: PullRequest; id: PrIdentity; files:
                   Raw
                 </button>
               </div>
-              <span className="rr-seg">
-                <span className="rr-seg-static">
-                  <span className="rr-sr-only">Revision: </span>
-                  {entry.status === "deleted" ? "Base" : "Current"} · <code>{doc.sha.slice(0, 7)}</code>
+              {revisions && revisions.length > 1 ? (
+                <select
+                  className="rr-btn rr-btn-sm rr-rev-select"
+                  aria-label="Revision"
+                  value={historical ? search.rev : current.sha}
+                  onChange={(e) => {
+                    const rev = e.target.value === current.sha ? undefined : e.target.value;
+                    void navigate({ search: (s) => ({ ...s, rev }) });
+                  }}
+                >
+                  {revisions.map((r) => (
+                    <option key={r.oid} value={r.oid}>
+                      {r.label}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <span className="rr-seg">
+                  <span className="rr-seg-static">
+                    <span className="rr-sr-only">Revision: </span>
+                    {entry.status === "deleted" ? "Base" : "Current"} · <code>{doc.sha.slice(0, 7)}</code>
+                  </span>
                 </span>
-              </span>
+              )}
               <DocumentCrumbs id={id} path={entry.path} />
               {doc.changes.length > 0 && (
                 <span className="rr-legend" role="note" aria-label="Changed-section legend">
@@ -273,11 +374,12 @@ function ReviewPage({ pr, id, files }: { pr: PullRequest; id: PrIdentity; files:
         review.data &&
         entry && (
           <>
-            <RailHeader
-              counts={filterCounts(placements.map((p) => p.thread))}
-              filters={filters}
-              onFiltersChange={setFilters}
-            />
+            <RailHeader counts={placementCounts(placements)} filters={filters} onFiltersChange={setFilters} />
+            {historical && (
+              <p className="rr-conv-note">
+                Comments written on <code>{search.rev!.slice(0, 7)}</code>. The others are on the current revision.
+              </p>
+            )}
             <p className="rr-conv-note">
               PR conversation ({review.data.timeline.length}) is in{" "}
               <Link
@@ -310,10 +412,11 @@ function ReviewPage({ pr, id, files }: { pr: PullRequest; id: PrIdentity; files:
                 docContainerRef={docColumn}
                 activeThreadId={active?.id ?? null}
                 onActiveThreadChange={setActive}
-                extras={reviewMode.extras}
+                extras={historical ? undefined : reviewMode.extras}
                 threadActions={reviewMode.threadActions}
+                originalLink={originalLink}
               />
-              {reviewMode.unplacedDrafts}
+              {!historical && reviewMode.unplacedDrafts}
             </>
           )
         )
@@ -343,7 +446,28 @@ function ReviewPage({ pr, id, files }: { pr: PullRequest; id: PrIdentity; files:
         <DocMessage title="Loading document…" />
       ) : (
         <>
-          {entry.status === "deleted" && (
+          {historical && (
+            <p className="rr-doc-note rr-history-banner" role="status" aria-label="Historical revision">
+              <span className="rr-badge rr-b-neutral">Original</span> Viewing{" "}
+              <ExternalLink href={`https://${id.host}/${id.owner}/${id.repo}/commit/${search.rev}`}>
+                <code>{search.rev!.slice(0, 7)}</code>
+              </ExternalLink>
+              {commit && (
+                <>
+                  {" "}
+                  from{" "}
+                  <time dateTime={commit.committedAt} title={new Date(commit.committedAt).toLocaleString()}>
+                    {new Date(commit.committedAt).toLocaleDateString()} ({relativeTime(commit.committedAt)})
+                  </time>
+                </>
+              )}
+              , read-only. Comments can only be added to the current revision.{" "}
+              <Link from={Route.fullPath} search={(s) => ({ ...s, rev: undefined })}>
+                Back to current
+              </Link>
+            </p>
+          )}
+          {entry.status === "deleted" && !historical && (
             <p className="rr-doc-note">
               Deleted in this pull request. Showing the base revision (<code>{doc.sha.slice(0, 7)}</code>), read-only.
             </p>
@@ -363,15 +487,17 @@ function ReviewPage({ pr, id, files }: { pr: PullRequest; id: PrIdentity; files:
                 rendered={doc.rendered}
                 changes={doc.changes}
                 link={link}
-                blobOid={entry.oid}
+                blobOid={past?.key ?? entry.oid}
                 containerRef={setArticle}
               />
-              <SelectionPopover
-                article={article}
-                rendered={doc.rendered}
-                source={doc.source}
-                onCompose={(selection, suggest) => reviewMode.compose(entry.path, selection, suggest)}
-              />
+              {!historical && (
+                <SelectionPopover
+                  article={article}
+                  rendered={doc.rendered}
+                  source={doc.source}
+                  onCompose={(selection, suggest) => reviewMode.compose(entry.path, selection, suggest)}
+                />
+              )}
             </>
           ) : (
             <DocMessage title="This document is too large to render">
@@ -385,6 +511,36 @@ function ReviewPage({ pr, id, files }: { pr: PullRequest; id: PrIdentity; files:
       )}
     </AppShell>
   );
+}
+
+/**
+ * Whether the original blobs of annotations that could not be placed can still be read, fetched
+ * only for those (by OID, so each is read once and cached): an unplaced comment is then either
+ * historical-only (its original can be opened) or unavailable.
+ */
+function useOriginals(id: PrIdentity, placements: ThreadPlacement[]): ReadonlyMap<string, "available" | "missing"> {
+  const oids = [
+    ...new Set(
+      placements.flatMap((p) =>
+        p.reanchor?.state === "outdated" && p.thread.anchor.type === "annotation"
+          ? [p.thread.anchor.annotation.target.blobOid]
+          : [],
+      ),
+    ),
+  ];
+  const states = useQueries({
+    queries: oids.map((oid) => blobQuery(id, oid)),
+    // A plain object, so it stays the same object while nothing changes.
+    combine: (results) => {
+      const known: Record<string, "available" | "missing"> = {};
+      results.forEach((r, i) => {
+        if (r.isSuccess) known[oids[i]!] = "available";
+        else if (r.error instanceof NotFoundError) known[oids[i]!] = "missing";
+      });
+      return known;
+    },
+  });
+  return useMemo(() => new Map(Object.entries(states)), [states]);
 }
 
 /**
