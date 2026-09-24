@@ -124,7 +124,7 @@ it("binds the selected doc to the URL and marks changed sections of a modified d
 it("switches to raw source with GitHub line links, and back, without refetching", async () => {
   renderPage(`?doc=${encodeURIComponent(INDEX)}`);
   await screen.findByRole("article", { name: "Rendered document" });
-  const fetches = vi.mocked(fetch).mock?.calls.length;
+  const fetches = requested.length;
 
   await userEvent.click(screen.getByRole("button", { name: "Raw" }));
   const line1 = screen.getByRole("link", { name: "Line 1 on GitHub" });
@@ -133,7 +133,7 @@ it("switches to raw source with GitHub line links, and back, without refetching"
 
   await userEvent.click(screen.getByRole("button", { name: "Rendered" }));
   expect(screen.getByRole("article", { name: "Rendered document" })).toBeTruthy();
-  expect(vi.mocked(fetch).mock?.calls.length).toBe(fetches);
+  expect(requested.length).toBe(fetches);
 });
 
 it("lists every head Markdown file under All docs, bound to the files param", async () => {

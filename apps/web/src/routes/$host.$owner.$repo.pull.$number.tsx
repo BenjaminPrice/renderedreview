@@ -30,7 +30,6 @@ import {
   pullRequestQuery,
   reviewCommentsQuery,
   reviewsQuery,
-  reviewThreadsQuery,
   treeQuery,
 } from "../github/queries";
 import {
@@ -289,24 +288,25 @@ function ReviewPage({ pr, id, files }: { pr: PullRequest; id: PrIdentity; files:
   );
 }
 
-/** GitHub-native review content for the PR. Thread resolution is optional (anonymous access can't read it). */
+/**
+ * GitHub-native review content for the PR. Thread resolution needs GraphQL, which GitHub refuses
+ * anonymously, so it stays unknown until signed-in access exists.
+ */
 function useReview(id: PrIdentity) {
   const comments = useQuery(reviewCommentsQuery(id));
   const reviews = useQuery(reviewsQuery(id));
   const issueComments = useQuery(issueCommentsQuery(id));
-  const threads = useQuery(reviewThreadsQuery(id));
   const data = useMemo(
     () =>
-      comments.data && reviews.data && issueComments.data && !threads.isPending
+      comments.data && reviews.data && issueComments.data
         ? projectReview({
             repository: { host: id.host, owner: id.owner, name: id.repo },
             reviewComments: comments.data,
-            reviewThreads: threads.data ?? undefined,
             reviews: reviews.data,
             issueComments: issueComments.data,
           })
         : undefined,
-    [id, comments.data, reviews.data, issueComments.data, threads.isPending, threads.data],
+    [id, comments.data, reviews.data, issueComments.data],
   );
   return { data, error: comments.error ?? reviews.error ?? issueComments.error };
 }

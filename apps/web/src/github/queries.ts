@@ -79,19 +79,6 @@ export const issueCommentsQuery = (id: PrIdentity) =>
     staleTime: PR_STALE_MS,
   });
 
-/**
- * Review-thread resolution, or `null` when GitHub won't say: GraphQL rejects anonymous calls
- * (401). Resolution is then unknown; a failure here never fails the page.
- */
-export const reviewThreadsQuery = (id: PrIdentity) =>
-  queryOptions({
-    queryKey: prKey(id, "review-threads"),
-    queryFn: () =>
-      withPublicGitHub(id.host, (c) => c.listReviewThreads(id.owner, id.repo, id.number)).catch(() => null),
-    // Don't keep asking once refused.
-    staleTime: (query) => (query.state.data === null ? Infinity : PR_STALE_MS),
-  });
-
 /** Immutable content by OID: served from the browser's object store, fetched and stored on a miss. */
 async function immutable<T>(id: PrIdentity, key: string, fetchFn: () => Promise<T>): Promise<T> {
   const cacheKey = objectKey(id.host, id.repositoryId, key);
