@@ -170,6 +170,16 @@ describe("loadConfig", () => {
     );
   });
 
+  it("loads a private key stored with real newlines (wrangler secret put) or escaped \\n (env files)", () => {
+    const pem = "-----BEGIN RSA PRIVATE KEY-----\nline-one\nline-two\n-----END RSA PRIVATE KEY-----";
+    // What a Worker in public-only community mode with sign-in secrets sees; pasted keys often end in a newline.
+    const worker = { HOSTING_MODE: "community", ACCESS_POLICY: "disabled", ...github, DATABASE_URL: undefined };
+    for (const stored of [`${pem}\n`, pem.replaceAll("\n", "\\n")]) {
+      const config = loadConfig({ ...worker, GITHUB_APP_PRIVATE_KEY: stored }, { databaseBinding: true });
+      expect(config.github.app?.privateKey).toBe(pem);
+    }
+  });
+
   it("rejects malformed values", () => {
     expect(
       problems({
