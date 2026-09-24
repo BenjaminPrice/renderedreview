@@ -30,7 +30,7 @@ pnpm exec wrangler secret put ENCRYPTION_KEY --env production
 
 For local development, put secrets in `apps/web/.dev.vars` (git-ignored), one `NAME=value` per line.
 
-Both hosted environments serve public pull requests only (`HOSTING_MODE=community`, `ACCESS_POLICY=disabled`); neither needs a billing account. Preview needs no secrets. Production also offers GitHub sign-in (see [Enable GitHub sign-in](#enable-github-sign-in)), so its `secrets.required` lists the seven sign-in secrets and `wrangler deploy` refuses to run while one of them is unset. `wrangler deploy --dry-run` does not check them. Moving to `HOSTING_MODE=hosted` (private repositories) also needs the OAuth and billing secrets listed at the top of `wrangler.jsonc`; add them to `secrets.required` at that point.
+Both hosted environments serve public pull requests only (`HOSTING_MODE=community`, `ACCESS_POLICY=disabled`); neither needs a billing account. Preview needs no secrets. Production also offers GitHub sign-in (see [Enable GitHub sign-in](#enable-github-sign-in)) and commenting on public repositories (see [Enable commenting on public repositories](#enable-commenting-on-public-repositories)), so its `secrets.required` lists the seven sign-in secrets plus `GITHUB_OAUTH_CLIENT_ID` and `GITHUB_OAUTH_CLIENT_SECRET`, and `wrangler deploy` refuses to run while one of them is unset. `wrangler deploy --dry-run` does not check them. Moving to `HOSTING_MODE=hosted` (private repositories) also needs the billing secrets listed at the top of `wrangler.jsonc`; add them to `secrets.required` at that point.
 
 ## One-time setup
 
@@ -103,7 +103,7 @@ The GitHub App's user tokens can only write where the app is installed. For publ
    pnpm exec wrangler secret put GITHUB_OAUTH_CLIENT_SECRET --env production  # the client secret
    ```
 
-3. Then add `GITHUB_OAUTH_CLIENT_ID` and `GITHUB_OAUTH_CLIENT_SECRET` to production's `secrets.required` in `wrangler.jsonc` (and the expected list in `apps/web/src/wrangler-config.test.ts`). Deploys then fail if they go missing. Don't add them before the secrets exist, or every production deploy is refused.
+3. Production's `secrets.required` in `wrangler.jsonc` lists `GITHUB_OAUTH_CLIENT_ID` and `GITHUB_OAUTH_CLIENT_SECRET`, so a deploy is refused until both are set. A self-hosted Cloudflare deployment that doesn't want public-repository commenting can remove them from its own `secrets.required`.
 4. Verify on `https://<domain>`: once you're signed in, **Allow commenting on public repositories** appears next to your name. It goes to GitHub, asks only for public repository access, and brings you back to the same page, where the action is gone.
 
 ## Deploying
