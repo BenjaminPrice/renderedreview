@@ -7,9 +7,10 @@ import viteReact from "@vitejs/plugin-react";
 import { nitro } from "nitro/vite";
 import { build, defineConfig, type Plugin } from "vite";
 
-// Not precached: Mermaid's browser build (megabytes) runs only in the diagram renderer frame,
-// which the worker does not control, and is fetched only when a document has a diagram.
-const ON_DEMAND = /(^|\/)mermaid\.min-[^/]+\.js$/;
+// Not precached: diagram renderer scripts (Mermaid's browser build and the `*-frame.ts` bundles,
+// up to a megabyte each) run only in the renderer frames, and are fetched only when a document
+// has such a diagram.
+const ON_DEMAND = /(^|\/)(mermaid\.min|[\w-]+-frame)-[^/]+\.js$/;
 
 // Builds src/sw/sw.ts into /sw.js with the client build's file list inlined. Start allows
 // only one client entry, so the worker is a separate nested build. Its version is a hash

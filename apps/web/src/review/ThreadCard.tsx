@@ -7,10 +7,12 @@ import {
   type RepositoryRef,
   type ThreadComment,
 } from "@rendered-review/review-domain";
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect, useRef } from "react";
 import { ExternalLink } from "../ui/ExternalLink";
 import { Markdown } from "./Markdown";
 import { anchorLabel, blobUrl, isEdited, lines, relativeTime, suggestionOriginal, threadState } from "./model";
+import type { ThreadActions } from "./thread-actions";
+import { ThreadFoot } from "./ThreadFoot";
 
 /** DOM id of a thread card. Anchors point at it with `aria-details`. */
 export const threadDomId = (threadId: string) => `rr-thread-${threadId.replace(/[^\w-]/g, "_")}`;
@@ -152,6 +154,8 @@ export interface ThreadCardProps {
   /** Re-anchored from an earlier revision to these lines of the displayed document; `approximate` when its text changed. */
   moved?: { startLine: number; endLine: number; approximate?: boolean };
   onActivate?: () => void;
+  /** Reply and resolve controls; without them the card is read-only. */
+  actions?: ThreadActions;
 }
 
 /** One native review thread. Resolved threads collapse in place; unknown resolution claims nothing. */
@@ -165,6 +169,7 @@ export function ThreadCard({
   damaged,
   moved,
   onActivate,
+  actions,
 }: ThreadCardProps) {
   const state = threadState(thread);
   // An annotation not verified against this document is shown at its GitHub line, when it has one.
@@ -173,6 +178,16 @@ export function ThreadCard({
   const root = thread.comments[0]!;
   const label = moved ? `Selected text · ${lines(moved)}` : anchorLabel(a);
   const n = thread.comments.length;
+  const who = root.author?.login ?? "ghost";
+
+  // Resolving collapses the card into a new element (and reopening expands it): keep focus on it.
+  const resolving = useRef(false);
+  useEffect(() => {
+    if (!resolving.current) return;
+    resolving.current = false;
+    const card = document.getElementById(threadDomId(thread.id));
+    (card?.querySelector("summary") ?? card)?.focus();
+  }, [state, thread.id]);
 
   const outdated = a.type === "outdated" && (
     <Badge tone="mod" icon="warn">
@@ -236,7 +251,7 @@ export function ThreadCard({
           ))}
         </ol>
       )}
-      <div className="rr-t-foot">
+      <ThreadFoot thread={thread} actions={actions} context={`thread by ${who}, ${label}`} resolving={resolving}>
         <span className={reason ? "rr-t-loc rr-t-why" : "rr-t-loc"}>
           {reason ? (
             `${label} · ${reason}`
@@ -264,7 +279,7 @@ export function ThreadCard({
         <ExternalLink className="rr-btn rr-btn-sm rr-btn-ghost" href={root.htmlUrl}>
           View on GitHub
         </ExternalLink>
-      </div>
+      </ThreadFoot>
     </>
   );
 
@@ -276,7 +291,6 @@ export function ThreadCard({
     onFocus: onActivate,
     onClick: onActivate,
   };
-  const who = root.author?.login ?? "ghost";
 
   if (state === "resolved")
     return (
