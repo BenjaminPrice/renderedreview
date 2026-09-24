@@ -2,7 +2,7 @@
 // @vitest-environment happy-dom
 import { renderMarkdown } from "@rendered-review/markdown-domain";
 import type { ReanchorResult, ThreadPlacement } from "@rendered-review/review-domain";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { toJsxRuntime } from "hast-util-to-jsx-runtime";
 import { useState } from "react";
 import { Fragment, jsx, jsxs } from "react/jsx-runtime";
@@ -15,6 +15,7 @@ afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
   delete (document as Partial<Document>).caretPositionFromPoint;
+  returned.length = 0;
 });
 
 const source = "# Title\n\nHello brave new world, said the old man.\n\nAnother paragraph.\n\nA reworded one.\n";
@@ -51,9 +52,13 @@ const placements: ThreadPlacement[] = [
   { thread: thread("reworded", lineAnchor(7)), blocks: [third!], reanchor: approximate },
 ];
 
+/** Every distinct ranges map the hook returned, in order. */
+const returned: ReadonlyMap<string, Range[]>[] = [];
+
 function Page({ active = null, onActivate = () => {} }: { active?: string | null; onActivate?: (id: string) => void }) {
   const [article, setArticle] = useState<HTMLElement | null>(null);
-  useAnchors(article, rendered, source, placements, DEFAULT_FILTERS, active, onActivate);
+  const ranges = useAnchors(article, rendered, source, placements, DEFAULT_FILTERS, active, onActivate);
+  if (returned.at(-1) !== ranges) returned.push(ranges);
   return (
     <article ref={setArticle} aria-label="Document">
       {toJsxRuntime(rendered.tree, { Fragment, jsx, jsxs })}
@@ -101,6 +106,15 @@ it("moves the active thread's words to the active highlight", () => {
   rerender(<Page active="old" />);
   expect(text("rr-comment")).toEqual(["brave"]);
   expect(text("rr-comment-active")).toEqual(["old man"]);
+});
+
+it("does not re-render for document changes that leave the words where they were", async () => {
+  stubHighlights();
+  render(<Page />);
+  const before = returned.length;
+  screen.getByRole("article").append(document.createComment("unrelated"));
+  await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+  expect(returned.length).toBe(before);
 });
 
 it("removes its highlights when unmounted", () => {
