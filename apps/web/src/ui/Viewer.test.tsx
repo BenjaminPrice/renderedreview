@@ -16,7 +16,7 @@ beforeEach(() => {
     requests.push(request);
     const path = new URL(request.url).pathname;
     if (path === "/api/auth/viewer") return viewer.clone();
-    if (path === "/api/auth/sign-in/social") {
+    if (path === "/api/auth/sign-in/social" || path === "/api/auth/link-social") {
       return Response.json({ url: "https://github.com/login/oauth/authorize?client_id=x", redirect: true });
     }
     if (path === "/api/auth/sign-out") return Response.json({ success: true });
@@ -61,4 +61,29 @@ it("shows nothing when sign-in is not available on this deployment", async () =>
   const { container } = render(<ViewerSlot navigate={vi.fn()} />);
   await vi.waitFor(() => expect(requests).toHaveLength(1));
   expect(container.innerHTML).toBe("");
+});
+
+it("offers to allow commenting on public repositories, returning to the exact current URL", async () => {
+  viewer = Response.json({ ...octocat, publicComments: "unlinked" });
+  history.replaceState(null, "", "/github.com/mdn/content/pull/45377?doc=a.md#rr-thread-9");
+  const navigate = vi.fn();
+  render(<ViewerSlot navigate={navigate} />);
+  await userEvent.click(await screen.findByRole("button", { name: "Allow commenting on public repositories" }));
+  const start = requests.find((r) => r.url.endsWith("/api/auth/link-social"))!;
+  expect(start.method).toBe("POST");
+  expect(await start.json()).toEqual({
+    provider: "github-public",
+    callbackURL: "/github.com/mdn/content/pull/45377?doc=a.md#rr-thread-9",
+  });
+  expect(navigate).toHaveBeenCalledWith("https://github.com/login/oauth/authorize?client_id=x");
+});
+
+it("does not offer public commenting once allowed, or when this deployment has no OAuth App", async () => {
+  for (const body of [{ ...octocat, publicComments: "linked" }, octocat]) {
+    viewer = Response.json(body);
+    render(<ViewerSlot navigate={vi.fn()} />);
+    expect(await screen.findByText("octocat")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Allow commenting on public repositories" })).toBeNull();
+    cleanup();
+  }
 });
