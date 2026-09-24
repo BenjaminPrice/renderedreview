@@ -4,6 +4,10 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     passWithNoTests: true,
-    projects: ["packages/*", { test: { name: "root", include: ["*.test.ts"] } }],
+    projects: [
+      "packages/*",
+      { test: { name: "root", include: ["*.test.ts"] } },
+      { test: { name: "web", include: ["apps/web/src/**/*.test.ts"] } },
+    ],
   },
 });
