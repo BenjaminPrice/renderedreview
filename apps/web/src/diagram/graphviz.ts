@@ -4,7 +4,7 @@
 import script from "./graphviz-frame?worker&url";
 import { frameRenderer, rendererFrameSrc } from "./frame-client";
 
-export const { load: loadGraphviz, close: closeGraphvizFrame } = frameRenderer({
+export const { load: loadGraphviz } = frameRenderer({
   id: "graphviz",
   fenceNames: ["dot", "graphviz"],
   // @hpcc-js/wasm-graphviz's version (its package.json is not importable); bump with it.

@@ -123,3 +123,16 @@ it("keeps the frame when a render is merely cancelled", async () => {
   controller.abort();
   expect(frames()).toEqual([el]);
 });
+
+it("fails to load when the frame never announces itself", async () => {
+  vi.useFakeTimers();
+  try {
+    const loading = loadMermaid();
+    const settled = expect(loading).rejects.toThrow("Could not load the Mermaid renderer");
+    await vi.advanceTimersByTimeAsync(30_000);
+    await settled;
+    expect(frames()).toHaveLength(0);
+  } finally {
+    vi.useRealTimers();
+  }
+});

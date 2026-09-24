@@ -9,6 +9,9 @@ import { sanitizeSvg } from "./sanitize";
 /** The frame page for a renderer bundled by this app, given its script's URL. */
 export const rendererFrameSrc = (script: string) => `/frames/renderer?script=${encodeURIComponent(script)}`;
 
+// A frame that has not announced itself by then (renderer script blocked or crashed) never will.
+const LOAD_TIMEOUT_MS = 20_000;
+
 type Reply = { id: number; svg: string } | { id: number; error: string };
 
 export interface FrameRenderer {
@@ -58,7 +61,10 @@ export function frameRenderer(options: {
     el.style.cssText = "position:fixed;left:-10000px;top:0;width:1200px;height:900px;border:0;visibility:hidden";
     let settle!: (ok: boolean) => void;
     const ready = new Promise<Window>((resolve, reject) => {
+      const timer = setTimeout(() => settle(false), LOAD_TIMEOUT_MS);
       settle = (ok) => {
+        clearTimeout(timer);
+        if (frame?.el !== el) return;
         if (ok) resolve(el.contentWindow!);
         else {
           close();
