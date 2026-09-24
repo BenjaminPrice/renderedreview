@@ -4,6 +4,8 @@ on:
   pull_request:
   push:
     branches: [main]
+  # Reused by the deploy workflow so every deploy passes the same checks.
+  workflow_call:
 
 permissions:
   contents: read
