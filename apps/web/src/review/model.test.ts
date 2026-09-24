@@ -1,5 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-import type { NativeAnchor, NativeThread, Resolution } from "@rendered-review/review-domain";
+import type {
+  NativeAnchor,
+  NativeThread,
+  ReanchorState,
+  Resolution,
+  ThreadPlacement,
+} from "@rendered-review/review-domain";
 import { describe, expect, it } from "vitest";
 import {
   anchorLabel,
@@ -8,10 +14,13 @@ import {
   filterCounts,
   isEdited,
   layoutCards,
+  originalRevision,
+  placementState,
   relativeTime,
   suggestionOriginal,
   threadState,
 } from "./model";
+import { appThread, HEAD } from "./fixtures";
 
 const line = (type: "current" | "outdated", startLine: number, endLine: number, side: "LEFT" | "RIGHT" = "RIGHT") =>
   ({ type, kind: "github-line", side, startLine, endLine, commitOid: "a".repeat(40) }) as NativeAnchor;
@@ -33,6 +42,35 @@ describe("thread state and filter counts", () => {
       thread("unresolved", line("outdated", 4, 4)),
     ];
     expect(filterCounts(threads)).toEqual({ current: 2, resolved: 1, outdated: 1, historical: 0 });
+  });
+});
+
+describe("placement state and original revision", () => {
+  const OLD = "b".repeat(40);
+  const reanchored = (state: ReanchorState, resolution: Resolution = "unresolved"): ThreadPlacement => ({
+    thread: appThread(undefined, { resolution }),
+    blocks: [],
+    reanchor: { state, evidence: "none", confidence: 0, candidates: [] },
+  });
+
+  it("buckets an annotation whose words are only in an earlier revision as historical, unless resolved", () => {
+    expect(placementState(reanchored("historical-only"))).toBe("historical");
+    expect(placementState(reanchored("historical-only", "resolved"))).toBe("resolved");
+    expect(placementState(reanchored("unavailable"))).toBe("current");
+    expect(placementState({ thread: thread("unknown", line("outdated", 1, 1)), blocks: [] })).toBe("outdated");
+  });
+
+  it("names the revision a thread was written on when it is not shown as it was", () => {
+    expect(originalRevision({ thread: thread("unknown", { ...line("outdated", 1, 1), commitOid: OLD }), blocks: [] })).toBe(
+      OLD,
+    );
+    // The fixture annotation was written on HEAD.
+    for (const state of ["outdated", "historical-only", "ambiguous", "moved"] as const)
+      expect(originalRevision(reanchored(state))).toBe(HEAD);
+    // Gone from GitHub, on its own blob, or a current line comment: nothing to open.
+    expect(originalRevision(reanchored("unavailable"))).toBeUndefined();
+    expect(originalRevision({ thread: appThread(), blocks: [] })).toBeUndefined();
+    expect(originalRevision({ thread: thread("unknown", line("current", 1, 1)), blocks: [] })).toBeUndefined();
   });
 });
 

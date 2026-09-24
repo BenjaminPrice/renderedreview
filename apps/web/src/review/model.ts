@@ -1,9 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Pure logic behind the comment rail: thread states, filters, labels, card layout and connector
 // geometry. No DOM access, so it is unit-tested directly.
-import { anchorLines, type NativeAnchor, type NativeThread, type RepositoryRef } from "@rendered-review/review-domain";
+import {
+  anchorLines,
+  type NativeAnchor,
+  type NativeThread,
+  type RepositoryRef,
+  type ThreadPlacement,
+} from "@rendered-review/review-domain";
 
-/** Filter bucket of a thread. `historical` stays empty until annotation re-anchoring exists. */
+/** Filter bucket of a thread. `historical`: its words are only in an earlier revision (see `placementState`). */
 export type ThreadState = "current" | "resolved" | "outdated" | "historical";
 
 export const THREAD_STATES: ThreadState[] = ["current", "resolved", "outdated", "historical"];
@@ -14,6 +20,24 @@ export const DEFAULT_FILTERS: ReadonlySet<ThreadState> = new Set(["current", "re
 export function threadState(thread: NativeThread): ThreadState {
   if (thread.resolution === "resolved") return "resolved";
   return thread.anchor.type === "outdated" ? "outdated" : "current";
+}
+
+/** Filter bucket of a placed thread: an open annotation whose words exist only in its original revision is historical. */
+export function placementState(p: ThreadPlacement): ThreadState {
+  const state = threadState(p.thread);
+  return state !== "resolved" && p.reanchor?.state === "historical-only" ? "historical" : state;
+}
+
+/**
+ * The commit a thread was written on, when the displayed document does not show it as it was:
+ * outdated line comments, and annotations re-anchored from an earlier blob (unless that blob is gone).
+ */
+export function originalRevision({ thread, reanchor }: ThreadPlacement): string | undefined {
+  const a = thread.anchor;
+  if (a.type === "outdated") return a.commitOid;
+  if (a.type !== "annotation" || !reanchor || reanchor.state === "unavailable" || reanchor.state === "current")
+    return undefined;
+  return a.annotation.target.commitOid;
 }
 
 export function filterCounts(threads: NativeThread[]): Record<ThreadState, number> {
