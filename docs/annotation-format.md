@@ -92,7 +92,7 @@ interface RenderedReviewAnnotationV1 {
     repositoryId: number; // GitHub's stable repository ID
     repository: string; // "owner/name", for readability
     pullRequest: number;
-    path: string; // repository-relative, no leading "/"
+    path: string; // repository-relative: "/"-separated, no empty, "." or ".." segments, no backslashes or control characters
     commitOid: string; // 40 or 64 lowercase hex characters
     blobOid: string; // 40 or 64 lowercase hex characters
     selectors: [
@@ -110,8 +110,9 @@ interface RenderedReviewAnnotationV1 {
     structure?: { nodeType?: string; headingPath?: string[] };
   };
   motivation: "commenting" | "replying" | "suggesting" | "resolving";
-  replyTo?: string;
-  threadId?: string;
+  replyTo?: string; // GitHub id of the comment answered, as a decimal string
+  threadId?: string; // GitHub id of the thread's first comment, as a decimal string
+  resolution?: "resolved" | "reopened"; // with motivation "resolving"; absent means "resolved"
   createdBy?: "rendered-review";
 }
 ```
@@ -128,6 +129,22 @@ plus one Markdown source range selector:
 
 Text is compared after one normalization only: CRLF and lone CR become LF, then Unicode NFC. No
 trimming, whitespace collapsing, case folding or Markdown stripping.
+
+### Threads and resolution
+
+Replies and resolution events of a thread stored as pull request conversation comments are
+conversation comments themselves:
+
+- A reply has motivation `replying`, `threadId` set to the id of the thread's first comment and
+  `replyTo` set to the id of the comment it answers.
+- Resolving or reopening a thread is a visible comment with motivation `resolving`, `threadId` set,
+  and `resolution` `"reopened"` to reopen (absent or `"resolved"` to resolve). The latest event
+  decides the thread's state.
+
+Ids are GitHub's numeric comment ids written as decimal strings. A reader only follows a reference
+to an older comment of the same pull request whose own annotation is valid (that includes naming
+the same pull request). A reply whose parent cannot be found is shown as a thread of its own, and a
+resolution event without a thread as an ordinary comment; nothing is hidden.
 
 ### Forward compatibility
 
