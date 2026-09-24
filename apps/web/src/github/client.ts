@@ -124,7 +124,8 @@ export async function withPublicGitHub<T>(host: string, call: (client: GitHubCli
   } catch (error) {
     const reason = fallbackReason(error);
     if (!reason) throw error;
-    console.info(`github public fallback: ${reason}`);
+    // The browser sends no telemetry anywhere; this is a development aid only.
+    if (import.meta.env.DEV) console.info(`github public fallback: ${reason}`);
     if (error instanceof RateLimitError) entry.proxyUntil = error.resetAt.getTime();
     return viaProxy();
   }

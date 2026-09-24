@@ -11,3 +11,4 @@ export {
   type HostingMode,
   type LoadConfigOptions,
 } from "./config";
+export { errorName, log, type LogFields } from "./log";

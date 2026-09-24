@@ -111,6 +111,28 @@ async function signIn(identity: Identity, callbackURL: string, base = BASE) {
   return { authorizeUrl: new URL(url), callback, cookie: cookieHeader(callback.headers.getSetCookie()) };
 }
 
+/** Everything written to the console while `run` runs: parsed log events and the raw text. */
+async function consoleDuring(run: () => Promise<unknown>) {
+  const spies = (["log", "info", "warn", "error"] as const).map((l) =>
+    vi.spyOn(console, l).mockImplementation(() => {}),
+  );
+  let lines: string[];
+  try {
+    await run();
+  } finally {
+    lines = spies.flatMap((s) => s.mock.calls.map((args) => args.map(String).join(" ")));
+    spies.forEach((s) => s.mockRestore());
+  }
+  const events = lines.flatMap((l) => {
+    try {
+      return [JSON.parse(l) as Record<string, unknown>];
+    } catch {
+      return [];
+    }
+  });
+  return { events, raw: lines.join("\n") };
+}
+
 const mergeCookies = (...headers: string[]) =>
   [...new Map(headers.flatMap((h) => h.split("; ")).map((c) => [c.split("=")[0], c])).values()].join("; ");
 
@@ -196,6 +218,15 @@ describe.each(databases)("GitHub sign-in on %s", (_, open) => {
       );
       expect(response.status, callbackURL).toBe(403);
     }
+  });
+
+  it("logs a failed sign-in by category only, never codes, tokens or GitHub's error text", async () => {
+    tokenReply = () => ({ error: "bad_verification_code", error_description: "The code the-code is incorrect" });
+    const { events, raw } = await consoleDuring(() => signIn(identity, DEEP_LINK));
+    expect(events).toContainEqual(
+      expect.objectContaining({ level: "warn", event: "auth.failure", route: "/callback/github" }),
+    );
+    expect(raw).not.toMatch(/the-code|incorrect|mdn\/content|ghu_|app-client-secret/);
   });
 
   it("sets an HttpOnly, Secure, SameSite=Lax session cookie", async () => {
@@ -346,6 +377,19 @@ describe.each(databases)("GitHub sign-in on %s", (_, open) => {
       expect(await db.all(`SELECT * FROM "account" WHERE "providerId" = 'github-public'`)).toEqual([]);
     });
 
+    it("logs a refused link by category only", async () => {
+      const { cookie } = await signIn(pub, "/");
+      oauthUserId = 999;
+      const { events, raw } = await consoleDuring(() => link(cookie));
+      expect(events).toContainEqual({
+        level: "warn",
+        event: "auth.failure",
+        route: "/callback/github-public",
+        category: "github_account_mismatch",
+      });
+      expect(raw).not.toMatch(/gho_|someone-else|octocat|oauth-code/);
+    });
+
     it("needs a signed-in user, and never signs anyone in or up through the OAuth App", async () => {
       expect((await startLink(undefined)).status).toBe(401);
       const signInPublic = await pub.handle(
@@ -450,6 +494,20 @@ describe.each(databases)("GitHub sign-in on %s", (_, open) => {
       vi.useFakeTimers({ now: Date.now() + 28800 * 1000, toFake: ["Date"] });
       tokenReply = () => ({ error: "bad_refresh_token", error_description: "The refresh token passed is incorrect." });
       expect(await identity.getUserGitHubToken(await userId(), "github.com")).toBeNull();
+    });
+
+    it("logs a rejected refresh by category, never the token or GitHub's message", async () => {
+      await signIn(identity, "/");
+      vi.useFakeTimers({ now: Date.now() + 28800 * 1000, toFake: ["Date"] });
+      tokenReply = () => ({
+        error: "bad_refresh_token",
+        error_description: "The refresh token ghr_refreshToken1 is bad.",
+      });
+      const { events, raw } = await consoleDuring(async () =>
+        identity.getUserGitHubToken(await userId(), "github.com"),
+      );
+      expect(events).toEqual([{ level: "warn", event: "auth.failure", category: "refresh-rejected" }]);
+      expect(raw).not.toMatch(/ghr_|ghu_|refresh token/);
     });
 
     it("still decrypts after key rotation and re-encrypts with the new key on refresh", async () => {
