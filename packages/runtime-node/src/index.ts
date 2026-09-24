@@ -2,7 +2,8 @@
 // Node implementations of the runtime adapters. The app's server entry imports this through
 // its `#runtime` import map, so it only ever lands in the Node build.
 import { migrate } from "@rendered-review/control-plane";
-import { loadConfig, type RequestContext, type SqlDatabase } from "@rendered-review/runtime";
+import type { RequestContext, SqlDatabase } from "@rendered-review/runtime";
+import { loadNodeConfig } from "./config";
 import { openDatabase } from "./database";
 
 export { openDatabase, type NodeDatabase } from "./database";
@@ -12,7 +13,7 @@ let context: RequestContext | undefined;
 export function createRequestContext(): RequestContext {
   // Config was already validated and logged at startup (./startup), so this cannot throw in practice.
   if (!context) {
-    const config = loadConfig(process.env);
+    const config = loadNodeConfig();
     context = {
       config,
       secrets: { get: async (name) => process.env[name] },
