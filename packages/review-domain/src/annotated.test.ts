@@ -93,23 +93,43 @@ describe("placeThreads with annotations", () => {
     expect(p!.reason).toBeUndefined();
   });
 
-  it("leaves an annotation on an older blob unplaced until re-anchoring", () => {
-    const [p] = placeThreads([appThread(target({ blobOid: OLD_BLOB }))], "doc.md", {
-      head,
-      blob: { oid: BLOB, source: DOC },
-    });
-    expect(p).toMatchObject({ blocks: [], reason: "Document changed since this comment — re-anchoring pending" });
-    expect(p!.range).toBeUndefined();
+  // The fixture annotation quotes DOC; these revisions change it.
+  const place = (source: string, thread = appThread(target({ blobOid: OLD_BLOB }))) =>
+    placeThreads([thread], "doc.md", { head: renderMarkdown(source), blob: { oid: BLOB, source } })[0]!;
+
+  it("re-anchors an annotation from an older blob whose words did not move", () => {
+    const p = place(DOC);
+    expect(p.reanchor).toMatchObject({ state: "current", evidence: "same-range" });
+    expect(p.range?.sourceRange).toEqual({ startLine: 3, startColumn: 12, endLine: 3, endColumn: 35 });
+    expect(p.blocks.map((b) => b.text)).toEqual(["The system retries failed requests indefinitely."]);
+    expect(p.reason).toBeUndefined();
   });
 
-  it("uses the GitHub line of an annotated review comment when the blob differs", () => {
-    const [p] = placeThreads([appThread(target({ blobOid: OLD_BLOB }), line)], "doc.md", {
-      head,
-      blob: { oid: BLOB, source: DOC },
-    });
-    expect(p!.blocks).toHaveLength(1);
-    expect(p!.range).toBeUndefined();
-    expect(p!.reason).toBeUndefined();
+  it("places a moved annotation at its new words, marked moved", () => {
+    const p = place(DOC.replace("# Reliability\n", "# Reliability\n\nAn introduction.\n"));
+    expect(p.reanchor?.state).toBe("moved");
+    expect(p.range?.sourceRange).toEqual({ startLine: 5, startColumn: 12, endLine: 5, endColumn: 35 });
+    expect(p.blocks.map((b) => b.text)).toEqual(["The system retries failed requests indefinitely."]);
+  });
+
+  it("leaves an annotation whose words are gone unplaced, saying why", () => {
+    const p = place("# Reliability\n\nThe system gives up after three attempts.\n");
+    expect(p).toMatchObject({ blocks: [], reason: "The quoted text changed since this comment" });
+    expect(p.reanchor?.state).toBe("outdated");
+    expect(p.range).toBeUndefined();
+  });
+
+  it("never places an ambiguous annotation, and counts its candidates", () => {
+    const p = place("# Reliability\n\nIt retries failed requests. It also retries failed requests.\n");
+    expect(p).toMatchObject({ blocks: [], reason: "The quoted text now appears in 2 places" });
+    expect(p.reanchor?.candidates).toHaveLength(2);
+  });
+
+  it("uses the GitHub line of an annotated review comment when re-anchoring cannot place it", () => {
+    const p = place("# Reliability\n\nThe system gives up after three attempts.\n", appThread(target({ blobOid: OLD_BLOB }), line));
+    expect(p.blocks).toHaveLength(1);
+    expect(p.range).toBeUndefined();
+    expect(p.reason).toBeUndefined();
   });
 
   it("marks the metadata damaged when the quote does not match the blob, and falls back", () => {
