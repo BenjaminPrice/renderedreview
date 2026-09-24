@@ -1253,6 +1253,12 @@ samp {
 .rr-markdown blockquote > [data-rr-change]::before {
   left: -49px;
 }
+.rr-markdown .markdown-alert > [data-rr-change]::before {
+  left: -47px; /* -28px less the callout's border and padding */
+}
+.rr-markdown .rr-frontmatter > [data-rr-change]::before {
+  left: -43px; /* -28px less the block's border and padding */
+}
 
 /* Rendered Markdown typography */
 .rr-markdown {
@@ -1375,6 +1381,87 @@ samp {
 .rr-markdown a {
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+
+/* YAML front matter: muted keys beside their values, like the document metadata row */
+.rr-markdown dl.rr-frontmatter {
+  display: grid;
+  grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
+  gap: 4px 16px;
+  margin: 0 0 24px;
+  padding: 10px 14px;
+  border: 1px solid var(--rr-border-muted);
+  border-radius: var(--rr-radius-lg);
+  background: var(--rr-surface-sunken);
+  font: var(--rr-text-sm) / 1.5 var(--rr-font-ui);
+}
+.rr-markdown .rr-frontmatter > div {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+}
+.rr-markdown .rr-frontmatter dt {
+  color: var(--rr-text-muted);
+}
+.rr-markdown .rr-frontmatter dd {
+  margin: 0;
+}
+.rr-markdown .rr-frontmatter ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.rr-markdown .rr-frontmatter li {
+  margin: 0;
+  padding: 0 8px;
+  border: 1px solid var(--rr-border);
+  border-radius: 999px;
+  background: var(--rr-surface);
+  font-size: var(--rr-text-xs);
+}
+.rr-markdown .rr-frontmatter code {
+  padding: 0;
+  border: 0;
+  background: none;
+  white-space: pre-wrap;
+}
+
+/* GitHub alerts: colour per type, with the icon and title as the non-colour cue */
+.rr-markdown .markdown-alert {
+  --rr-alert: var(--rr-accent-text);
+  margin: 0 0 20px;
+  padding: 6px 16px;
+  border-left: 3px solid var(--rr-alert);
+}
+.rr-markdown .markdown-alert-tip {
+  --rr-alert: var(--rr-added-fg);
+}
+.rr-markdown .markdown-alert-important {
+  --rr-alert: var(--rr-renamed-fg);
+}
+.rr-markdown .markdown-alert-warning {
+  --rr-alert: var(--rr-modified-fg);
+}
+.rr-markdown .markdown-alert-caution {
+  --rr-alert: var(--rr-deleted-fg);
+}
+.rr-markdown .markdown-alert > :last-child {
+  margin-bottom: 0;
+}
+.rr-markdown .markdown-alert-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  color: var(--rr-alert);
+  font-weight: 600;
+}
+.rr-markdown .markdown-alert-title svg {
+  flex: none;
+  fill: currentColor;
 }
 
 /* Raw Markdown with GitHub line links */

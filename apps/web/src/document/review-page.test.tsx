@@ -103,7 +103,8 @@ it("shows the PR in the top bar and lists changed docs with letter statuses", as
 it("opens the first changed doc; a deleted doc renders read-only from the base revision", async () => {
   renderPage();
   const article = await screen.findByRole("article", { name: "Rendered document" });
-  expect(within(article).getByRole("heading", { name: /102 Processing/ })).toBeTruthy();
+  // The deleted page's title comes from its front matter.
+  expect(within(article).getAllByRole("definition")[0]!.textContent).toBe("102 Processing");
   expect(fileLink(/102\/index\.md/).getAttribute("aria-current")).toBe("page");
   expect(screen.getByText(/Deleted in this pull request\. Showing the base revision/)).toBeTruthy();
   const source = screen.getByRole("link", { name: "Source (opens in new tab)" });
@@ -123,6 +124,23 @@ it("binds the selected doc to the URL and marks changed sections of a modified d
   expect(screen.getByRole("note", { name: "Changed-section legend" })).toBeTruthy();
 });
 
+it("shows a document's front matter as terms and definitions, not as a heading", async () => {
+  renderPage(`?doc=${encodeURIComponent(INDEX)}`);
+  const article = await screen.findByRole("article", { name: "Rendered document" });
+  const terms = await within(article).findAllByRole("term");
+  expect(terms.map((t) => t.textContent)).toEqual(["title", "slug", "page-type", "browser-compat", "sidebar"]);
+  expect(within(article).getAllByRole("definition")[0]!.textContent).toBe("HTTP response status codes");
+  expect(within(article).queryByRole("heading", { name: /title:/ })).toBeNull();
+});
+
+it("shows GitHub alerts as titled callouts without the marker", async () => {
+  renderPage(`?doc=${encodeURIComponent(INDEX)}`);
+  const article = await screen.findByRole("article", { name: "Rendered document" });
+  const title = await within(article).findByText("Note");
+  expect(title.closest(".markdown-alert-note")?.textContent).toMatch(/^Note\s*If you receive a response/);
+  expect(within(article).queryByText(/\[!NOTE\]/)).toBeNull();
+});
+
 it("scrolls the document back to the top when another doc is opened", async () => {
   renderPage();
   await screen.findByRole("article", { name: "Rendered document" });
@@ -131,7 +149,7 @@ it("scrolls the document back to the top when another doc is opened", async () =
   expect(scroller.scrollTop).toBe(500);
 
   await userEvent.click(fileLink(/status\/index\.md, modified/));
-  await screen.findByRole("heading", { name: /HTTP response status codes/ });
+  await screen.findByText("HTTP response status codes", { selector: "dd" });
   expect(scroller.scrollTop).toBe(0);
 });
 

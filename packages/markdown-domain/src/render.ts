@@ -4,12 +4,15 @@ import { toString } from "hast-util-to-string";
 import type { Root as MdastRoot } from "mdast";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize from "rehype-sanitize";
+import remarkFrontmatter from "remark-frontmatter";
 import remarkGfm from "remark-gfm";
 import remarkParse from "remark-parse";
 import remarkRehype from "remark-rehype";
 import { unified } from "unified";
 import type { Position } from "unist";
 import { visit } from "unist-util-visit";
+import { extractAlerts, renderAlerts } from "./alerts.js";
+import { renderFrontmatter } from "./frontmatter.js";
 import { markExternalLinks } from "./links.js";
 import { normalizeText } from "./normalize.js";
 import { resolveResources, type ResourceOptions } from "./resources.js";
@@ -17,8 +20,12 @@ import { resolveResources, type ResourceOptions } from "./resources.js";
 /*
  * Source-map representation
  * -------------------------
- * Pipeline: remark-parse + remark-gfm -> remark-rehype -> rehype-raw -> rehype-sanitize (GitHub
- * allowlist) -> resource resolution (./resources.ts) -> external links (./links.ts) -> stamping. Stamping runs after sanitization, so authored HTML can never supply or
+ * Pipeline: remark-parse + remark-gfm + remark-frontmatter (YAML) -> GitHub alert markers removed
+ * (./alerts.ts) -> remark-rehype -> rehype-raw -> rehype-sanitize (GitHub allowlist) -> resource
+ * resolution (./resources.ts) -> alert callout markup (./alerts.ts) -> front matter
+ * (./frontmatter.ts, text nodes only) -> external links (./links.ts, last so it sees every link,
+ * generated or authored) -> stamping. Generated markup is added after sanitization so it can
+ * carry its own classes. Stamping runs last, so authored HTML can never supply or
  * forge the markers, and the sanitizer (which keeps `position`) cannot strip them.
  *
  * - Each element with a source position gets `data-rr-id="<n>"`; `nodes[n]` holds its range,
@@ -51,7 +58,8 @@ export interface SourceNode {
   /**
    * Markdown node type (`paragraph`, `heading`, `code`, `tableCell`, `emphasis`, ...) when the
    * element corresponds exactly to an mdast node, `part` for `thead`/`tbody`, otherwise `html`
-   * (an element parsed from raw HTML).
+   * (an element parsed from raw HTML). Front matter is `yaml` (the block), `yamlEntry` (one
+   * top-level key and its value), `yamlKey` and `yamlValue`.
    */
   type: string;
   tagName: string;
@@ -80,12 +88,14 @@ const BLOCK_TYPES = new Set([
   "paragraph",
   "tableRow",
   "thematicBreak",
+  "yaml",
+  "yamlEntry",
 ]);
 
 // remark-rehype gives these the position of their first/only row; they are not Markdown nodes.
 const STRUCTURAL = new Set(["thead", "tbody"]);
 
-const markdownParser = unified().use(remarkParse).use(remarkGfm).freeze();
+const markdownParser = unified().use(remarkParse).use(remarkGfm).use(remarkFrontmatter).freeze();
 const toSafeHast = unified()
   // Ids are left bare here so the sanitizer's clobber prefix yields GitHub's `user-content-` ids.
   .use(remarkRehype, { allowDangerousHtml: true, clobberPrefix: "" })
@@ -111,6 +121,7 @@ const key = (p: Position) => `${p.start.offset}:${p.end.offset}`;
  */
 export function renderMarkdown(source: string, options: ResourceOptions = {}): RenderedMarkdown {
   const mdast = markdownParser.runSync(markdownParser.parse(source)) as MdastRoot;
+  const alerts = extractAlerts(mdast, source);
 
   const mdastTypes = new Map<string, { type: string; lang?: string }>();
   visit(mdast, (node) => {
@@ -122,6 +133,13 @@ export function renderMarkdown(source: string, options: ResourceOptions = {}): R
 
   const tree = toSafeHast.runSync(structuredClone(mdast)) as HastRoot;
   resolveResources(tree, options);
+  renderAlerts(tree, alerts);
+  const first = mdast.children[0];
+  if (first?.type === "yaml") {
+    const front = renderFrontmatter(source, first);
+    for (const [p, type] of front.types) mdastTypes.set(key(p), { type });
+    tree.children.unshift(front.element, { type: "text", value: "\n" });
+  }
   markExternalLinks(tree);
   const nodes: SourceNode[] = [];
   const headings: { depth: number; text: string }[] = [];

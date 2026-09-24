@@ -3,12 +3,26 @@ import type { Element, Nodes, Root } from "hast";
 import { toHtml } from "hast-util-to-html";
 import { describe, expect, test } from "vitest";
 import adr from "./fixtures/adr-0007-use-postgres.md?raw";
+import alerts from "./fixtures/alerts.md?raw";
+import frontmatterDocs from "./fixtures/frontmatter-docs.md?raw";
+import frontmatterInvalid from "./fixtures/frontmatter-invalid.md?raw";
+import frontmatterNested from "./fixtures/frontmatter-nested.md?raw";
 import rfd from "./fixtures/rfd-0042-rendered-review.md?raw";
+import ruleNotFrontmatter from "./fixtures/rule-not-frontmatter.md?raw";
 import xss from "./fixtures/xss.md?raw";
 import { normalizeText } from "./normalize.js";
 import { blocksForLines, renderMarkdown, type SourcePoint, type SourceRange } from "./render.js";
 
-const fixtures = { adr, rfd, xss };
+const fixtures = {
+  adr,
+  alerts,
+  rfd,
+  xss,
+  "frontmatter-docs": frontmatterDocs,
+  "frontmatter-nested": frontmatterNested,
+  "frontmatter-invalid": frontmatterInvalid,
+  "rule-not-frontmatter": ruleNotFrontmatter,
+};
 
 /** Offset of a 1-based line/column, computed independently of the parser. */
 function offsetOf(source: string, { line, column }: SourcePoint): number {
@@ -25,8 +39,38 @@ function expectValidRange(source: string, range: SourceRange) {
   expect(offsetOf(source, range.end)).toBe(range.end.offset);
 }
 
+/**
+ * Whether `text` appears in the source slice of `range`. Text inside a blockquote drops each
+ * line's `>` markers (and the indentation before them), so for `quoted` text both sides are
+ * compared without them; everything else must match verbatim.
+ */
+function sourceContains(source: string, range: SourceRange, text: string, quoted: boolean): boolean {
+  const flat = (t: string) => (quoted ? normalizeText(t).replace(/^[ \t]*(?:>[ \t]?)+/gm, "") : normalizeText(t));
+  return flat(source.slice(range.start.offset, range.end.offset)).includes(flat(text));
+}
+
 /** Text the pipeline generates without source (footnote chrome and reference numbers). */
-const GENERATED_TEXT = new Set(["Footnotes", "↩", "1"]);
+const GENERATED_TEXT = new Set(["Footnotes", "↩", "1", "Note", "Tip", "Important", "Warning", "Caution"]);
+
+describe("source containment check", () => {
+  const whole = (src: string) => ({
+    start: { line: 1, column: 1, offset: 0 },
+    end: { line: 1, column: 1, offset: src.length },
+  });
+
+  test("plain text must appear verbatim in its range", () => {
+    expect(sourceContains("Hello\nworld", whole("Hello\nworld"), "Hello\nworld", false)).toBe(true);
+    expect(sourceContains("Hello\nworld", whole("Hello"), "Hello\nworld", false)).toBe(false);
+    expect(sourceContains("x\n> y", whole("x\n> y"), "x\ny", false)).toBe(false);
+    expect(sourceContains("a\n  b", whole("a\n  b"), "a\nb", false)).toBe(false);
+  });
+
+  test("quoted text is compared without the line's blockquote markers only", () => {
+    expect(sourceContains("x\n> y", whole("x\n> y"), "x\ny", true)).toBe(true);
+    expect(sourceContains("  > x\n  > y", whole("  > x\n  > y"), "x\ny", true)).toBe(true);
+    expect(sourceContains("x\n> y", whole("x\n> y"), "x\nz", true)).toBe(false);
+  });
+});
 
 describe.each(Object.entries(fixtures))("%s fixture", (name, source) => {
   const doc = renderMarkdown(source);
@@ -53,25 +97,27 @@ describe.each(Object.entries(fixtures))("%s fixture", (name, source) => {
   // A text node belongs to its own position or, failing that, to its nearest stamped ancestor:
   // a `data-rr-id` ancestor gives the range, a `data-rr-unmapped` one makes it non-selectable.
   test("every rendered text node maps to a source range containing it", () => {
-    const visit = (node: Nodes, owner: SourceRange | null) => {
+    const visit = (node: Nodes, owner: SourceRange | null, quoted: boolean) => {
       if (node.type === "text" && node.value.trim()) {
         const range = node.position ? { start: node.position.start, end: node.position.end } : owner;
         if (!range) {
           expect(GENERATED_TEXT, `unmapped text ${JSON.stringify(node.value)}`).toContain(node.value);
         } else {
           expectValidRange(source, range as SourceRange);
-          const slice = normalizeText(source.slice(range.start.offset, range.end.offset));
           // trim(): remark-rehype appends a space to the text before a footnote back-reference.
-          if (!GENERATED_TEXT.has(node.value)) expect(slice).toContain(normalizeText(node.value.trim()));
+          const text = node.value.trim();
+          if (!GENERATED_TEXT.has(node.value))
+            expect(sourceContains(source, range as SourceRange, text, quoted), JSON.stringify(text)).toBe(true);
         }
       }
       if (node.type === "element") {
         const id = node.properties.dataRrId;
         owner = id === undefined ? null : doc.nodes[id as number]!.range;
+        quoted ||= node.tagName === "blockquote" || String(node.properties.className).includes("markdown-alert");
       }
-      if ("children" in node) for (const c of node.children) visit(c, owner);
+      if ("children" in node) for (const c of node.children) visit(c, owner, quoted);
     };
-    visit(doc.tree, null);
+    visit(doc.tree, null, false);
   });
 
   test("is deterministic", () => {
@@ -153,6 +199,162 @@ describe("GitHub Flavored Markdown", () => {
 
   test("permitted HTML survives", () => {
     expect(html("<kbd>Ctrl</kbd> H<sub>2</sub>O")).toBe("<p><kbd>Ctrl</kbd> H<sub>2</sub>O</p>");
+  });
+});
+
+describe("front matter", () => {
+  const html = (md: string) =>
+    toHtml(renderMarkdown(md).tree)
+      .trim()
+      .replace(/ data-rr-(id="\d+"|unmapped)/g, "");
+  const entries = (md: string) =>
+    renderMarkdown(md)
+      .nodes.filter((n) => n.type === "yamlEntry")
+      .map((n) => n.text);
+
+  test("YAML front matter renders as a key/value list, not a heading", () => {
+    const out = html(frontmatterDocs);
+    expect(out).toMatch(/^<dl class="rr-frontmatter">/);
+    expect(out).not.toContain("<h2");
+    expect(out).not.toContain("<hr");
+    expect(out).toContain("<div><dt>title</dt><dd>Array.prototype.map()</dd></div>");
+    expect(out).toContain("<dt>tags</dt><dd><ul><li>JavaScript</li><li>Array</li></ul></dd>");
+    expect(out).toContain("<dt>date</dt><dd>2024-05-01</dd>");
+  });
+
+  test("values are text, never markup", () => {
+    const doc = renderMarkdown(frontmatterDocs);
+    const out = toHtml(doc.tree);
+    expect(out).not.toContain("<script");
+    expect(out).toContain("&#x3C;script>alert(1)&#x3C;/script>");
+  });
+
+  test("nested values show their YAML source; lists and scalars are parsed", () => {
+    const out = html(frontmatterNested);
+    expect(out).toContain("<dt>title</dt><dd>Quoted: a title</dd>");
+    expect(out).toContain("<dt>sidebar</dt><dd><code>order: 2\n  label: Intro</code></dd>");
+    expect(out).toContain("<dt>authors</dt><dd><ul><li>ada</li><li>grace</li></ul></dd>");
+    expect(out).toContain("<dt>draft</dt><dd>false</dd>");
+    expect(out).toContain("<dt>summary</dt><dd>Folded text\n  over two lines.</dd>");
+  });
+
+  test("invalid YAML falls back to the raw front matter as code", () => {
+    const out = html(frontmatterInvalid);
+    expect(out).toMatch(/^<pre class="rr-frontmatter"><code>title: \[unclosed\nkey: : bad<\/code><\/pre>/);
+    expect(out).toContain('<h1 id="user-content-still-rendered">Still rendered</h1>');
+  });
+
+  test("front matter that is not a mapping falls back to code", () => {
+    expect(html("---\njust prose\n---\n\nBody")).toMatch(
+      /^<pre class="rr-frontmatter"><code>just prose<\/code><\/pre>/,
+    );
+  });
+
+  test("a leading rule without a closing fence is not front matter", () => {
+    expect(html(ruleNotFrontmatter)).toMatch(/^<hr>\n<p>This document starts/);
+  });
+
+  test("TOML front matter is left as Markdown", () => {
+    expect(html('+++\ntitle = "x"\n+++')).not.toContain("rr-frontmatter");
+  });
+
+  test("the block and each entry map to their source lines", () => {
+    const doc = renderMarkdown(frontmatterDocs);
+    const at = (l: number) => blocksForLines(doc, l, l).map((n) => `${n.type}:${n.text}`);
+    expect(at(1)).toEqual([expect.stringMatching(/^yaml:title/)]);
+    expect(at(2)).toEqual(["yamlEntry:titleArray.prototype.map()"]);
+    expect(at(9)).toEqual(["yamlEntry:tagsJavaScriptArray"]);
+    expect(at(11)).toEqual([expect.stringMatching(/^yaml:/)]);
+    expect(entries(frontmatterDocs)).toHaveLength(7);
+  });
+
+  test("CRLF front matter keeps line numbers and raw offsets", () => {
+    const lf = renderMarkdown("---\na: 1\nb: [x]\n---\n\nText\n");
+    const crlf = renderMarkdown("---\r\na: 1\r\nb: [x]\r\n---\r\n\r\nText\r\n");
+    const shape = (d: typeof lf) => d.nodes.map((n) => [n.type, n.range.start.line, n.range.start.column, n.text]);
+    expect(shape(crlf)).toEqual(shape(lf));
+    expect(crlf.nodes.find((n) => n.text === "b")!.range.start.offset).toBe(11);
+  });
+
+  test("headings are unaffected", () => {
+    const doc = renderMarkdown(frontmatterDocs);
+    const h1 = doc.nodes.find((n) => n.type === "heading")!;
+    expect(h1.headingPath).toEqual(["Array.prototype.map()"]);
+    expect(doc.nodes.filter((n) => n.type === "yamlEntry").every((n) => n.headingPath.length === 0)).toBe(true);
+  });
+});
+
+describe("GitHub alerts", () => {
+  const html = (md: string) =>
+    toHtml(renderMarkdown(md).tree)
+      .trim()
+      .replace(/ data-rr-(id="\d+"|unmapped)/g, "")
+      .replace(/<svg[^]*?<\/svg>/g, "<svg/>");
+
+  test("a marked top-level blockquote renders as a titled callout without the marker", () => {
+    expect(html("> [!NOTE]\n> Body")).toBe(
+      '<div class="markdown-alert markdown-alert-note"><p class="markdown-alert-title"><svg/>Note</p>\n<p>Body</p>\n</div>',
+    );
+  });
+
+  test.each([
+    ["tip", "Tip"],
+    ["important", "Important"],
+    ["warning", "Warning"],
+    ["caution", "Caution"],
+  ])("%s alerts", (type, title) => {
+    expect(html(`> [!${type.toUpperCase()}]\n> Body`)).toContain(
+      `<div class="markdown-alert markdown-alert-${type}"><p class="markdown-alert-title"><svg/>${title}</p>`,
+    );
+  });
+
+  test("the icon is decorative", () => {
+    const svg = /<svg[^>]*>/.exec(toHtml(renderMarkdown("> [!TIP]\n> Body").tree))![0];
+    expect(svg).toContain('aria-hidden="true"');
+  });
+
+  test("the marker is case-insensitive and may stand alone or before a hard break", () => {
+    const doc = renderMarkdown(alerts);
+    const callouts = doc.nodes.filter((n) => n.tagName === "div").map((n) => n.text.replace(/\n/g, ""));
+    expect(callouts).toEqual([
+      "NoteUseful information that users should know.",
+      "TipHelpful advice for doing things better.",
+      "ImportantKey information users need to know.",
+      "WarningUrgent info that needs immediate attention.with a list",
+      "CautionLazy continuation of a caution.",
+    ]);
+  });
+
+  test.each([
+    ["text on the marker line", "> [!NOTE] Text."],
+    ["an unknown type", "> [!FOO]\n> Body"],
+    ["a marker with no content", "> [!NOTE]"],
+    ["a marker after the first line", "> Text.\n> [!NOTE]\n> Body"],
+    ["a nested blockquote", "> > [!NOTE]\n> > Body"],
+    ["a blockquote inside a list", "- Item\n\n  > [!NOTE]\n  > Body"],
+  ])("%s stays a blockquote", (_, md) => {
+    const out = html(md);
+    expect(out).toContain("<blockquote>");
+    expect(out).toContain("[!");
+    expect(out).not.toContain("markdown-alert");
+  });
+
+  test("the callout maps to the blockquote's range; its first paragraph starts after the marker", () => {
+    const doc = renderMarkdown("> [!NOTE]\n> Body\n\n> [!TIP]\n>\n> Tip body\n");
+    const at = (l: number) =>
+      blocksForLines(doc, l, l).map((n) => `${n.type}:${n.tagName}:${n.text.replace(/\n/g, "")}`);
+    expect(at(1)).toEqual(["blockquote:div:NoteBody"]);
+    expect(at(2)).toEqual(["paragraph:p:Body"]);
+    expect(at(4)).toEqual(["blockquote:div:TipTip body"]);
+    expect(at(6)).toEqual(["paragraph:p:Tip body"]);
+    const body = doc.nodes.find((n) => n.text === "Body")!;
+    expect([body.range.start.line, body.range.start.column]).toEqual([2, 3]);
+  });
+
+  test("the title is generated, not selectable source text", () => {
+    expect(toHtml(renderMarkdown("> [!NOTE]\n> Body").tree)).toContain(
+      '<p class="markdown-alert-title" data-rr-unmapped>',
+    );
   });
 });
 
