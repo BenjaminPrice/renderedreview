@@ -20,6 +20,11 @@ export const diagramRegistry = createDiagramRegistry([
     fenceNames: ["dot", "graphviz"],
     load: () => (import.meta.env.SSR ? SERVER() : import("./graphviz").then((m) => m.loadGraphviz())),
   },
+  {
+    label: "WaveDrom",
+    fenceNames: ["wavedrom"],
+    load: () => (import.meta.env.SSR ? SERVER() : import("./wavedrom").then((m) => m.loadWaveDrom())),
+  },
 ]);
 
 /** Tests substitute fake renderers here. */

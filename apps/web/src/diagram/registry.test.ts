@@ -11,9 +11,17 @@ vi.mock("./graphviz", () => {
   return { loadGraphviz: async () => fake("graphviz") };
 });
 
+vi.mock("./wavedrom", () => {
+  loaded.push("wavedrom");
+  return { loadWaveDrom: async () => fake("wavedrom") };
+});
+
 const { diagramRegistry } = await import("./registry");
 
-it.each([[["dot", "graphviz", "DOT"], "Graphviz", "graphviz"]])(
+it.each([
+  [["dot", "graphviz", "DOT"], "Graphviz", "graphviz"],
+  [["wavedrom"], "WaveDrom", "wavedrom"],
+])(
   "renders %j fences with %s, loading it on first use",
   async (fences, label, id) => {
     const entry = diagramRegistry.match(fences[0])!;
