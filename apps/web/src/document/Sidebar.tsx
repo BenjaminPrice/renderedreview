@@ -143,6 +143,15 @@ function FileItem({
         aria-current={doc.path === selected ? "page" : undefined}
         tabIndex={tabbable ? 0 : -1}
         title={doc.path}
+        aria-label={[
+          doc.path,
+          status.toLowerCase(),
+          doc.previousPath && `from ${doc.previousPath}`,
+          doc.status === "deleted" && "historical, base revision",
+          count && `${count} unresolved ${count === 1 ? "comment" : "comments"}`,
+        ]
+          .filter(Boolean)
+          .join(", ")}
       >
         <span className={`rr-status rr-status-${doc.status}`} title={status} aria-hidden="true">
           {STATUS_LETTER[doc.status]}
@@ -166,10 +175,6 @@ function FileItem({
             {count}
           </span>
         ) : null}
-        <span className="rr-sr-only">
-          , {status.toLowerCase()}
-          {count ? `, ${count} unresolved ${count === 1 ? "comment" : "comments"}` : ""}
-        </span>
       </a>
     </li>
   );

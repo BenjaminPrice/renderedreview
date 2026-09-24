@@ -7,7 +7,7 @@ export default defineConfig({
     projects: [
       "packages/*",
       { test: { name: "root", include: ["*.test.ts"] } },
-      { test: { name: "web", include: ["apps/web/src/**/*.test.ts"] } },
+      { test: { name: "web", include: ["apps/web/src/**/*.test.{ts,tsx}"] } },
     ],
   },
 });

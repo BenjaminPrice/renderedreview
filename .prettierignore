@@ -5,3 +5,5 @@ LICENSE
 packages/github-action/dist/
 # Markdown fixtures and their rendered snapshots must stay byte-exact
 packages/markdown-domain/src/fixtures/
+# Recorded GitHub responses for the review page tests
+apps/web/src/document/fixtures/
