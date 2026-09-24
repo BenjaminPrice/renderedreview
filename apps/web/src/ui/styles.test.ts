@@ -16,3 +16,9 @@ it("gives focused comment anchors the focus ring, after every other anchor outli
   // Same specificity as `[data-rr-anchor][data-rr-active]`, so it must come last to override it.
   expect(focus).toBe(anchorRules.length - 1);
 });
+
+it("underlines links in running text, which colour alone does not set apart (WCAG 1.4.1)", () => {
+  expect(rules.some(([selector, body]) => /(^|,)\s*p a\b/.test(selector) && /text-decoration:\s*underline/.test(body))).toBe(
+    true,
+  );
+});
