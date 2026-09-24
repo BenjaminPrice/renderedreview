@@ -41,6 +41,8 @@ All builds read the same environment variables (`packages/runtime/src/config.ts`
 | `GITHUB_APP_ID`, `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_APP_WEBHOOK_SECRET` | Hosted and dedicated; community unless the policy is `disabled`              |
 | `GITHUB_OAUTH_CLIENT_ID`, `GITHUB_OAUTH_CLIENT_SECRET`                                                                     | Hosted; optional elsewhere                                                   |
 | `ENCRYPTION_KEY` (`openssl rand -base64 32`)                                                                               | Whenever GitHub credentials are set                                          |
+| `ENCRYPTION_KEY_PREVIOUS`                                                                                                  | Optional: the key being rotated out (see below)                              |
+| `BETTER_AUTH_SECRET` (`openssl rand -base64 32`)                                                                           | Whenever GitHub App credentials are set; signs sessions and OAuth state      |
 | `DATABASE_URL` (`postgres://`, `sqlite://`, `file://`)                                                                     | Node build, when GitHub credentials are set or the mode is not `community`   |
 | `BILLING_PROVIDER` (`polar`, `stripe`), `BILLING_API_KEY`, `BILLING_WEBHOOK_SECRET`                                        | Hosted only; ignored otherwise                                               |
 | `PORT`                                                                                                                     | Node server listen port (default 3000)                                       |
@@ -51,6 +53,16 @@ All builds read the same environment variables (`packages/runtime/src/config.ts`
 Without sign-in, public pull requests are read anonymously, which GitHub limits to 60 requests an hour per IP address. Set `GITHUB_PUBLIC_READ_TOKEN` to have the server read public repositories with your token instead (5,000 requests an hour). Browsers then send public reads through the server's `/api/github/public/` proxy; the token never leaves the server and is redacted from logs.
 
 Use a [fine-grained token](https://github.com/settings/personal-access-tokens/new) with **Public repositories (read-only)** access, or a classic token with no scopes. The token only goes to the host in `GITHUB_URL`. Because a token may be able to read private repositories, the proxy first checks that each repository is public (cached for a few minutes) and answers "not found" for private, internal or unverifiable repositories.
+
+### Sign in with GitHub
+
+Sign-in uses the GitHub App's user authorization: `GITHUB_APP_CLIENT_ID` / `GITHUB_APP_CLIENT_SECRET` drive the flow, and the app's expiring user-to-server tokens are what the server keeps. It is on when the GitHub App credentials, `ENCRYPTION_KEY`, `BETTER_AUTH_SECRET` and a database are configured and `GITHUB_URL` is github.com (Enterprise Server sign-in is not supported yet). Otherwise the top bar shows no sign-in and every `/api/auth/*` route answers 404.
+
+In the GitHub App settings, set the callback URL to `<public origin>/api/auth/callback/github` (for local development `http://localhost:3000/api/auth/callback/github`) and enable **Expire user authorization tokens**. Give the app the **Email addresses** account permission (read) if you want users' email addresses; without it, accounts use GitHub's noreply address.
+
+The server must see the public origin in the request URL, because the OAuth redirect URI and cookie security follow it. Behind a TLS-terminating proxy, forward `Host` and configure the proxy so the Node server receives the public `https://` URL. Session cookies are `HttpOnly`, `SameSite=Lax` and `Secure` everywhere except `localhost`.
+
+GitHub access and refresh tokens are encrypted with AES-256-GCM under `ENCRYPTION_KEY` before they reach the database, and are refreshed on the server shortly before they expire. They never go to the browser. To rotate the key, move the old value to `ENCRYPTION_KEY_PREVIOUS` and set a new `ENCRYPTION_KEY`. Existing rows still decrypt, and each is re-encrypted with the new key the next time its token is refreshed (at most eight hours for GitHub App tokens). Remove `ENCRYPTION_KEY_PREVIOUS` after that.
 
 ## Scripts
 
