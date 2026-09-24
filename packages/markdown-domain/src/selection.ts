@@ -292,10 +292,11 @@ export function selectionToSource(
   let blockIds: number[];
   const expanded = sb.id !== eb.id;
   if (!expanded) {
-    const s = spansOf(doc, ix, source, first)[(a - first.at) * 2]!;
-    const e = spansOf(doc, ix, source, last)[(b - 1 - last.at) * 2 + 1]!;
-    from = advance(source, first.base!, Math.min(s, e));
-    to = advance(source, from, Math.max(s, e));
+    const [s0, e0] = spansOf(doc, ix, source, first).subarray((a - first.at) * 2, (a - first.at) * 2 + 2);
+    const [s1, e1] = spansOf(doc, ix, source, last).subarray((b - 1 - last.at) * 2, (b - last.at) * 2);
+    // Text that does not align claims its whole element for every character: never claim less.
+    from = advance(source, first.base!, Math.min(s0!, s1!));
+    to = advance(source, from, Math.max(e0!, e1!));
     let n = doc.nodes[common(doc, first.owner!, last.owner!)!]!;
     while (!blockish(doc, n) && !CELLS.has(n.type) && n.parentId !== null) n = doc.nodes[n.parentId]!;
     nodeType = n.type;
@@ -316,10 +317,26 @@ export function selectionToSource(
     [k0, a, k1, b] = clamped;
   }
 
+  // Generated whitespace at the end (before a footnote back-link) claims no source; leave it out of
+  // the quote so the quote is exactly what the claimed source renders (see `renderedText`).
+  const tail = ix.segments[k1]!;
+  if (kindOf(doc, ix, tail) === "text") {
+    const spans = spansOf(doc, ix, source, tail);
+    while (
+      b - 1 > Math.max(tail.at, k0 === k1 ? a : tail.at) &&
+      spans[(b - 1 - tail.at) * 2] === spans[(b - 1 - tail.at) * 2 + 1]
+    )
+      b--;
+  }
+
+  // The quote is what the claim renders: wider than the selection when unaligned text widened it.
+  const selected = normalizeText(textBetween(ix, k0, a, k1, b));
+  const exact = expanded ? selected : (renderedText(doc, source, { start: from.offset, end: to.offset }) ?? selected);
+
   return {
     ok: true,
     selection: {
-      exact: normalizeText(textBetween(ix, k0, a, k1, b)),
+      exact,
       prefix: context(ix, k0, a, -1),
       suffix: context(ix, k1, b, 1),
       textPosition: { start: from.offset, end: to.offset },
@@ -330,6 +347,25 @@ export function selectionToSource(
       expanded,
     },
   };
+}
+
+/**
+ * The normalized rendered text a source range claims, joined exactly as `selectionToSource` joins
+ * a quote: from the first to the last claimed document character, generated labels left out,
+ * whitespace between blocks kept. `undefined` when the range claims no rendered text. For a claim
+ * made by `selectionToSource`, this is its `exact`.
+ */
+export function renderedText(
+  doc: RenderedMarkdown,
+  source: string,
+  range: { start: number; end: number },
+): string | undefined {
+  const runs = sourceToRendered(doc, source, range);
+  if (!runs.length) return undefined;
+  const ix = indexOf(doc);
+  const global = (p: RenderedPoint) => ix.extent[p.id]![0] + p.offset;
+  const clamped = clamp(doc, ix, global(runs[0]!.start), global(runs.at(-1)!.end));
+  return clamped ? normalizeText(textBetween(ix, ...clamped)) : undefined;
 }
 
 /** Move `[g0, g1)` inward onto document text: `[startSegment, g0, endSegment, g1]`, or null if none is left. */
