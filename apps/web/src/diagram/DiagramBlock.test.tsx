@@ -197,3 +197,9 @@ it("shows the source with the targeted line when a line link points inside the f
   expect(line.hasAttribute("data-rr-target")).toBe(true);
   expect(within(figure()).getByRole("button", { name: "Source" }).getAttribute("aria-pressed")).toBe("true");
 });
+
+it("lets keyboard readers scroll the document's code blocks and tables", async () => {
+  await show("```ts\nconst x = 1;\n```\n\n| a | b |\n| - | - |\n| 1 | 2 |\n");
+  expect(screen.getByText("const x = 1;").closest("pre")!.tabIndex).toBe(0);
+  expect(screen.getByRole("table").tabIndex).toBe(0);
+});
