@@ -56,6 +56,12 @@ describe("proxyUserGitHub", () => {
     expect(res.headers.get("set-cookie")).toBeNull();
   });
 
+  it("reads a pull request's commits", async () => {
+    const { fetch, call } = setup();
+    expect((await call("github.com/repos/acme/one/pulls/1/commits?per_page=100")).status).toBe(200);
+    expect(fetch.mock.calls.at(-1)![0]).toBe("https://api.github.com/repos/acme/one/pulls/1/commits?per_page=100");
+  });
+
   it("keeps immutable content private too", async () => {
     const { call } = setup();
     const res = await call(`github.com/repos/acme/two/git/blobs/${OID}`);

@@ -38,6 +38,7 @@ describe("proxyPublicGitHub", () => {
     ["github.com/repos/acme/widgets/pulls/1/files?per_page=100&page=2", "mutable"],
     ["github.com/repos/acme/widgets/pulls/1/comments", "mutable"],
     ["github.com/repos/acme/widgets/pulls/1/reviews", "mutable"],
+    ["github.com/repos/acme/widgets/pulls/1/commits?per_page=100", "mutable"],
     ["github.com/repos/acme/widgets/issues/1/comments", "mutable"],
     ["github.com/repositories/42/pulls/1/files?per_page=100&page=3", "mutable"],
     [`github.com/repos/acme/widgets/git/trees/${OID}?recursive=1`, "immutable"],

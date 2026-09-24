@@ -19,7 +19,7 @@ const REPO = String.raw`(?:repos/${REPO_SEGMENT}/${REPO_SEGMENT}|repositories/\d
 export const REPO_PREFIX = new RegExp(`^${REPO}`);
 const OID = "[0-9a-f]{40}(?:[0-9a-f]{24})?";
 const MUTABLE = new RegExp(
-  String.raw`^${REPO}/(?:pulls/\d{1,10}(?:/(?:files|comments|reviews))?|issues/\d{1,10}/comments)$`,
+  String.raw`^${REPO}/(?:pulls/\d{1,10}(?:/(?:files|comments|reviews|commits))?|issues/\d{1,10}/comments)$`,
 );
 // Trees and blobs are only proxied by full OID, so the content behind a URL can never change.
 const IMMUTABLE = new RegExp(String.raw`^${REPO}/git/(?:trees|blobs)/${OID}$`);
