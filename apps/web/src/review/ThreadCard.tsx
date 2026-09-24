@@ -7,7 +7,7 @@ import {
   type RepositoryRef,
   type ThreadComment,
 } from "@rendered-review/review-domain";
-import { type ReactNode, useEffect, useRef } from "react";
+import { type MouseEvent, type ReactNode, useEffect, useRef } from "react";
 import { ExternalLink } from "../ui/ExternalLink";
 import { Markdown } from "./Markdown";
 import { anchorLabel, blobUrl, isEdited, lines, relativeTime, suggestionOriginal, threadState } from "./model";
@@ -153,6 +153,13 @@ export interface ThreadCardProps {
   damaged?: string;
   /** Re-anchored from an earlier revision to these lines of the displayed document; `approximate` when its text changed. */
   moved?: { startLine: number; endLine: number; approximate?: boolean };
+  /** Its words are only in the revision it was written on. */
+  historical?: boolean;
+  /**
+   * In-app link to the revision the thread was written on. Without it, an outdated thread links
+   * to its original lines on GitHub instead.
+   */
+  original?: { href: string; onClick?: (event: MouseEvent<HTMLAnchorElement>) => void };
   onActivate?: () => void;
   /** Reply and resolve controls; without them the card is read-only. */
   actions?: ThreadActions;
@@ -168,10 +175,12 @@ export function ThreadCard({
   verified,
   damaged,
   moved,
+  historical,
+  original,
   onActivate,
   actions,
 }: ThreadCardProps) {
-  const state = threadState(thread);
+  const state = historical && threadState(thread) !== "resolved" ? "historical" : threadState(thread);
   // An annotation not verified against this document is shown at its GitHub line, when it has one.
   const a =
     thread.anchor.type === "annotation" && !verified && thread.anchor.fallback ? thread.anchor.fallback : thread.anchor;
@@ -204,10 +213,16 @@ export function ThreadCard({
       Moved
     </Badge>
   );
-  const badges = (outdated || movedBadge || unresolved) && (
+  const historicalBadge = state === "historical" && (
+    <Badge tone="neutral" icon="history">
+      Historical
+    </Badge>
+  );
+  const badges = (outdated || movedBadge || historicalBadge || unresolved) && (
     <>
       {outdated}
       {movedBadge}
+      {historicalBadge}
       {unresolved}
     </>
   );
@@ -268,13 +283,19 @@ export function ThreadCard({
           )}
         </span>
         <span className="rr-spacer" />
-        {a.type === "outdated" && (
-          <ExternalLink
-            className="rr-btn rr-btn-sm rr-btn-ghost"
-            href={blobUrl(repository, a.commitOid, thread.path, a)}
-          >
+        {original ? (
+          <a className="rr-btn rr-btn-sm rr-btn-ghost" href={original.href} onClick={original.onClick}>
             View in original
-          </ExternalLink>
+          </a>
+        ) : (
+          a.type === "outdated" && (
+            <ExternalLink
+              className="rr-btn rr-btn-sm rr-btn-ghost"
+              href={blobUrl(repository, a.commitOid, thread.path, a)}
+            >
+              View in original
+            </ExternalLink>
+          )
         )}
         <ExternalLink className="rr-btn rr-btn-sm rr-btn-ghost" href={root.htmlUrl}>
           View on GitHub
@@ -314,7 +335,7 @@ export function ThreadCard({
   return (
     <section
       {...common}
-      aria-label={`${label}, by ${who}${a.type === "outdated" ? ", outdated" : moved ? ", moved" : ""}`}
+      aria-label={`${label}, by ${who}${a.type === "outdated" ? ", outdated" : moved ? ", moved" : historical ? ", historical" : ""}`}
     >
       {body}
     </section>

@@ -74,6 +74,15 @@ describe("validatePrSearch", () => {
     }));
   it("keeps the overview view", () => expect(validatePrSearch({ view: "overview" }).view).toBe("overview"));
   it("keeps numeric thread ids", () => expect(validatePrSearch({ thread: 42 }).thread).toBe(42));
+  it("keeps a full commit OID as the revision, lowercased", () => {
+    expect(validatePrSearch({ rev: "C5EBC9F3071D5E5E143298F508C2AEDB7060C884" }).rev).toBe(
+      "c5ebc9f3071d5e5e143298f508c2aedb7060c884",
+    );
+    expect(validatePrSearch({ rev: "a".repeat(64) }).rev).toBe("a".repeat(64));
+  });
+  it.each(["c5ebc9f", "main", "g".repeat(40), "a".repeat(41), 42, ""])("drops the revision %s", (rev) =>
+    expect(validatePrSearch({ rev })).toEqual({ files: "changed" }),
+  );
   it("drops invalid values", () =>
     expect(validatePrSearch({ files: "bogus", doc: 5, thread: "", view: "raw" })).toEqual({ files: "changed" }));
 });

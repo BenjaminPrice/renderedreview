@@ -5,12 +5,14 @@ import {
   type ChangedFile,
   type IssueComment,
   type PullRequest,
+  type PullRequestCommit,
   type Raw,
   type Review,
   type ReviewComment,
   type ReviewThread,
   type Tree,
   toChangedFile,
+  toPullRequestCommit,
   toIssueComment,
   toPullRequest,
   toReview,
@@ -318,6 +320,9 @@ export function createGitHubClient(options: GitHubClientOptions = {}) {
       (await paginate(`${repo(owner, name)}/pulls/${number}/files`)).map(toChangedFile),
 
     /** `treeOid` may also be a commit OID. */
+    /** Up to 250 commits, oldest first (GitHub's limit for this list). */
+    listPullRequestCommits: async (owner: string, name: string, number: number): Promise<PullRequestCommit[]> =>
+      (await paginate(`${repo(owner, name)}/pulls/${number}/commits`)).map(toPullRequestCommit),
     getTree: async (owner: string, name: string, treeOid: string, { recursive = false } = {}): Promise<Tree> =>
       toTree(await get(`${repo(owner, name)}/git/trees/${seg(treeOid)}${recursive ? "?recursive=1" : ""}`)),
 

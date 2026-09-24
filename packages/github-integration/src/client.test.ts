@@ -16,6 +16,7 @@ import blobRaw from "./fixtures/blob-raw.json";
 import files from "./fixtures/files.json";
 import issueComments from "./fixtures/issue-comments.json";
 import pull from "./fixtures/pull.json";
+import pullCommits from "./fixtures/pull-commits.json";
 import reviewComments from "./fixtures/review-comments.json";
 import reviewThreads from "./fixtures/review-threads.json";
 import reviews from "./fixtures/reviews.json";
@@ -107,6 +108,20 @@ describe("read operations", () => {
       blobOid: "1187b70ba329d86b04fc573682abd31bf6c7ae87",
       status: "modified",
       patch: expect.stringMatching(/^@@ -746,7/),
+    });
+  });
+
+  it("lists a pull request's commits, oldest first", async () => {
+    // Recorded from mdn/content#45377.
+    const { client, request } = setup([json(pullCommits)]);
+    const commits = await client.listPullRequestCommits("mdn", "content", 45377);
+    expect(request(0).url).toBe(`${API}/pulls/45377/commits?per_page=100`);
+    expect(commits).toHaveLength(4);
+    expect(commits[1]).toEqual({
+      oid: "c5ebc9f3071d5e5e143298f508c2aedb7060c884",
+      title: "add more info about 102 status",
+      committedAt: "2026-09-01T04:55:55Z",
+      htmlUrl: "https://github.com/mdn/content/commit/c5ebc9f3071d5e5e143298f508c2aedb7060c884",
     });
   });
 
