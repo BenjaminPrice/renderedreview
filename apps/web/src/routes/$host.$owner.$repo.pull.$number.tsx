@@ -332,8 +332,15 @@ function ReviewPage({ pr, id, files }: { pr: PullRequest; id: PrIdentity; files:
               Deleted in this pull request. Showing the base revision (<code>{doc.sha.slice(0, 7)}</code>), read-only.
             </p>
           )}
-          {view === "raw" ? (
-            <RawDocument source={doc.source} changes={doc.changes} link={link} />
+          {view === "raw" || doc.renderError ? (
+            <>
+              {view !== "raw" && (
+                <p className="rr-doc-note">
+                  Could not render this document, showing its source. {doc.renderError?.message}
+                </p>
+              )}
+              <RawDocument source={doc.source} changes={doc.changes} link={link} />
+            </>
           ) : doc.rendered ? (
             <RenderedDocument rendered={doc.rendered} changes={doc.changes} containerRef={setArticle} />
           ) : (

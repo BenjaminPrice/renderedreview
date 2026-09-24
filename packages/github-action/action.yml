@@ -9,10 +9,11 @@ inputs:
     description: Rendered Review application URL (public service, dedicated installation, or self-hosted).
     default: https://renderedreview.dev
   include:
-    description: Glob patterns (newline- or comma-separated) selecting Markdown files.
+    description: Glob patterns (newline- or comma-separated) selecting Markdown and MDX files.
     default: |
       **/*.md
       **/*.markdown
+      **/*.mdx
   exclude:
     description: Glob patterns (newline- or comma-separated) to ignore, applied after include.
     default: ""

@@ -6,15 +6,15 @@ The link has the form `<base-url>/<github-host>/<owner>/<repo>/pull/<number>`, f
 
 ## Inputs
 
-| Input               | Default                      | Description                                                                              |
-| ------------------- | ---------------------------- | ---------------------------------------------------------------------------------------- |
-| `base-url`          | `https://renderedreview.dev` | Rendered Review application URL.                                                         |
-| `include`           | `**/*.md`, `**/*.markdown`   | Glob patterns (newline- or comma-separated). `**` spans directories; `*` and `?` do not. |
-| `exclude`           | none                         | Glob patterns removed from the matches.                                                  |
-| `comment-on-drafts` | `false`                      | Also comment on draft pull requests.                                                     |
-| `remove-when-empty` | `true`                       | Delete the action's comment when no matching Markdown remains.                           |
-| `github-token`      | `${{ github.token }}`        | Token used to list PR files and manage the comment.                                      |
-| `fail-on-error`     | `false`                      | Fail the step on errors. By default errors are reported as warnings.                     |
+| Input               | Default                                | Description                                                                              |
+| ------------------- | -------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `base-url`          | `https://renderedreview.dev`           | Rendered Review application URL.                                                         |
+| `include`           | `**/*.md`, `**/*.markdown`, `**/*.mdx` | Glob patterns (newline- or comma-separated). `**` spans directories; `*` and `?` do not. |
+| `exclude`           | none                                   | Glob patterns removed from the matches.                                                  |
+| `comment-on-drafts` | `false`                                | Also comment on draft pull requests.                                                     |
+| `remove-when-empty` | `true`                                 | Delete the action's comment when no matching Markdown remains.                           |
+| `github-token`      | `${{ github.token }}`                  | Token used to list PR files and manage the comment.                                      |
+| `fail-on-error`     | `false`                                | Fail the step on errors. By default errors are reported as warnings.                     |
 
 Added, modified, renamed (old or new path matching) and deleted files all count.
 

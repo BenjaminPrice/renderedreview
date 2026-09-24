@@ -87,6 +87,12 @@ describe("run", () => {
     expect(gh.comments[0]!.body).toContain("2 Markdown files changed (2 modified)");
   });
 
+  it("links pull requests that only change MDX files", async () => {
+    const gh = github({ files: [md("docs/intro.mdx", "added"), md("src/app.ts")] });
+    expect(await run({ env: env(), event: event(), fetch: gh.fetch })).toMatch(/^Created/);
+    expect(gh.comments[0]!.body).toContain("1 Markdown file changed (1 added)");
+  });
+
   it("deletes its own comment when Markdown disappears, unless remove-when-empty is false", async () => {
     const comments = () => [{ id: 1, body: `${MARKER}\nold`, user: { login: "github-actions[bot]" } }];
     const gh = github({ files: [md("src/app.ts")], comments: comments() });
