@@ -3,12 +3,24 @@ import type { Element, Nodes, Root } from "hast";
 import { toHtml } from "hast-util-to-html";
 import { describe, expect, test } from "vitest";
 import adr from "./fixtures/adr-0007-use-postgres.md?raw";
+import frontmatterDocs from "./fixtures/frontmatter-docs.md?raw";
+import frontmatterInvalid from "./fixtures/frontmatter-invalid.md?raw";
+import frontmatterNested from "./fixtures/frontmatter-nested.md?raw";
 import rfd from "./fixtures/rfd-0042-rendered-review.md?raw";
+import ruleNotFrontmatter from "./fixtures/rule-not-frontmatter.md?raw";
 import xss from "./fixtures/xss.md?raw";
 import { normalizeText } from "./normalize.js";
 import { blocksForLines, renderMarkdown, type SourcePoint, type SourceRange } from "./render.js";
 
-const fixtures = { adr, rfd, xss };
+const fixtures = {
+  adr,
+  rfd,
+  xss,
+  "frontmatter-docs": frontmatterDocs,
+  "frontmatter-nested": frontmatterNested,
+  "frontmatter-invalid": frontmatterInvalid,
+  "rule-not-frontmatter": ruleNotFrontmatter,
+};
 
 /** Offset of a 1-based line/column, computed independently of the parser. */
 function offsetOf(source: string, { line, column }: SourcePoint): number {
@@ -153,6 +165,78 @@ describe("GitHub Flavored Markdown", () => {
 
   test("permitted HTML survives", () => {
     expect(html("<kbd>Ctrl</kbd> H<sub>2</sub>O")).toBe("<p><kbd>Ctrl</kbd> H<sub>2</sub>O</p>");
+  });
+});
+
+describe("front matter", () => {
+  const html = (md: string) =>
+    toHtml(renderMarkdown(md).tree)
+      .trim()
+      .replace(/ data-rr-(id="\d+"|unmapped)/g, "");
+  const entries = (md: string) =>
+    renderMarkdown(md)
+      .nodes.filter((n) => n.type === "yamlEntry")
+      .map((n) => n.text);
+
+  test("YAML front matter renders as a key/value list, not a heading", () => {
+    const out = html(frontmatterDocs);
+    expect(out).toMatch(/^<dl class="rr-frontmatter">/);
+    expect(out).not.toContain("<h2");
+    expect(out).not.toContain("<hr");
+    expect(out).toContain("<div><dt>title</dt><dd>Array.prototype.map()</dd></div>");
+    expect(out).toContain("<dt>tags</dt><dd><ul><li>JavaScript</li><li>Array</li></ul></dd>");
+    expect(out).toContain("<dt>date</dt><dd>2024-05-01</dd>");
+  });
+
+  test("values are text, never markup", () => {
+    const doc = renderMarkdown(frontmatterDocs);
+    const out = toHtml(doc.tree);
+    expect(out).not.toContain("<script");
+    expect(out).toContain("&#x3C;script>alert(1)&#x3C;/script>");
+  });
+
+  test("nested values show their YAML source; lists and scalars are parsed", () => {
+    const out = html(frontmatterNested);
+    expect(out).toContain("<dt>title</dt><dd>Quoted: a title</dd>");
+    expect(out).toContain("<dt>sidebar</dt><dd><code>order: 2\n  label: Intro</code></dd>");
+    expect(out).toContain("<dt>authors</dt><dd><ul><li>ada</li><li>grace</li></ul></dd>");
+    expect(out).toContain("<dt>draft</dt><dd>false</dd>");
+    expect(out).toContain("<dt>summary</dt><dd>Folded text over two lines.</dd>");
+  });
+
+  test("invalid YAML falls back to the raw front matter as code", () => {
+    const out = html(frontmatterInvalid);
+    expect(out).toMatch(/^<pre class="rr-frontmatter"><code>title: \[unclosed\nkey: : bad<\/code><\/pre>/);
+    expect(out).toContain("<h1>Still rendered</h1>");
+  });
+
+  test("front matter that is not a mapping falls back to code", () => {
+    expect(html("---\njust prose\n---\n\nBody")).toMatch(/^<pre class="rr-frontmatter"><code>just prose<\/code><\/pre>/);
+  });
+
+  test("a leading rule without a closing fence is not front matter", () => {
+    expect(html(ruleNotFrontmatter)).toMatch(/^<hr>\n<p>This document starts/);
+  });
+
+  test("TOML front matter is left as Markdown", () => {
+    expect(html('+++\ntitle = "x"\n+++')).not.toContain("rr-frontmatter");
+  });
+
+  test("the block and each entry map to their source lines", () => {
+    const doc = renderMarkdown(frontmatterDocs);
+    const at = (l: number) => blocksForLines(doc, l, l).map((n) => `${n.type}:${n.text}`);
+    expect(at(1)).toEqual([expect.stringMatching(/^yaml:title/)]);
+    expect(at(2)).toEqual(["yamlEntry:titleArray.prototype.map()"]);
+    expect(at(9)).toEqual(["yamlEntry:tagsJavaScriptArray"]);
+    expect(at(11)).toEqual([expect.stringMatching(/^yaml:/)]);
+    expect(entries(frontmatterDocs)).toHaveLength(7);
+  });
+
+  test("headings are unaffected", () => {
+    const doc = renderMarkdown(frontmatterDocs);
+    const h1 = doc.nodes.find((n) => n.type === "heading")!;
+    expect(h1.headingPath).toEqual(["Array.prototype.map()"]);
+    expect(doc.nodes.filter((n) => n.type === "yamlEntry").every((n) => n.headingPath.length === 0)).toBe(true);
   });
 });
 
