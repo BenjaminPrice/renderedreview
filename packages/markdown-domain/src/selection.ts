@@ -436,6 +436,9 @@ function context(ix: Index, k: number, g: number, dir: -1 | 1): string {
   return dir < 0 ? text.slice(-CONTEXT) : text.slice(0, CONTEXT);
 }
 
+/** @internal For tests that check `sourceToRendered` against a full scan; not part of the package API. */
+export const internals = { indexOf, kindOf, spansOf };
+
 /** A highlighted run of rendered text, `[start, end)`. */
 export interface RenderedRun {
   start: RenderedPoint;
