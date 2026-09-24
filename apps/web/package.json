@@ -23,6 +23,7 @@
   "dependencies": {
     "@rendered-review/browser-cache": "workspace:*",
     "@rendered-review/github-integration": "workspace:*",
+    "@rendered-review/identity": "workspace:*",
     "@rendered-review/markdown-domain": "workspace:*",
     "@rendered-review/review-domain": "workspace:*",
     "@rendered-review/runtime": "workspace:*",
