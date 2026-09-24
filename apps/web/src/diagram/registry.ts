@@ -25,6 +25,11 @@ export const diagramRegistry = createDiagramRegistry([
     fenceNames: ["wavedrom"],
     load: () => (import.meta.env.SSR ? SERVER() : import("./wavedrom").then((m) => m.loadWaveDrom())),
   },
+  {
+    label: "Map",
+    fenceNames: ["geojson", "topojson"],
+    load: () => (import.meta.env.SSR ? SERVER() : import("./geo").then((m) => m.loadGeo())),
+  },
 ]);
 
 /** Tests substitute fake renderers here. */

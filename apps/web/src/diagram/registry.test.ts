@@ -16,11 +16,17 @@ vi.mock("./wavedrom", () => {
   return { loadWaveDrom: async () => fake("wavedrom") };
 });
 
+vi.mock("./geo", () => {
+  loaded.push("geo");
+  return { loadGeo: async () => fake("geo") };
+});
+
 const { diagramRegistry } = await import("./registry");
 
 it.each([
   [["dot", "graphviz", "DOT"], "Graphviz", "graphviz"],
   [["wavedrom"], "WaveDrom", "wavedrom"],
+  [["geojson", "topojson"], "Map", "geo"],
 ])(
   "renders %j fences with %s, loading it on first use",
   async (fences, label, id) => {
