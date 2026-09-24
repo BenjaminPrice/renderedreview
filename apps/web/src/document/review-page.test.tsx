@@ -122,6 +122,18 @@ it("binds the selected doc to the URL and marks changed sections of a modified d
   expect(screen.getByRole("note", { name: "Changed-section legend" })).toBeTruthy();
 });
 
+it("scrolls the document back to the top when another doc is opened", async () => {
+  renderPage();
+  await screen.findByRole("article", { name: "Rendered document" });
+  const scroller = document.querySelector<HTMLElement>(".rr-scroll")!;
+  scroller.scrollTop = 500;
+  expect(scroller.scrollTop).toBe(500);
+
+  await userEvent.click(fileLink(/status\/index\.md, modified/));
+  await screen.findByRole("heading", { name: /HTTP response status codes/ });
+  expect(scroller.scrollTop).toBe(0);
+});
+
 it("switches to raw source with GitHub line links, and back, without refetching", async () => {
   renderPage(`?doc=${encodeURIComponent(INDEX)}`);
   await screen.findByRole("article", { name: "Rendered document" });
@@ -253,6 +265,28 @@ it("anchors are keyboard operable", async () => {
   await vi.waitFor(() => expect(document.activeElement).toBe(card));
 });
 
+it("puts each margin marker right after its anchor in tab order", async () => {
+  localStorage.setItem("rr-rail", "collapsed");
+  suggestionOnHead();
+  renderPage(`?doc=${encodeURIComponent(INDEX)}`);
+  const anchor = anchorOf(await threadCard(/GitHub line comment · L30/))!;
+  const marker = await screen.findByRole("button", { name: /1 comment, current\. Open in comment rail/ });
+  const article = screen.getByRole("article", { name: "Rendered document" });
+
+  anchor.focus();
+  await userEvent.tab();
+  expect(document.activeElement).toBe(marker);
+  await userEvent.tab({ shift: true });
+  expect(document.activeElement).toBe(anchor);
+  // Past the marker, Tab carries on in the document after the anchor.
+  await userEvent.tab();
+  await userEvent.tab();
+  expect(article.contains(document.activeElement)).toBe(true);
+  expect(anchor.compareDocumentPosition(document.activeElement!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  await userEvent.tab({ shift: true });
+  expect(document.activeElement).toBe(marker);
+});
+
 it("selects the thread from the thread param on load, and updates the param when another is activated", async () => {
   suggestionOnHead();
   const router = renderPage(`?doc=${encodeURIComponent(INDEX)}&thread=${SUGGESTION}`);
@@ -308,9 +342,11 @@ it("signed in, reads through the authenticated endpoint and shows real thread re
   expect(github.every((u) => u.startsWith("/api/github/user/github.com/"))).toBe(true);
 });
 
-it("counts open threads per doc in the sidebar and the doc's threads on the Comments button", async () => {
+it("counts threads per doc in the sidebar and the doc's threads on the Comments button", async () => {
   renderPage(`?doc=${encodeURIComponent(INDEX)}`);
-  expect(await screen.findByRole("link", { name: /status\/index\.md, modified, 2 unresolved comments/ })).toBeTruthy();
+  // Resolution is unknown anonymously, so the count does not claim the threads are unresolved.
+  const link = await screen.findByRole("link", { name: /status\/index\.md, modified, 2 comments$/ });
+  expect(link.getAttribute("aria-label")).not.toContain("unresolved");
   expect(screen.getByRole("button", { name: /Comments 2/ })).toBeTruthy();
 });
 

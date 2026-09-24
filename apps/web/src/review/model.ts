@@ -72,10 +72,11 @@ const UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
 
 export function relativeTime(iso: string, now = Date.now(), locale?: string): string {
   const seconds = (Date.parse(iso) - now) / 1000;
-  const format = new Intl.RelativeTimeFormat(locale, { numeric: "auto", style: "narrow" });
+  // Always numeric: "auto" mixes words in ("last yr.", "yesterday") next to "2y ago".
+  const format = new Intl.RelativeTimeFormat(locale, { numeric: "always", style: "narrow" });
   for (const [unit, size] of UNITS)
     if (Math.abs(seconds) >= size) return format.format(Math.round(seconds / size), unit);
-  return format.format(0, "second");
+  return new Intl.RelativeTimeFormat(locale, { numeric: "auto" }).format(0, "second");
 }
 
 export interface LayoutItem {

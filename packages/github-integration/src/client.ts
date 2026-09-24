@@ -52,7 +52,8 @@ export interface RequestMetric {
   durationMs: number;
   /** 0 for the first try. */
   attempt: number;
-  outcome: "ok" | "not-modified" | "retry" | "error";
+  /** "stale": rate-limited, answered from the cache (`staleOnRateLimit`). */
+  outcome: "ok" | "not-modified" | "stale" | "retry" | "error";
   rateLimit?: RateLimit;
 }
 
@@ -64,6 +65,11 @@ export interface GitHubClientOptions {
   auth?: () => string | undefined | Promise<string | undefined>;
   cache?: ResponseCache;
   onMetric?: (metric: RequestMetric) => void;
+  /**
+   * When rate-limited, answer GET requests from the cache, however old, instead of throwing a
+   * `RateLimitError`; reported with outcome "stale". Throws as usual when nothing is cached.
+   */
+  staleOnRateLimit?: boolean;
   /** Retries for network errors and 5xx on these read-only requests. Default 2. */
   maxRetries?: number;
   /** First backoff delay; doubles each retry. Default 500 ms. */
@@ -225,13 +231,20 @@ export function createGitHubClient(options: GitHubClientOptions = {}) {
         emit(res.status, "ok", rl);
         return { body: data, ...(next && { next }) };
       }
-      const again = RETRYABLE.has(res.status) && attempt < maxRetries;
-      emit(res.status, again ? "retry" : "error", rl);
-      if (again) {
+      if (RETRYABLE.has(res.status) && attempt < maxRetries) {
+        emit(res.status, "retry", rl);
         await retry();
         continue;
       }
-      throw await toError(res, url, rl, url !== graphqlUrl);
+      const error = await toError(res, url, rl, url !== graphqlUrl);
+      if (error instanceof RateLimitError && cached && options.staleOnRateLimit) {
+        // Retry-After limits come without rate-limit headers; the reset time is what matters.
+        const limit = rl ?? { limit: 0, remaining: 0, used: 0, resource: "core" };
+        emit(res.status, "stale", { ...limit, resetAt: error.resetAt });
+        return cached;
+      }
+      emit(res.status, "error", rl);
+      throw error;
     }
   }
 

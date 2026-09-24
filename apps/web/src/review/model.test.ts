@@ -63,6 +63,13 @@ describe("labels and links", () => {
     expect(relativeTime("2026-01-01T21:00:00Z", now, "en")).toBe("3h ago");
     expect(relativeTime("2026-01-01T23:59:50Z", now, "en")).toBe("now");
   });
+
+  it("uses one numeric style for every distance, never words like 'last yr.'", () => {
+    const now = Date.parse("2026-01-02T00:00:00Z");
+    expect(relativeTime("2025-01-01T00:00:00Z", now, "en")).toBe("1y ago");
+    expect(relativeTime("2024-01-01T00:00:00Z", now, "en")).toBe("2y ago");
+    expect(relativeTime("2026-01-01T00:00:00Z", now, "en")).toBe("1d ago");
+  });
 });
 
 describe("suggestionOriginal", () => {
