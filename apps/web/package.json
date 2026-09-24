@@ -15,6 +15,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@rendered-review/browser-cache": "workspace:*",
     "@rendered-review/github-integration": "workspace:*",
     "@rendered-review/runtime": "workspace:*",
     "@rendered-review/runtime-node": "workspace:*",
