@@ -101,7 +101,8 @@ it("shows the PR in the top bar and lists changed docs with letter statuses", as
 it("opens the first changed doc; a deleted doc renders read-only from the base revision", async () => {
   renderPage();
   const article = await screen.findByRole("article", { name: "Rendered document" });
-  expect(within(article).getByRole("heading", { name: /102 Processing/ })).toBeTruthy();
+  // The deleted page's title comes from its front matter.
+  expect(within(article).getAllByRole("definition")[0]!.textContent).toBe("102 Processing");
   expect(fileLink(/102\/index\.md/).getAttribute("aria-current")).toBe("page");
   expect(screen.getByText(/Deleted in this pull request\. Showing the base revision/)).toBeTruthy();
   expect(screen.getByRole("link", { name: "Source" }).getAttribute("href")).toBe(
@@ -119,6 +120,15 @@ it("binds the selected doc to the URL and marks changed sections of a modified d
   // The removed status's entry was edited, so the change shows as a modification.
   expect(article.querySelector('[data-rr-change="modified"]')).toBeTruthy();
   expect(screen.getByRole("note", { name: "Changed-section legend" })).toBeTruthy();
+});
+
+it("shows a document's front matter as terms and definitions, not as a heading", async () => {
+  renderPage(`?doc=${encodeURIComponent(INDEX)}`);
+  const article = await screen.findByRole("article", { name: "Rendered document" });
+  const terms = await within(article).findAllByRole("term");
+  expect(terms.map((t) => t.textContent)).toEqual(["title", "slug", "page-type", "browser-compat", "sidebar"]);
+  expect(within(article).getAllByRole("definition")[0]!.textContent).toBe("HTTP response status codes");
+  expect(within(article).queryByRole("heading", { name: /title:/ })).toBeNull();
 });
 
 it("switches to raw source with GitHub line links, and back, without refetching", async () => {
