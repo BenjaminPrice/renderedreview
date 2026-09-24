@@ -258,8 +258,7 @@ function once(key: string, run: () => Promise<Result>): Promise<Result> {
   return result;
 }
 
-type Outcome =
-  ({ draftId: string } & ({ ok: true } & Record<string, unknown>)) | { draftId: string; ok: false; error: unknown };
+type Outcome = { draftId: string; ok: boolean } & Record<string, unknown>;
 
 /**
  * Line drafts and the summary become one native review; file and conversation drafts are
