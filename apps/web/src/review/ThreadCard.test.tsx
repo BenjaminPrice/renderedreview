@@ -3,7 +3,7 @@
 import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it } from "vitest";
-import { comment, lineAnchor, OLD, repository, thread } from "./fixtures";
+import { appThread, comment, issueComment, lineAnchor, OLD, repository, thread } from "./fixtures";
 import { expectNewTab } from "../test-utils";
 import { ThreadCard } from "./ThreadCard";
 
@@ -105,5 +105,70 @@ describe("resolved threads", () => {
     await userEvent.click(summary);
     expect((el as HTMLDetailsElement).open).toBe(true);
     expect(within(el).getByText("Done")).toBeTruthy();
+  });
+});
+
+describe("application threads", () => {
+  const REANCHOR = "Document changed since this comment — re-anchoring pending";
+
+  it("labels the selected words and hides the repeated quote once the anchor is verified", () => {
+    const el = render(<ThreadCard thread={appThread()} repository={repository} verified />).container;
+    expect(screen.getByRole("region", { name: "Selected text · L3, by alice" })).toBeTruthy();
+    expect(within(el as HTMLElement).getByText("Needs a retry limit.")).toBeTruthy();
+    expect(el.querySelector("blockquote")).toBeNull();
+    expect(el.textContent).not.toContain("Document:");
+  });
+
+  it("shows the whole body and why it is not placed while the document has changed", () => {
+    const el = render(<ThreadCard thread={appThread()} repository={repository} unplaced reason={REANCHOR} />).container;
+    expect(el.querySelector("blockquote")?.textContent?.trim()).toBe("retries failed requests");
+    expect(screen.getByText(`Selected text · L3 · ${REANCHOR}`)).toBeTruthy();
+  });
+
+  it("shows resolve and reopen as small events, not as comments", () => {
+    const [root, resolve, reopen] = [
+      issueComment("Needs a retry limit."),
+      issueComment("Resolved", { author: { login: "bob", id: 2, nodeId: "U2", type: "User" } }),
+      issueComment("Reopened"),
+    ];
+    const t = appThread([root], {
+      events: [
+        { resolution: "resolved", at: "2026-01-02T00:00:00Z", comment: resolve },
+        { resolution: "reopened", at: "2026-01-03T00:00:00Z", comment: reopen },
+      ],
+    });
+    render(<ThreadCard thread={t} repository={repository} verified />);
+    const events = screen.getByRole("list", { name: "Thread events" });
+    expect(
+      within(events)
+        .getAllByRole("listitem")
+        .map((li) => li.textContent),
+    ).toEqual([
+      expect.stringMatching(/^bob resolved this thread/),
+      expect.stringMatching(/^alice reopened this thread/),
+    ]);
+    expect(screen.queryByText("Resolved")).toBeNull();
+  });
+});
+
+describe("metadata notices", () => {
+  it("badges damaged and unsupported metadata on the comment, keeping its whole body", () => {
+    const [damaged, unsupported] = [comment({ body: "> quote\n\nFirst" }), comment({ body: "Second" })];
+    const t = thread("t1", lineAnchor(3), "unknown", [damaged, unsupported]);
+    t.metadata = {
+      [damaged.id]: { state: "damaged", reason: "The metadata names another pull request", edited: false },
+      [unsupported.id]: { state: "unsupported", reason: "Unsupported annotation version 2", edited: false },
+    };
+    const el = card(t);
+    expect(screen.getByText("Metadata damaged").closest("[title]")?.getAttribute("title")).toBe(
+      "The metadata names another pull request",
+    );
+    expect(screen.getByText("Unsupported version")).toBeTruthy();
+    expect(el.querySelector("blockquote")).toBeTruthy();
+  });
+
+  it("badges an annotation that does not match its document", () => {
+    render(<ThreadCard thread={appThread()} repository={repository} damaged="The quoted text does not match" />);
+    expect(screen.getByText("Metadata damaged")).toBeTruthy();
   });
 });

@@ -51,6 +51,13 @@ describe("validateAnnotation", () => {
     ["pull request zero", (a) => (a.target.pullRequest = 0)],
     ["empty path", (a) => (a.target.path = "")],
     ["absolute path", (a) => (a.target.path = "/etc/passwd")],
+    ["path with a .. segment", (a) => (a.target.path = "docs/../../secrets.md")],
+    ["path that is ..", (a) => (a.target.path = "..")],
+    ["path with a . segment", (a) => (a.target.path = "docs/./guide.md")],
+    ["path with an empty segment", (a) => (a.target.path = "docs//guide.md")],
+    ["path with a trailing slash", (a) => (a.target.path = "docs/")],
+    ["path with a backslash", (a) => (a.target.path = "docs\\..\\guide.md")],
+    ["path with a control character", (a) => (a.target.path = "docs/gu\nide.md")],
     ["short commit oid", (a) => (a.target.commitOid = "0123456")],
     ["uppercase blob oid", (a) => (a.target.blobOid = a.target.blobOid.toUpperCase())],
     ["selectors not an array", (a) => (a.target.selectors = {})],
@@ -70,9 +77,24 @@ describe("validateAnnotation", () => {
     ["unknown motivation", (a) => (a.motivation = "liking")],
     ["replyTo not a string", (a) => (a.replyTo = 5)],
     ["other createdBy", (a) => (a.createdBy = "someone-else")],
+    ["unknown resolution", (a) => (a.resolution = "closed")],
   ])("rejects %s", (_name, mutate) => {
     const result = validateAnnotation(mutated(mutate));
     expect(result.ok).toBe(false);
+  });
+
+  it("accepts nested paths and dots inside names", () => {
+    for (const path of ["README.md", "docs/.github/a..b.md", "docs/v1.2/guide.md"])
+      expect(validateAnnotation(mutated((a) => (a.target.path = path))).ok).toBe(true);
+  });
+
+  it("accepts a resolution event that reopens a thread", () => {
+    const a = mutated((a) => {
+      a.motivation = "resolving";
+      a.threadId = "101";
+      a.resolution = "reopened";
+    });
+    expect(validateAnnotation(a).ok).toBe(true);
   });
 
   it("names the offending field", () => {

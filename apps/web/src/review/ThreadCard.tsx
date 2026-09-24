@@ -1,6 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-import type { Actor, ReviewComment } from "@rendered-review/github-integration";
-import type { NativeThread, RepositoryRef } from "@rendered-review/review-domain";
+import type { Actor } from "@rendered-review/github-integration";
+import {
+  displayBody,
+  type NativeAnchor,
+  type NativeThread,
+  type RepositoryRef,
+  type ThreadComment,
+} from "@rendered-review/review-domain";
 import type { ReactNode } from "react";
 import { ExternalLink } from "../ui/ExternalLink";
 import { Markdown } from "./Markdown";
@@ -89,21 +95,44 @@ export function Badge({
   );
 }
 
-function Comment({ comment, thread, badges }: { comment: ReviewComment; thread: NativeThread; badges?: ReactNode }) {
-  const a = thread.anchor;
+/** Small notice that a comment's metadata could not be used; `reason` on hover. */
+export function MetadataNotice({ state, reason }: { state: "damaged" | "unsupported"; reason?: string }) {
+  return (
+    <span title={reason}>
+      <Badge tone="mod" icon="warn">
+        {state === "damaged" ? "Metadata damaged" : "Unsupported version"}
+      </Badge>
+    </span>
+  );
+}
+
+function Comment({
+  comment,
+  anchor,
+  body,
+  badges,
+}: {
+  comment: ThreadComment;
+  anchor: NativeAnchor;
+  body: string;
+  badges?: ReactNode;
+}) {
   const suggestion =
-    a.type === "file"
-      ? undefined
-      : {
-          original: a.side === "RIGHT" ? suggestionOriginal(comment.diffHunk, a.endLine - a.startLine + 1) : null,
+    anchor.type === "current" || anchor.type === "outdated"
+      ? {
+          original:
+            anchor.side === "RIGHT" && "diffHunk" in comment
+              ? suggestionOriginal(comment.diffHunk, anchor.endLine - anchor.startLine + 1)
+              : null,
           href: comment.htmlUrl,
-        };
+        }
+      : undefined;
   return (
     <div className="rr-c">
       <CommentHead author={comment.author} createdAt={comment.createdAt} updatedAt={comment.updatedAt}>
         {badges}
       </CommentHead>
-      <Markdown source={comment.body} suggestion={suggestion} />
+      <Markdown source={body} suggestion={suggestion} />
     </div>
   );
 }
@@ -114,13 +143,30 @@ export interface ThreadCardProps {
   active?: boolean;
   /** A current line comment that maps to no rendered block (e.g. a blank line); its label says so. */
   unplaced?: boolean;
+  /** Why the thread is not placed (e.g. its document changed), shown with its location. */
+  reason?: string;
+  /** Its annotation was verified against the displayed document: the quote it repeats is hidden. */
+  verified?: boolean;
+  /** Its annotation does not match the document it names: why. */
+  damaged?: string;
   onActivate?: () => void;
 }
 
 /** One native review thread. Resolved threads collapse in place; unknown resolution claims nothing. */
-export function ThreadCard({ thread, repository, active, unplaced, onActivate }: ThreadCardProps) {
+export function ThreadCard({
+  thread,
+  repository,
+  active,
+  unplaced,
+  reason,
+  verified,
+  damaged,
+  onActivate,
+}: ThreadCardProps) {
   const state = threadState(thread);
-  const a = thread.anchor;
+  // An annotation not verified against this document is shown at its GitHub line, when it has one.
+  const a =
+    thread.anchor.type === "annotation" && !verified && thread.anchor.fallback ? thread.anchor.fallback : thread.anchor;
   const root = thread.comments[0]!;
   const label = anchorLabel(a);
   const n = thread.comments.length;
@@ -143,12 +189,49 @@ export function ThreadCard({ thread, repository, active, unplaced, onActivate }:
   );
   const body = (
     <>
-      {thread.comments.map((c, i) => (
-        <Comment key={c.id} comment={c} thread={thread} badges={i === 0 && state !== "resolved" ? badges : null} />
-      ))}
+      {thread.comments.map((c, i) => {
+        const meta = thread.metadata?.[c.id];
+        const notice =
+          meta?.state === "damaged" || meta?.state === "unsupported" ? (
+            <MetadataNotice state={meta.state} reason={meta.reason} />
+          ) : (
+            i === 0 && damaged && <MetadataNotice state="damaged" reason={damaged} />
+          );
+        return (
+          <Comment
+            key={c.id}
+            comment={c}
+            anchor={a}
+            body={displayBody(thread, c, !!verified)}
+            badges={
+              (notice || (i === 0 && state !== "resolved" && badges)) && (
+                <>
+                  {notice}
+                  {i === 0 && state !== "resolved" && badges}
+                </>
+              )
+            }
+          />
+        );
+      })}
+      {thread.events && (
+        <ol className="rr-t-events" aria-label="Thread events">
+          {thread.events.map((e) => (
+            <li key={e.comment.id}>
+              <ReviewIcon name={e.resolution === "resolved" ? "check" : "dot"} />
+              <b>{e.comment.author?.login ?? "ghost"}</b> {e.resolution} this thread ·{" "}
+              <time dateTime={e.at} title={new Date(e.at).toLocaleString()}>
+                {relativeTime(e.at)}
+              </time>
+            </li>
+          ))}
+        </ol>
+      )}
       <div className="rr-t-foot">
-        <span className="rr-t-loc">
-          {a.type === "outdated" ? (
+        <span className={reason ? "rr-t-loc rr-t-why" : "rr-t-loc"}>
+          {reason ? (
+            `${label} · ${reason}`
+          ) : a.type === "outdated" ? (
             <>
               From <code>{a.commitOid.slice(0, 7)}</code> · {label.replace("GitHub line comment · ", "")}
             </>
