@@ -484,10 +484,8 @@ describe("MDX", () => {
 
   test("line comments resolve to inert blocks and to Markdown inside components", () => {
     expect(at(lineOf("import TabItem"))).toEqual([starting("mdxjsEsm:MDX import/exportimport Tabs")]);
-    expect(at(lineOf("<Tabs "))).toEqual([starting("mdxJsxFlowElement:MDX component <Tabs><Tabs groupId")]);
-    expect(at(lineOf('  <TabItem value="yarn"'))).toEqual([
-      starting('mdxJsxFlowElement:MDX component <TabItem><TabItem value="yarn"'),
-    ]);
+    expect(at(lineOf("<Tabs "))).toEqual(['mdxJsxTag:<Tabs groupId="package-manager">']);
+    expect(at(lineOf('  <TabItem value="yarn"'))).toEqual([starting('mdxJsxTag:<TabItem value="yarn"')]);
     expect(at(lineOf("Install with npm"))).toEqual(["paragraph:Install with npm:"]);
     expect(at(lineOf("npm install"))).toEqual([starting("code:npm install @docusaurus/core")]);
     expect(at(lineOf("{/*"))).toEqual([starting("mdxFlowExpression:MDX expression{/*")]);
@@ -496,7 +494,8 @@ describe("MDX", () => {
   });
 
   test("a component's opening and closing tag lines resolve to the tags, not only the whole component", () => {
-    const src = '<Timeline>\n  <Event time="09:12">First.</Event>\n  <Event time="11:40">Second.</Event>\n</Timeline>\n';
+    const src =
+      '<Timeline>\n  <Event time="09:12">First.</Event>\n  <Event time="11:40">Second.</Event>\n</Timeline>\n';
     const d = mdx(src);
     const lines = (s: number, e = s) => blocksForLines(d, s, e).map((n) => `${n.type}:${n.text}`);
     expect(lines(1)).toEqual(["mdxJsxTag:<Timeline>"]);

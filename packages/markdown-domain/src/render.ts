@@ -87,6 +87,8 @@ export interface RenderedMarkdown {
 const BLOCK_TYPES = new Set([
   "mdxFlowExpression",
   "mdxJsxFlowElement",
+  // A component's opening/closing tag: its lines belong to no other block.
+  "mdxJsxTag",
   "mdxjsEsm",
   "blockquote",
   "code",
