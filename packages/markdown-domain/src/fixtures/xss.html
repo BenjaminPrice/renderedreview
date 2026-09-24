@@ -1,0 +1,18 @@
+<h1 data-rr-id="0">XSS corpus</h1>
+
+<img src="x" data-rr-id="1">
+<p data-rr-id="2"><a data-rr-id="3">javascript link</a></p>
+<p data-rr-id="4"><a data-rr-id="5">mixed case</a></p>
+<p data-rr-id="6"><a data-rr-id="7">entity encoded</a></p>
+<p data-rr-id="8"><a data-rr-id="9">markdown link</a></p>
+<p data-rr-id="10"><img alt="markdown image" data-rr-id="11"></p>
+<p data-rr-id="12"></p>
+
+body { background: url("javascript:alert('css')") }
+<div data-rr-id="13">styled</div>
+<input name="user-content-q" disabled type="checkbox" data-rr-id="14">
+<p data-rr-id="15"></p>
+<p data-rr-id="16">&#x3C;img src=x onerror="alert('mxss')"><table data-rr-id="17"></table></p>
+<details open data-rr-id="18"><summary data-rr-id="19">toggle</summary>body</details>
+<p data-rr-id="20"><a data-rr-id="21">data url</a></p>
+<p id="user-content-__proto__" name="user-content-location" data-rr-id="22">clobber and forged markers</p>
