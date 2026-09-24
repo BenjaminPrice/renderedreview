@@ -2,7 +2,7 @@
 // The comment rail for one rendered document: threads aligned to their anchors (pinned), a packed
 // list (slide-over), margin markers (collapsed) and optional connector lines.
 import type { RepositoryRef, ThreadPlacement } from "@rendered-review/review-domain";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useEffectEvent, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { useShell } from "../ui/AppShell";
 import { layoutCards, THREAD_STATES, threadState, type ThreadState, type Wire } from "./model";
@@ -183,11 +183,13 @@ export function CommentRail(props: CommentRailProps) {
     requestAnimationFrame(() => focusThread(id));
   }, [shell.railMode, focusThread]);
 
-  // Activation from outside (an anchor was selected) focuses its thread.
-  useEffect(() => {
-    const card = active && document.getElementById(threadDomId(active));
-    if (card && !card.contains(document.activeElement)) openThread(active);
-  }, [active]);
+  // Activation from outside (an anchor was selected) focuses its thread. Only a change of the
+  // active thread triggers this; the rail mode is read when it happens.
+  const onActiveChange = useEffectEvent((id: string | null) => {
+    const card = id && document.getElementById(threadDomId(id));
+    if (card && !card.contains(document.activeElement)) openThread(id);
+  });
+  useEffect(() => onActiveChange(active), [active]);
 
   const card = (p: ThreadPlacement) => (
     <ThreadCard
