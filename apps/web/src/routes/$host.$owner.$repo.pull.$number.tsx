@@ -1,11 +1,22 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-import { ForbiddenError, NotFoundError, RateLimitError } from "@rendered-review/github-integration";
+import {
+  type ChangedFile,
+  ForbiddenError,
+  NotFoundError,
+  type PullRequest,
+  RateLimitError,
+} from "@rendered-review/github-integration";
 import { queryOptions, useQuery } from "@tanstack/react-query";
 import { createFileRoute, notFound, stripSearchParams } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
+import { useMemo, useRef, useState } from "react";
+import { ExternalIcon, MAX_RENDER_CHARS, RawDocument, RenderedDocument, useDocument } from "../document/document";
+import { allDocs, changedDocs, selectedPath, sourceUrl } from "../document/docs";
+import { Sidebar } from "../document/Sidebar";
 import { allowedHosts } from "../github/proxy";
-import { changedFilesQuery, type PrIdentity, prIdentity, pullRequestQuery } from "../github/queries";
-import { isMarkdownPath, parsePrParams, validatePrSearch } from "../pr-url";
+import { changedFilesQuery, type PrIdentity, prIdentity, pullRequestQuery, treeQuery } from "../github/queries";
+import { AppShell } from "../ui/AppShell";
+import { parsePrParams, validatePrSearch } from "../pr-url";
 
 const getAllowedHosts = createServerFn({ method: "GET" }).handler(({ context }) => allowedHosts(context.config));
 
@@ -53,25 +64,178 @@ function PullRequestPage() {
 
   const error = pr.error ?? files.error;
   if (error) return <ErrorState error={error} />;
-  if (!pr.data || !files.data) return <Message title="Loading…" />;
+  if (!pr.data || !identity || !files.data) return <Message title="Loading…" />;
+  return <ReviewPage pr={pr.data} id={identity} files={files.data} />;
+}
 
-  const markdown = files.data.filter((f) => isMarkdownPath(f.path));
+function ReviewPage({ pr, id, files }: { pr: PullRequest; id: PrIdentity; files: ChangedFile[] }) {
+  const search = Route.useSearch();
+  const { docs: changed, otherCount } = useMemo(() => changedDocs(files), [files]);
+  const path = selectedPath(search.doc, changed);
+  const changedEntry = changed.find((d) => d.path === path);
+  const tree = useQuery({
+    ...treeQuery(id, id.headSha),
+    enabled: search.files === "all" || (path !== undefined && !changedEntry),
+  });
+  const all = useMemo(() => tree.data && allDocs(tree.data, changed), [tree.data, changed]);
+  const entry = changedEntry ?? all?.find((d) => d.path === path);
+  const doc = useDocument(id, entry);
+  const [view, setView] = useState<"rendered" | "raw">("rendered");
+  // The rendered article; the comment rail positions threads against it.
+  const docRef = useRef<HTMLElement>(null);
+
+  const dir = entry ? entry.path.slice(0, entry.path.lastIndexOf("/") + 1) : "";
+  const link = entry && { ...id, sha: doc.sha, path: entry.path };
+
   return (
-    <main>
-      <h1>{pr.data.title}</h1>
-      <p>
-        <a href={pr.data.htmlUrl}>View on GitHub</a>
-      </p>
-      {markdown.length === 0 ? (
-        <p>No Markdown in this PR.</p>
+    <AppShell
+      title={<PrTitle pr={pr} id={id} docCount={changed.length} />}
+      actions={
+        <a className="rr-btn rr-btn-ghost" href={pr.htmlUrl}>
+          Open in GitHub
+          <ExternalIcon />
+        </a>
+      }
+      sidebar={
+        <Sidebar
+          mode={search.files}
+          changed={changed}
+          all={all}
+          truncated={tree.data?.truncated}
+          allError={!!tree.error}
+          selected={path}
+          otherCount={otherCount}
+          filesUrl={`${pr.htmlUrl}/files`}
+        />
+      }
+      toolbar={
+        entry && (
+          <>
+            <div className="rr-seg" role="group" aria-label="View">
+              <button type="button" aria-pressed={view === "rendered"} onClick={() => setView("rendered")}>
+                Rendered
+              </button>
+              <button type="button" aria-pressed={view === "raw"} onClick={() => setView("raw")}>
+                Raw
+              </button>
+            </div>
+            <span className="rr-seg">
+              <span className="rr-seg-static">
+                <span className="rr-sr-only">Revision: </span>
+                {entry.status === "deleted" ? "Base" : "Current"} · <code>{doc.sha.slice(0, 7)}</code>
+              </span>
+            </span>
+            <span className="rr-doc-path" title={entry.path}>
+              <span className="rr-sr-only">File: </span>
+              {dir}
+              <b>{entry.path.slice(dir.length)}</b>
+            </span>
+            {doc.changes.length > 0 && (
+              <span className="rr-legend" role="note" aria-label="Changed-section legend">
+                <span>
+                  <i className="rr-legend-added" />
+                  Added
+                </span>
+                <span>
+                  <i className="rr-legend-modified" />
+                  Modified
+                </span>
+              </span>
+            )}
+          </>
+        )
+      }
+      toolbarEnd={
+        link && (
+          <a className="rr-btn rr-btn-sm rr-btn-ghost" href={sourceUrl(link, link.sha, link.path)}>
+            Source
+            <ExternalIcon />
+          </a>
+        )
+      }
+      railHeader={null}
+      rail={<p className="rr-rail-empty">Comments on this document will appear here.</p>}
+    >
+      {!path ? (
+        <DocMessage title="No Markdown changed in this pull request">
+          Browse the repository&apos;s documents under All docs, or{" "}
+          <a href={`${pr.htmlUrl}/files`}>review the changes on GitHub</a>.
+        </DocMessage>
+      ) : !entry ? (
+        tree.isPending && !tree.error ? (
+          <DocMessage title="Loading…" />
+        ) : (
+          <DocMessage title="Document not found">
+            <code>{path}</code> is not a Markdown document in this pull request.
+          </DocMessage>
+        )
+      ) : doc.error ? (
+        <DocMessage title="Could not load this document">{doc.error.message}</DocMessage>
+      ) : doc.source === undefined || !link ? (
+        <DocMessage title="Loading document…" />
       ) : (
-        <ul>
-          {markdown.map((f) => (
-            <li key={f.path}>{f.path}</li>
-          ))}
-        </ul>
+        <>
+          {entry.status === "deleted" && (
+            <p className="rr-doc-note">
+              Deleted in this pull request. Showing the base revision (<code>{doc.sha.slice(0, 7)}</code>), read-only.
+            </p>
+          )}
+          {view === "raw" ? (
+            <RawDocument source={doc.source} changes={doc.changes} link={link} />
+          ) : doc.rendered ? (
+            <RenderedDocument rendered={doc.rendered} changes={doc.changes} containerRef={docRef} />
+          ) : (
+            <DocMessage title="This document is too large to render">
+              It has {doc.source.length.toLocaleString()} characters; the limit is {MAX_RENDER_CHARS.toLocaleString()}.{" "}
+              <button type="button" className="rr-btn rr-btn-sm" onClick={() => setView("raw")}>
+                View raw
+              </button>
+            </DocMessage>
+          )}
+        </>
       )}
-    </main>
+    </AppShell>
+  );
+}
+
+function PrTitle({ pr, id, docCount }: { pr: PullRequest; id: PrIdentity; docCount: number }) {
+  const [state, label] = pr.merged
+    ? ["merged", "Merged"]
+    : pr.state === "closed"
+      ? ["closed", "Closed"]
+      : pr.draft
+        ? ["draft", "Draft"]
+        : ["open", "Open"];
+  const verb = pr.merged ? "merged into" : pr.state === "open" ? "wants to merge into" : "proposed merging into";
+  return (
+    <>
+      <h1 className="rr-pr-title" title={pr.title}>
+        {pr.title} <span className="rr-pr-num">#{pr.number}</span>
+      </h1>
+      <div className="rr-pr-meta">
+        <span className={`rr-badge rr-badge-${state}`}>{label}</span>
+        <span>
+          {id.owner}/{id.repo}
+        </span>
+        <span aria-hidden="true">·</span>
+        <span>
+          {pr.author && <b>{pr.author.login}</b>} {verb} <code>{pr.base.ref}</code>
+        </span>
+        <span aria-hidden="true">·</span>
+        <span>
+          {docCount} {docCount === 1 ? "doc" : "docs"} changed
+        </span>
+      </div>
+    </>
+  );
+}
+
+function DocMessage({ title, children }: { title: string; children?: React.ReactNode }) {
+  return (
+    <div className="rr-doc-message" role="status">
+      <h2>{title}</h2>
+      {children && <p>{children}</p>}
+    </div>
   );
 }
 
@@ -93,7 +257,7 @@ function ErrorState({ error }: { error: Error }) {
 
 function Message({ title, children }: { title: string; children?: React.ReactNode }) {
   return (
-    <main>
+    <main className="rr-message">
       <h1>{title}</h1>
       {children && <p>{children}</p>}
     </main>

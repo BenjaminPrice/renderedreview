@@ -836,3 +836,480 @@ samp {
 .rr-marker-historical {
   border-style: dotted;
 }
+
+/* =====================================================================
+   PR REVIEW PAGE: top bar, sidebar, toolbar, document
+   ===================================================================== */
+.rr-icon-sm {
+  width: 12px;
+  height: 12px;
+}
+.rr-message,
+.rr-doc-message {
+  max-width: var(--rr-measure);
+  margin: 12vh auto 0;
+  padding: 0 24px;
+  font: var(--rr-text-ui) / 1.5 var(--rr-font-ui);
+}
+.rr-message h1,
+.rr-doc-message h2 {
+  margin: 0 0 8px;
+  font-size: 20px;
+}
+.rr-message p,
+.rr-doc-message p {
+  margin: 0;
+  color: var(--rr-text-muted);
+}
+.rr-doc-message {
+  margin-top: 0;
+  padding: 0;
+}
+
+/* Top bar */
+.rr-pr-title {
+  margin: 0;
+  font-size: var(--rr-text-ui);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rr-pr-num {
+  color: var(--rr-text-muted);
+  font-weight: 400;
+}
+.rr-pr-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--rr-text-xs);
+  color: var(--rr-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.rr-pr-meta b {
+  color: var(--rr-text);
+  font-weight: 500;
+}
+.rr-badge-open {
+  color: light-dark(var(--rr-accent-fg), var(--rr-added-fg));
+  background: light-dark(var(--rr-added-fg), var(--rr-added-bg));
+  border-color: var(--rr-added-fg);
+}
+.rr-badge-merged {
+  color: var(--rr-renamed-fg);
+  background: var(--rr-renamed-bg);
+}
+.rr-badge-closed {
+  color: var(--rr-deleted-fg);
+  background: var(--rr-deleted-bg);
+}
+.rr-badge-draft {
+  color: var(--rr-text-muted);
+  background: var(--rr-surface-sunken);
+  border-color: var(--rr-border);
+}
+
+/* Segmented controls: role="group" of aria-pressed buttons */
+.rr-seg {
+  display: inline-flex;
+  flex: none;
+  padding: 2px;
+  gap: 2px;
+  border: 1px solid var(--rr-border);
+  border-radius: var(--rr-radius);
+  background: var(--rr-surface-sunken);
+}
+.rr-seg button,
+.rr-seg-static {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: var(--rr-radius-sm);
+  background: transparent;
+  color: var(--rr-text-muted);
+  font-size: var(--rr-text-xs);
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.rr-seg button[aria-pressed="true"],
+.rr-seg-static {
+  background: var(--rr-surface);
+  color: var(--rr-text);
+  border-color: var(--rr-border);
+  cursor: default;
+}
+.rr-seg button:hover:not([aria-pressed="true"]) {
+  color: var(--rr-text);
+}
+.rr-seg-fill {
+  display: flex;
+}
+.rr-seg-fill button {
+  flex: 1 1 auto;
+  padding: 0 6px;
+}
+
+/* Sidebar */
+.rr-sidebar-head {
+  padding: 12px 12px 8px;
+}
+.rr-sidebar-note {
+  margin: 0;
+  padding: 8px 16px;
+  font-size: var(--rr-text-sm);
+  color: var(--rr-text-muted);
+}
+.rr-sidebar-foot {
+  margin: auto 0 0;
+  padding: 10px 16px;
+  border-top: 1px solid var(--rr-border);
+  font-size: var(--rr-text-xs);
+  color: var(--rr-text-muted);
+}
+.rr-sidebar-foot .rr-icon {
+  margin-left: 3px;
+  vertical-align: -1px;
+}
+.rr-filelist {
+  list-style: none;
+  margin: 0;
+  padding: 4px 8px 12px;
+}
+.rr-file {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--rr-radius);
+  border: 1px solid transparent;
+  font-size: var(--rr-text-sm);
+  color: var(--rr-text);
+}
+.rr-file:hover {
+  background: var(--rr-surface-hover);
+  text-decoration: none;
+}
+.rr-file[aria-current="page"] {
+  background: var(--rr-surface);
+  border-color: var(--rr-border);
+  font-weight: 500;
+}
+.rr-file-name {
+  flex: 1;
+  min-width: 0;
+}
+.rr-file-path {
+  display: flex;
+  white-space: nowrap;
+}
+.rr-file-dir {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  direction: rtl;
+}
+.rr-file-base {
+  flex: none;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rr-file-sub {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rr-file-dir,
+.rr-file-sub {
+  color: var(--rr-text-muted);
+  font-weight: 400;
+}
+.rr-file-sub {
+  font-size: 11.5px;
+}
+.rr-file-deleted .rr-file-path > * {
+  text-decoration: line-through;
+  text-decoration-color: var(--rr-deleted-fg);
+}
+.rr-file-comments {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--rr-text-muted);
+}
+/* File status: letter + border, never colour alone */
+.rr-status {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  flex: none;
+  border-radius: var(--rr-radius-sm);
+  border: 1px solid currentColor;
+  font: 700 10.5px/1 var(--rr-font-mono);
+}
+.rr-status-added {
+  color: var(--rr-added-fg);
+  background: var(--rr-added-bg);
+}
+.rr-status-modified {
+  color: var(--rr-modified-fg);
+  background: var(--rr-modified-bg);
+}
+.rr-status-renamed {
+  color: var(--rr-renamed-fg);
+  background: var(--rr-renamed-bg);
+}
+.rr-status-deleted {
+  color: var(--rr-deleted-fg);
+  background: var(--rr-deleted-bg);
+}
+.rr-status-unchanged {
+  color: var(--rr-text-muted);
+  border-style: dashed;
+}
+
+/* Document toolbar */
+.rr-doc-path {
+  /* Takes the free space ahead of the shell's spacer so the legend sits by the Comments button. */
+  flex: 1000 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 12.5px var(--rr-font-mono);
+  color: var(--rr-text-muted);
+}
+.rr-doc-path b {
+  color: var(--rr-text);
+  font-weight: 600;
+}
+.rr-legend {
+  display: inline-flex;
+  gap: 10px;
+  font-size: var(--rr-text-xs);
+  color: var(--rr-text-muted);
+  white-space: nowrap;
+}
+.rr-legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.rr-legend i {
+  width: 3px;
+  height: 14px;
+  background: var(--rr-added-fg);
+}
+.rr-legend i.rr-legend-modified {
+  background: repeating-linear-gradient(var(--rr-modified-fg) 0 4px, transparent 4px 6px);
+}
+.rr-doc-note {
+  margin: 0 0 24px;
+  padding: 8px 12px;
+  border: 1px dashed var(--rr-deleted-fg);
+  border-radius: var(--rr-radius);
+  background: var(--rr-deleted-bg);
+  font: var(--rr-text-sm) / 1.45 var(--rr-font-ui);
+}
+
+/* Changed sections: solid bar = added, dashed = modified; the alt text names the change for
+   screen readers without adding text to the document DOM (selections map DOM text to source). */
+.rr-markdown [data-rr-change],
+.rr-raw-line[data-rr-change] {
+  position: relative;
+}
+.rr-markdown [data-rr-change]::before {
+  content: "" / "Added in this pull request.";
+  position: absolute;
+  left: -28px;
+  top: 4px;
+  bottom: 4px;
+  width: 3px;
+  background: var(--rr-added-fg);
+}
+/* Dashes via a gradient: a dashed border renders solid at this size in some browsers. */
+.rr-markdown [data-rr-change="modified"]::before {
+  content: "" / "Modified in this pull request.";
+  background: repeating-linear-gradient(var(--rr-modified-fg) 0 6px, transparent 6px 10px);
+}
+/* Keep bars of nested blocks in the same gutter column as top-level ones. */
+.rr-markdown li[data-rr-change]::before,
+.rr-markdown li > [data-rr-change]::before {
+  left: calc(-28px - 2em);
+}
+.rr-markdown li li[data-rr-change]::before,
+.rr-markdown li li > [data-rr-change]::before {
+  left: calc(-28px - 4em);
+}
+.rr-markdown blockquote > [data-rr-change]::before {
+  left: -49px;
+}
+
+/* Rendered Markdown typography */
+.rr-markdown {
+  overflow-wrap: break-word;
+}
+.rr-markdown > :first-child {
+  margin-top: 0;
+}
+.rr-markdown h1 {
+  font-size: 30px;
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+  margin: 0 0 20px;
+}
+.rr-markdown h2 {
+  font-size: 22px;
+  line-height: 1.3;
+  margin: 36px 0 12px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--rr-border-muted);
+  font-weight: 650;
+}
+.rr-markdown h3 {
+  font-size: 18px;
+  line-height: 1.35;
+  margin: 28px 0 8px;
+  font-weight: 650;
+}
+.rr-markdown h4,
+.rr-markdown h5,
+.rr-markdown h6 {
+  font-size: 1em;
+  margin: 24px 0 8px;
+  font-weight: 650;
+}
+.rr-markdown p,
+.rr-markdown ul,
+.rr-markdown ol,
+.rr-markdown dl {
+  margin: 0 0 16px;
+}
+.rr-markdown ul,
+.rr-markdown ol {
+  padding-left: 2em;
+}
+.rr-markdown li > ul,
+.rr-markdown li > ol {
+  margin: 0;
+}
+.rr-markdown li + li {
+  margin-top: 4px;
+}
+.rr-markdown li.task-list-item {
+  list-style: none;
+}
+.rr-markdown li.task-list-item input {
+  margin: 0 0.4em 0 -1.4em;
+  accent-color: var(--rr-accent);
+}
+.rr-markdown code {
+  font-size: 0.86em;
+  padding: 0.12em 0.36em;
+  border-radius: var(--rr-radius-sm);
+  background: var(--rr-surface-sunken);
+  border: 1px solid var(--rr-border-muted);
+}
+.rr-markdown pre {
+  margin: 0 0 20px;
+  padding: 14px 16px;
+  overflow: auto;
+  border-radius: var(--rr-radius-lg);
+  background: var(--rr-surface-sunken);
+  border: 1px solid var(--rr-border-muted);
+  font: 13.5px/1.6 var(--rr-font-mono);
+}
+.rr-markdown pre code {
+  padding: 0;
+  border: 0;
+  background: none;
+  font-size: inherit;
+}
+.rr-markdown blockquote {
+  margin: 0 0 20px;
+  padding: 2px 0 2px 18px;
+  border-left: 3px solid var(--rr-border);
+  color: var(--rr-text-muted);
+}
+.rr-markdown blockquote > :last-child {
+  margin-bottom: 0;
+}
+.rr-markdown table {
+  display: block;
+  max-width: 100%;
+  overflow: auto;
+  border-collapse: collapse;
+  margin: 0 0 20px;
+  font-size: 15px;
+  line-height: 1.45;
+  font-variant-numeric: tabular-nums;
+}
+.rr-markdown th,
+.rr-markdown td {
+  text-align: left;
+  padding: 7px 12px;
+  border: 1px solid var(--rr-border);
+}
+.rr-markdown th {
+  background: var(--rr-surface-sunken);
+  font-weight: 600;
+}
+.rr-markdown img {
+  max-width: 100%;
+}
+.rr-markdown hr {
+  height: 0;
+  margin: 28px 0;
+  border: 0;
+  border-top: 1px solid var(--rr-border);
+}
+.rr-markdown a {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* Raw Markdown with GitHub line links */
+.rr-raw {
+  margin: 0;
+  font: 13px/1.6 var(--rr-font-mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.rr-raw-line {
+  display: block;
+  padding-left: 4.5em;
+  text-indent: -4.5em;
+}
+.rr-raw-num {
+  display: inline-block;
+  width: 3.5em;
+  margin-right: 1em;
+  text-indent: 0;
+  text-align: right;
+  color: var(--rr-text-muted);
+  user-select: none;
+}
+.rr-raw-line[data-rr-change]::before {
+  content: "" / "Added in this pull request.";
+  position: absolute;
+  left: -12px;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--rr-added-fg);
+}
+.rr-raw-line[data-rr-change="modified"]::before {
+  content: "" / "Modified in this pull request.";
+  background: repeating-linear-gradient(var(--rr-modified-fg) 0 6px, transparent 6px 10px);
+}
