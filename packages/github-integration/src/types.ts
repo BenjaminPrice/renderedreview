@@ -41,6 +41,9 @@ export interface PullRequest {
   closedAt: string | null;
   mergedAt: string | null;
   changedFiles: number;
+  commits: number;
+  /** Label names, in GitHub's order. */
+  labels: string[];
   head: { ref: string; sha: string; repository: Repository | null };
   base: { ref: string; sha: string; repository: Repository | null };
 }
@@ -174,6 +177,8 @@ export const toPullRequest = (p: Raw): PullRequest => ({
   closedAt: p.closed_at,
   mergedAt: p.merged_at,
   changedFiles: p.changed_files,
+  commits: p.commits,
+  labels: (p.labels ?? []).map((l: Raw) => l.name),
   head: { ref: p.head.ref, sha: p.head.sha, repository: repository(p.head.repo) },
   base: { ref: p.base.ref, sha: p.base.sha, repository: repository(p.base.repo) },
 });

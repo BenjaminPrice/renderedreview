@@ -4,6 +4,35 @@
   "number": 45752,
   "title": "Fix internal links",
   "body": "Fixing issues reported by https://mdn-graph.joshcena.com/warnings. This time fixing:\r\n\r\n- Self-links\r\n- Missing `href`s\r\n- Broken links\r\n- Broken anchors",
+  "labels": [
+    {
+      "name": "Content:CSS"
+    },
+    {
+      "name": "Content:HTML"
+    },
+    {
+      "name": "Content:WebExt"
+    },
+    {
+      "name": "Content:WebAPI"
+    },
+    {
+      "name": "Content:JS"
+    },
+    {
+      "name": "Content:Learn"
+    },
+    {
+      "name": "Content:Media"
+    },
+    {
+      "name": "Content:Security"
+    },
+    {
+      "name": "size/m"
+    }
+  ],
   "state": "closed",
   "draft": false,
   "merged": true,

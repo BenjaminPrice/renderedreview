@@ -74,6 +74,18 @@ describe("read operations", () => {
       author: { login: "Josh-Cena", type: "User" },
       authorAssociation: "MEMBER",
       mergedAt: "2026-09-22T00:07:45Z",
+      commits: 4,
+      labels: [
+        "Content:CSS",
+        "Content:HTML",
+        "Content:WebExt",
+        "Content:WebAPI",
+        "Content:JS",
+        "Content:Learn",
+        "Content:Media",
+        "Content:Security",
+        "size/m",
+      ],
       head: { sha: HEAD },
       base: { sha: "76c2e04d720aa8260ba7d75788ed96776aac35c6", repository: { fullName: "mdn/content" } },
     });
