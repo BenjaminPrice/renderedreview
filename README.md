@@ -82,6 +82,14 @@ The server must see the public origin in the request URL, because the OAuth redi
 
 GitHub access and refresh tokens are encrypted with AES-256-GCM under `ENCRYPTION_KEY` before they reach the database, and are refreshed on the server shortly before they expire. They never go to the browser. To rotate the key, move the old value to `ENCRYPTION_KEY_PREVIOUS` and set a new `ENCRYPTION_KEY`. Existing rows still decrypt, and each is re-encrypted with the new key the next time its token is refreshed (at most eight hours for GitHub App tokens). Remove `ENCRYPTION_KEY_PREVIOUS` after that.
 
+### Commenting on public repositories
+
+A GitHub App's user token can only write where the app is installed. To let signed-in users comment on and review public pull requests in repositories without the app, register a GitHub **OAuth App** as well ([github.com/settings/applications/new](https://github.com/settings/applications/new), or under an organization's developer settings) and set `GITHUB_OAUTH_CLIENT_ID` / `GITHUB_OAUTH_CLIENT_SECRET`. Set its authorization callback URL to `<public origin>/api/auth/callback/github-public` (locally `http://localhost:3000/api/auth/callback/github-public`). It is optional in every mode except hosted, and does nothing without GitHub App sign-in.
+
+Signed-in users then see **Allow commenting on public repositories** next to their name. It asks GitHub for the `public_repo` scope only (never `repo`) and links the grant to the account they signed in with; authorizing as a different GitHub user is refused. For each write the server uses the GitHub App token where the app is installed on the repository, and the OAuth App token on other public repositories. Private repositories without the app are not supported.
+
+OAuth App tokens do not expire unless you enable expiring tokens in the OAuth App's settings (both work). A non-expiring token is never refreshed, so it stays encrypted under the key it was stored with: after a key rotation, users whose token was under the removed key are asked to allow public commenting again.
+
 ## Scripts
 
 | Command                                            | What it does                                                    |

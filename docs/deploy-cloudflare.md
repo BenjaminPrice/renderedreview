@@ -88,6 +88,24 @@ Signed-in readers use their own GitHub token: 5,000 requests an hour instead of 
 
 `pnpm --filter @rendered-review/web smoke:workers` checks the same wiring locally. It runs the built Worker with fake app credentials and a throwaway local D1, then checks that `/api/auth/viewer` answers and sign-in redirects to GitHub with the right callback URL.
 
+## Enable commenting on public repositories
+
+The GitHub App's user tokens can only write where the app is installed. For public repositories without it, signed-in users link a separate OAuth App that has the `public_repo` scope and nothing broader. This is optional. Without it, commenting works only where the app is installed, and the Worker runs as before.
+
+1. Register an OAuth App for production at <https://github.com/settings/applications/new>, separate from the one you use for local development.
+   - **Application name:** `Rendered Review`. **Homepage URL:** `https://<domain>`.
+   - **Authorization callback URL:** `https://<domain>/api/auth/callback/github-public`. OAuth Apps take a single callback URL.
+   - Leave **Enable Device Flow** off. After registering, generate a client secret.
+2. Set the Worker secrets (from `apps/web`):
+
+   ```sh
+   pnpm exec wrangler secret put GITHUB_OAUTH_CLIENT_ID --env production      # Client ID
+   pnpm exec wrangler secret put GITHUB_OAUTH_CLIENT_SECRET --env production  # the client secret
+   ```
+
+3. Then add `GITHUB_OAUTH_CLIENT_ID` and `GITHUB_OAUTH_CLIENT_SECRET` to production's `secrets.required` in `wrangler.jsonc` (and the expected list in `apps/web/src/wrangler-config.test.ts`). Deploys then fail if they go missing. Don't add them before the secrets exist, or every production deploy is refused.
+4. Verify on `https://<domain>`: once you're signed in, **Allow commenting on public repositories** appears next to your name. It goes to GitHub, asks only for public repository access, and brings you back to the same page, where the action is gone.
+
 ## Deploying
 
 Deploys are manual. Run the **Deploy to Cloudflare** workflow (`.github/workflows/deploy-cloudflare.yml`) from the Actions tab and choose `preview` or `production`. Production only deploys from `main`. The workflow:
