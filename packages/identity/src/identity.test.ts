@@ -276,12 +276,12 @@ describe.each(databases)("GitHub sign-in on %s", (_, open) => {
       pub = await createIdentity({ config: publicConfig, db, baseURL: BASE });
     });
     const userId = async () => (await db.all<{ id: string }>(`SELECT "id" FROM "user"`))[0]!.id;
-    const startLink = (cookie: string | undefined, provider = "github-public") =>
+    const startLink = (cookie: string | undefined, provider = "github-public", extra = {}) =>
       pub.handle(
         new Request(`${BASE}/api/auth/link-social`, {
           method: "POST",
           headers: { origin: BASE, "content-type": "application/json", ...(cookie ? { cookie } : {}) },
-          body: JSON.stringify({ provider, callbackURL: DEEP_LINK }),
+          body: JSON.stringify({ provider, callbackURL: DEEP_LINK, ...extra }),
         }),
       );
     async function link(cookie: string) {
@@ -309,6 +309,16 @@ describe.each(databases)("GitHub sign-in on %s", (_, open) => {
       expect(await pub.getUserPublicWriteToken(await userId(), "github.com")).toBe(oauthToken);
       // The sign-in token is untouched.
       expect(await pub.getUserGitHubToken(await userId(), "github.com")).toBe(tokens.access);
+    });
+
+    it("ignores scopes or authorization parameters sent by the browser", async () => {
+      const { cookie } = await signIn(pub, "/");
+      const start = await startLink(cookie, "github-public", {
+        scopes: ["repo"],
+        additionalParams: { scope: "repo" },
+      });
+      const { url } = (await start.json()) as { url: string };
+      expect(new URL(url).searchParams.get("scope")).toBe("public_repo");
     });
 
     it("stores the OAuth App token only as ciphertext", async () => {
