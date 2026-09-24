@@ -4,7 +4,7 @@ import { renderMarkdown } from "@rendered-review/markdown-domain";
 import type { Element, Nodes } from "hast";
 import { toString } from "hast-util-to-string";
 import { toJsxRuntime } from "hast-util-to-jsx-runtime";
-import { useMemo, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Fragment, jsx, jsxs } from "react/jsx-runtime";
 import { ExternalLink } from "../ui/ExternalLink";
 
@@ -52,6 +52,7 @@ export function Markdown({ source, suggestion }: { source: string; suggestion?: 
           ) : (
             <pre {...props}>{children}</pre>
           ),
+        table: ({ children }) => <CommentTable>{children}</CommentTable>,
       },
     });
   }, [source, original, href]);
@@ -69,12 +70,63 @@ function ProposedChange({ original, proposed, href }: { original: string[] | nul
     <div className="rr-diff" role="group" aria-label="Suggested change">
       <div className="rr-diff-head">
         <span>Suggested change</span>
-        <ExternalLink href={href}>
-          Apply on GitHub
-        </ExternalLink>
+        <ExternalLink href={href}>Apply on GitHub</ExternalLink>
       </div>
       {original?.map((l, i) => row("del", l, i))}
       {proposed.split("\n").map((l, i) => row("add", l, i))}
+    </div>
+  );
+}
+
+/**
+ * A comment table scrolls sideways in the narrow rail, and opens in a modal for easier reading.
+ * The modal shows the same rendered (sanitized) table elements.
+ */
+function CommentTable({ children }: { children?: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const dialog = useRef<HTMLDialogElement>(null);
+  const close = useRef<HTMLButtonElement>(null);
+  const expand = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    dialog.current?.showModal();
+    close.current?.focus();
+  }, [open]);
+  const scroller = (
+    <div className="rr-table-scroll" role="region" aria-label="Scrollable table" tabIndex={0}>
+      <table>{children}</table>
+    </div>
+  );
+  return (
+    <div className="rr-md-table">
+      {scroller}
+      <button ref={expand} type="button" className="rr-btn rr-btn-sm rr-btn-ghost" onClick={() => setOpen(true)}>
+        Expand table
+      </button>
+      {/* Escape and the Close button both end in `close`; the modal makes the page behind it inert. */}
+      <dialog
+        ref={dialog}
+        className="rr-table-dialog"
+        aria-label="Table"
+        // The browser handles Escape here; page shortcuts (closing the slide-over) must not also run.
+        onKeyDown={(event) => event.key === "Escape" && event.stopPropagation()}
+        onClose={() => {
+          setOpen(false);
+          expand.current?.focus();
+        }}
+      >
+        {open && (
+          <>
+            <div className="rr-table-dialog-head">
+              <span>Table</span>
+              <button ref={close} type="button" className="rr-btn rr-btn-sm" onClick={() => dialog.current?.close()}>
+                Close
+              </button>
+            </div>
+            {scroller}
+          </>
+        )}
+      </dialog>
     </div>
   );
 }
