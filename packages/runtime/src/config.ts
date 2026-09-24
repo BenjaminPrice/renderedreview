@@ -81,7 +81,8 @@ export function loadConfig(env: Env, options: LoadConfigOptions = {}): AppConfig
   }
 
   const hostingMode = oneOf("HOSTING_MODE", hostingModes);
-  const accessPolicy = oneOf("ACCESS_POLICY", accessPolicies, "allowlist");
+  // Community installs default to a local allowlist; hosted and dedicated access follows the GitHub App installation.
+  const accessPolicy = oneOf("ACCESS_POLICY", accessPolicies, hostingMode === "community" ? "allowlist" : "installed");
 
   let allowlist: string[] = [];
   if (accessPolicy === "allowlist") {

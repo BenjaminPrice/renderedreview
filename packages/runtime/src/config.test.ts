@@ -65,6 +65,21 @@ describe("loadConfig", () => {
     expect(config.billing).toBeUndefined();
   });
 
+  it("defaults ACCESS_POLICY by hosting mode, and an explicit value overrides it", () => {
+    const withoutPolicy = { ...hosted, ACCESS_POLICY: undefined };
+    expect(loadConfig(withoutPolicy).accessPolicy).toBe("installed");
+    expect(loadConfig({ ...withoutPolicy, HOSTING_MODE: "dedicated" }).accessPolicy).toBe("installed");
+    expect(problems({ HOSTING_MODE: "community" })).toContain(
+      "ACCESS_ALLOWLIST required when ACCESS_POLICY is allowlist (comma-separated owner or owner/repo)",
+    );
+    expect(loadConfig({ ...withoutPolicy, HOSTING_MODE: "community", ACCESS_ALLOWLIST: "acme" }).accessPolicy).toBe(
+      "allowlist",
+    );
+    expect(loadConfig({ ...hosted, ACCESS_POLICY: "allowlist", ACCESS_ALLOWLIST: "acme" }).accessPolicy).toBe(
+      "allowlist",
+    );
+  });
+
   it("derives the GitHub Enterprise Server API URL", () => {
     const config = loadConfig({
       HOSTING_MODE: "community",
@@ -77,7 +92,6 @@ describe("loadConfig", () => {
   it("reports every missing required value in one readable error", () => {
     expect(() => loadConfig({})).toThrow(/^Invalid configuration:\n {2}- HOSTING_MODE is required/);
     expect(problems({ HOSTING_MODE: "hosted" })).toEqual([
-      "ACCESS_ALLOWLIST required when ACCESS_POLICY is allowlist (comma-separated owner or owner/repo)",
       "GITHUB_APP_ID, GITHUB_APP_CLIENT_ID, GITHUB_APP_CLIENT_SECRET, GITHUB_APP_PRIVATE_KEY, GITHUB_APP_WEBHOOK_SECRET required when HOSTING_MODE is hosted",
       "GITHUB_OAUTH_CLIENT_ID, GITHUB_OAUTH_CLIENT_SECRET required when HOSTING_MODE is hosted",
       "DATABASE_URL required when HOSTING_MODE is hosted",

@@ -35,7 +35,7 @@ All builds read the same environment variables (`packages/runtime/src/config.ts`
 | Variable                                                                                                                   | Required                                                                   |
 | -------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
 | `HOSTING_MODE` (`hosted`, `dedicated`, `community`)                                                                        | Always                                                                     |
-| `ACCESS_POLICY` (`disabled`, `allowlist`, `installed`, `all-accessible`)                                                   | Defaults to `allowlist`                                                    |
+| `ACCESS_POLICY` (`disabled`, `allowlist`, `installed`, `all-accessible`)                                                   | Defaults to `allowlist` in community, `installed` otherwise                |
 | `ACCESS_ALLOWLIST` (comma-separated `owner` or `owner/repo`)                                                               | When the policy is `allowlist`                                             |
 | `GITHUB_URL`                                                                                                               | Defaults to `https://github.com`; set it to a GitHub Enterprise Server URL |
 | `GITHUB_APP_ID`, `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_APP_WEBHOOK_SECRET` | Hosted and dedicated; community unless the policy is `disabled`            |
