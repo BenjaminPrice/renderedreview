@@ -22,4 +22,13 @@ export async function checkCsp(url: string): Promise<void> {
   for (const tag of scripts) assert.ok(tag.includes(`nonce="${nonce}"`), `script without nonce: ${tag}`);
   assert.notEqual(nonceOf(await fetch(url)), nonce, "nonce reused across responses");
   console.log(`ok: ${new URL(url).pathname} sends the CSP and nonces all ${scripts.length} scripts`);
+
+  // The diagram renderer frame keeps its own, stricter policy instead of the app's.
+  const frame = await fetch(new URL("/frames/mermaid?script=/assets/mermaid.js", url));
+  const framePolicy = frame.headers.get("content-security-policy") ?? "";
+  for (const directive of ["sandbox allow-scripts", "default-src 'none'", "frame-ancestors 'self'"]) {
+    assert.ok(framePolicy.includes(directive), `frame CSP lacks ${directive}: ${framePolicy}`);
+  }
+  assert.ok(!frame.headers.has("content-security-policy-report-only"), "frame also got the app policy");
+  console.log("ok: /frames/mermaid sends its own sandboxing CSP");
 }

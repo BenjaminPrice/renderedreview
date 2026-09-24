@@ -29,7 +29,9 @@ export function contentSecurityPolicy(config: AppConfig, nonce: string): string 
     // React `style` props render as attributes. They cannot run script, url() loads are still
     // limited by img-src/font-src, and sanitized Markdown never carries them.
     "style-src-attr": ["'unsafe-inline'"],
-    "img-src": ["'self'", ...content],
+    // blob: shows sanitized diagram SVG as images (see diagram/sanitize.ts). Only app code can
+    // create blob URLs; sanitized Markdown cannot reference them.
+    "img-src": ["'self'", "blob:", ...content],
     // Public blobs and metadata are fetched from the browser directly.
     "connect-src": ["'self'", ...api, ...content],
     "font-src": ["'self'"],

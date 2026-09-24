@@ -28,6 +28,11 @@ const ICONS = {
   file: "M4 1.5h5l3 3v10H4zM9 1.5v3h3",
   repo: "M3.5 13V3a1 1 0 0 1 1-1h8v9.5h-8a1 1 0 0 0-1 1.5zM3.5 13a1 1 0 0 0 1 1h8",
   jump: "M2.5 8h11M10 4.5 13.5 8 10 11.5",
+  plus: "M8 3v10M3 8h10",
+  minus: "M3 8h10",
+  fit: "M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10",
+  expand: "M9.5 2.5h4v4M13.5 2.5l-4.5 4.5M6.5 13.5h-4v-4M2.5 13.5 7 9",
+  code: "m5.5 4.5-3.5 3.5 3.5 3.5M10.5 4.5l3.5 3.5-3.5 3.5",
 };
 
 export function Icon({ name, className = "" }: { name: keyof typeof ICONS; className?: string }) {
