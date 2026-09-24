@@ -26,8 +26,10 @@ export interface SidebarProps {
   /** Changed files that are not Markdown; they are reviewed on GitHub. */
   otherCount: number;
   filesUrl: string;
-  /** Unresolved thread count per document path. */
+  /** Count of threads not known to be resolved, per document path. */
   unresolved?: ReadonlyMap<string, number>;
+  /** Whether thread resolution is known; anonymous reads cannot see it, so counts include resolved threads. */
+  resolutionKnown?: boolean;
 }
 
 export function Sidebar(props: SidebarProps) {
@@ -131,6 +133,7 @@ function FileItem({
   tabbable,
   selected,
   unresolved,
+  resolutionKnown,
 }: { doc: DocEntry; href: string; tabbable: boolean } & SidebarProps) {
   const dir = dirOf(doc.path);
   const count = unresolved?.get(doc.path);
@@ -148,7 +151,7 @@ function FileItem({
           status.toLowerCase(),
           doc.previousPath && `from ${doc.previousPath}`,
           doc.status === "deleted" && "historical, base revision",
-          count && `${count} unresolved ${count === 1 ? "comment" : "comments"}`,
+          count && `${count} ${resolutionKnown ? "unresolved " : ""}${count === 1 ? "comment" : "comments"}`,
         ]
           .filter(Boolean)
           .join(", ")}

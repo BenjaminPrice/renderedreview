@@ -166,6 +166,7 @@ function ReviewPage({ pr, id, files }: { pr: PullRequest; id: PrIdentity; files:
           allError={!!tree.error}
           selected={path}
           unresolved={unresolved}
+          resolutionKnown={review.data?.threads.every((t) => t.resolution !== "unknown")}
           otherCount={otherCount}
           filesUrl={`${pr.htmlUrl}/files`}
         />
