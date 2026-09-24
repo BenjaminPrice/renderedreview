@@ -2,7 +2,17 @@
 // The comment rail for one rendered document: threads aligned to their anchors (pinned), a packed
 // list (slide-over), margin markers (collapsed) and optional connector lines.
 import type { RepositoryRef, ThreadPlacement } from "@rendered-review/review-domain";
-import { useCallback, useEffect, useEffectEvent, useLayoutEffect, useRef, useState, type RefObject } from "react";
+import {
+  Fragment,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type RefObject,
+} from "react";
 import { createPortal } from "react-dom";
 import { useShell } from "../ui/AppShell";
 import { layoutCards, THREAD_STATES, threadState, type ThreadState, type Wire } from "./model";
@@ -31,6 +41,11 @@ export interface CommentRailProps {
   /** Controlled active thread; highlight its anchor with the same id. Uncontrolled when omitted. */
   activeThreadId?: string | null;
   onActiveThreadChange?: (threadId: string | null) => void;
+  /**
+   * Other cards aligned with the threads at a block (the composer, drafts). Each `element` must
+   * carry the DOM id `threadDomId(id)`.
+   */
+  extras?: { id: string; blockId: number; element: ReactNode }[];
 }
 
 export function CommentRail(props: CommentRailProps) {
@@ -52,6 +67,11 @@ export function CommentRail(props: CommentRailProps) {
   // Unanchored threads are listed after the aligned ones so they don't push every card off its anchor.
   // rr ids are in document order, so this is also reading and tab order.
   const anchored = visible.filter((p) => p.blocks.length).sort((a, b) => a.blocks[0]!.id - b.blocks[0]!.id);
+  const extras = props.extras ?? [];
+  const aligned = [
+    ...anchored.map((p) => ({ id: p.thread.id, blockId: p.blocks[0]!.id, placement: p, element: undefined })),
+    ...extras.map((e) => ({ ...e, placement: undefined })),
+  ].sort((a, b) => a.blockId - b.blockId);
 
   const alignedRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -65,18 +85,18 @@ export function CommentRail(props: CommentRailProps) {
     const origin = doc.getBoundingClientRect();
     // Right edge of the text column; the document's right padding is the marker and connector gutter.
     const textRight = origin.width - parseFloat(getComputedStyle(doc).paddingRight);
-    const rows = anchored.map((p) => ({
-      id: p.thread.id,
-      anchor: find(p.blocks[0]!.id)?.getBoundingClientRect(),
-      card: document.getElementById(threadDomId(p.thread.id)),
-      count: p.thread.comments.length,
-      state: threadState(p.thread),
+    const rows = aligned.map((a) => ({
+      id: a.id,
+      anchor: find(a.blockId)?.getBoundingClientRect(),
+      card: document.getElementById(threadDomId(a.id)),
+      count: a.placement?.thread.comments.length ?? 0,
+      state: a.placement && threadState(a.placement.thread),
     }));
 
     if (!pinned) {
       box.style.height = "";
       rows.forEach((r) => r.card?.style.removeProperty("top"));
-      const placed = rows.filter((r) => r.anchor);
+      const placed = rows.filter((r) => r.anchor && r.state);
       const { tops } = layoutCards(
         placed.map((r) => ({ id: r.id, anchorTop: r.anchor!.top - origin.top + 2, height: MARKER_HEIGHT })),
         MARKER_GAP,
@@ -84,7 +104,7 @@ export function CommentRail(props: CommentRailProps) {
       setMarkers(
         placed.map((r) => ({
           threadId: r.id,
-          state: r.state,
+          state: r.state!,
           count: r.count,
           top: tops.get(r.id)!,
           left: textRight + 8,
@@ -125,7 +145,7 @@ export function CommentRail(props: CommentRailProps) {
     );
     setMarkers([]);
     // `anchored` is derived from these props each render.
-  }, [doc, getAnchorElement, pinned, active, placements, filters]);
+  }, [doc, getAnchorElement, pinned, active, placements, filters, props.extras]);
 
   useLayoutEffect(relayout, [relayout]);
 
@@ -231,13 +251,11 @@ export function CommentRail(props: CommentRailProps) {
 
   return (
     <div className="rr-rail-body">
-      {!placements.length ? (
-        <p className="rr-rail-empty">No review comments on this document.</p>
-      ) : (
-        !visible.length && <p className="rr-rail-empty">No comments match the selected filters.</p>
-      )}
+      {!placements.length
+        ? !extras.length && <p className="rr-rail-empty">No review comments on this document.</p>
+        : !visible.length && <p className="rr-rail-empty">No comments match the selected filters.</p>}
       <div ref={alignedRef} className="rr-rail-aligned">
-        {anchored.map(card)}
+        {aligned.map((a) => (a.placement ? card(a.placement) : <Fragment key={a.id}>{a.element}</Fragment>))}
       </div>
       {unanchored.length > 0 && (
         <section className="rr-rail-group" aria-labelledby="rr-rail-unanchored">

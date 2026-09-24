@@ -844,7 +844,7 @@ it("keeps an annotation copied from another pull request in the conversation, ma
   expect(within(item).getByText("indicates that the client")).toBeTruthy();
 });
 
-it("turns a text selection into a pending comment on its source lines", async () => {
+it("turns a text selection into a new comment, which needs sign-in where the server offers none", async () => {
   renderPage(`?doc=${encodeURIComponent(INDEX)}`);
   const article = await screen.findByRole("article", { name: "Rendered document" });
   const text = [...article.querySelectorAll("p")]
@@ -858,7 +858,7 @@ it("turns a text selection into a pending comment on its source lines", async ()
 
   const pending = screen.getByRole("region", { name: "New comment" });
   expect(within(pending).getByText("grouped")).toBeTruthy();
-  expect(pending.textContent).toContain("line 10");
+  expect(within(pending).getByText(/Commenting needs GitHub sign-in/)).toBeTruthy();
   await userEvent.click(within(pending).getByRole("button", { name: "Cancel" }));
   expect(screen.queryByRole("region", { name: "New comment" })).toBeNull();
   document.getSelection()!.removeAllRanges();

@@ -67,6 +67,22 @@ describe("openBrowserCache", () => {
     expect(deleted).toEqual(["rendered-review-v1", "rendered-review-v2"]);
   });
 
+  it("adds the drafts store to a database created before it existed, keeping cached data", async () => {
+    const request = indexedDB.open("rendered-review", 1);
+    request.onupgradeneeded = () => {
+      for (const store of ["responses", "objects", "derived", "prefs", "recent"])
+        request.result.createObjectStore(store);
+      request.transaction!.objectStore("objects").put("# Kept", "k");
+    };
+    await new Promise((resolve) => (request.onsuccess = resolve));
+    request.result.close();
+
+    const cache = openBrowserCache();
+    expect(await cache.get("objects", "k")).toBe("# Kept");
+    await cache.set("drafts", "github.com/42/7", [{ id: "d1" }], pub);
+    expect(await openBrowserCache().get("drafts", "github.com/42/7")).toEqual([{ id: "d1" }]);
+  });
+
   it.each([
     ["missing", () => vi.stubGlobal("indexedDB", undefined)],
     [
