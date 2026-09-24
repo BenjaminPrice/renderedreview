@@ -1564,8 +1564,8 @@ samp {
 .rr-pr-avatars .rr-avatar {
   width: 22px;
   height: 22px;
-  margin-right: -5px;
-  font-size: 9px;
+  margin-right: -2px;
+  font-size: 8.5px;
   box-shadow: 0 0 0 2px var(--rr-surface-sunken);
 }
 .rr-pr-entry[aria-current="page"] .rr-pr-avatars .rr-avatar {
@@ -1904,7 +1904,6 @@ samp {
 }
 .rr-docsum-path {
   display: block;
-  overflow-wrap: anywhere;
 }
 .rr-docsum-note {
   margin: 4px 16px 16px;

@@ -318,7 +318,16 @@ export function DocsWithComments({ threads, docs }: { threads: NativeThread[]; d
                   {STATUS_LETTER[status]}
                 </span>
                 <span className="rr-file-name">
-                  <span className="rr-docsum-path">{path}</span>
+                  <span className="rr-docsum-path">
+                    {/* Long paths wrap after a slash. */}
+                    {path.split("/").map((part, i) => (
+                      <span key={i}>
+                        {i > 0 && "/"}
+                        {i > 0 && <wbr />}
+                        {part}
+                      </span>
+                    ))}
+                  </span>
                   <span className="rr-file-sub">{summary}</span>
                 </span>
                 <span className="rr-file-comments" aria-hidden="true">
