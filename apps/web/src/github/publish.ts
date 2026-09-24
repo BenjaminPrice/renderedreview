@@ -14,8 +14,10 @@ import {
   RateLimitError,
 } from "@rendered-review/github-integration";
 import type { Identity } from "@rendered-review/identity";
+import { log } from "@rendered-review/runtime";
 import { forRepository, type WriteOperation } from "./broker";
 import type { InstallationCheck } from "./installation";
+import { meteredFetch } from "./metrics";
 import { parseProxyPath, REPO_SEGMENT } from "./proxy";
 import { REQUESTED_WITH } from "./user-proxy";
 
@@ -320,12 +322,12 @@ async function submitReview(
 
 export async function publishToGitHub(request: Request, deps: Deps): Promise<Response> {
   try {
-    const { status, body } = await handle(request, deps);
-    console.info("github write: published");
+    const { status, body } = await handle(request, { ...deps, fetch: meteredFetch(deps.fetch ?? fetch) });
+    log.info("github.publish", { category: "published", status });
     return Response.json(body, { status, headers: PRIVATE });
   } catch (error) {
     if (!(error instanceof Refusal)) throw error;
-    console.info(`github write: ${error.code}`);
+    log.info("github.publish", { category: error.code, status: error.status });
     return Response.json(error.body, { status: error.status, headers: PRIVATE });
   }
 }

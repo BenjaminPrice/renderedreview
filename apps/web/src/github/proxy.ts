@@ -4,6 +4,7 @@
 // operator's public read token, and never serves a private repository. Never an open proxy. Web Request/Response/fetch only, so it runs on Node and Workers alike.
 import type { AppConfig } from "@rendered-review/runtime";
 import { forRepository } from "./broker";
+import { meteredFetch } from "./metrics";
 
 export const PROXY_PREFIX = "/api/github/public/";
 
@@ -140,7 +141,7 @@ export async function proxyPublicGitHub(
   {
     allowedHosts,
     readToken,
-    fetch: fetchFn = fetch,
+    fetch: unmetered = fetch,
   }: {
     allowedHosts: string[];
     /** Operator token, sent only to its own host. */
@@ -149,6 +150,7 @@ export async function proxyPublicGitHub(
   },
 ): Promise<Response> {
   if (request.method !== "GET") return reject(405, "Method not allowed");
+  const fetchFn = meteredFetch(unmetered);
   const url = new URL(request.url);
   const target = parseProxyPath(url, PROXY_PREFIX, allowedHosts);
   if (target instanceof Response) return target;

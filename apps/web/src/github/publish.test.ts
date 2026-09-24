@@ -328,7 +328,7 @@ describe("comment", () => {
       comment({ body: withMarker("more secret words") }),
     );
     expect(logs.events()).toContainEqual({ level: "info", event: "github.publish", category: "stale-head", status: 409 });
-    expect(logs.events()).toContainEqual({ level: "info", event: "github.publish", category: "published", status: 200 });
+    expect(logs.events()).toContainEqual({ level: "info", event: "github.publish", category: "published", status: 201 });
     expect(logs.events()).toContainEqual(
       expect.objectContaining({ event: "github.request", method: "POST", route: "/repos/:/:/pulls/:/comments", status: 201 }),
     );
