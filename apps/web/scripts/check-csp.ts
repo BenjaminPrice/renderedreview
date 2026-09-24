@@ -12,7 +12,7 @@ export async function checkCsp(url: string): Promise<void> {
   const nonce = nonceOf(page);
   assert.ok(nonce, `no script nonce in CSP: ${csp}`);
   assert.match(csp, /script-src 'self' 'nonce-[^';]+';/);
-  for (const directive of ["object-src 'none'", "base-uri 'none'", "frame-ancestors 'none'"]) {
+  for (const directive of ["object-src 'none'", "base-uri 'none'", "frame-ancestors 'none'", "worker-src 'self';"]) {
     assert.ok(csp.includes(directive), `CSP lacks ${directive}: ${csp}`);
   }
   // Links out (GitHub, external images) must not reveal which PR the reader was viewing.

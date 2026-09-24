@@ -35,6 +35,8 @@ export function contentSecurityPolicy(config: AppConfig, nonce: string): string 
     // Public blobs and metadata are fetched from the browser directly.
     "connect-src": ["'self'", ...api, ...content],
     "font-src": ["'self'"],
+    // The render Worker (document/render-worker.ts) and the service worker, both same-origin.
+    "worker-src": ["'self'"],
     "object-src": ["'none'"],
     "base-uri": ["'none'"],
     "form-action": ["'self'"],

@@ -9,8 +9,8 @@ import { build, defineConfig, type Plugin } from "vite";
 
 // Not precached: diagram renderer scripts (Mermaid's browser build and the `*-frame.ts` bundles,
 // up to a megabyte each) run only in the renderer frames, and are fetched only when a document
-// has such a diagram.
-const ON_DEMAND = /(^|\/)(mermaid\.min|[\w-]+-frame)-[^/]+\.js$/;
+// has such a diagram. The render Worker is fetched only for large documents.
+const ON_DEMAND = /(^|\/)(mermaid\.min|[\w-]+-frame|render-worker)-[^/]+\.js$/;
 
 // Builds src/sw/sw.ts into /sw.js with the client build's file list inlined. Start allows
 // only one client entry, so the worker is a separate nested build. Its version is a hash
