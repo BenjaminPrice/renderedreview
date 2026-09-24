@@ -1,14 +1,18 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // @vitest-environment happy-dom
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { act, cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { composeDraftBody, prepareAnnotation } from "./compose";
 import { appThread, comment, HEAD, issueComment, lineAnchor, OLD, repository, thread } from "./fixtures";
 import { expectNewTab } from "../test-utils";
+import type { ThreadActions } from "./thread-actions";
 import { ThreadCard } from "./ThreadCard";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 const card = (t: Parameters<typeof ThreadCard>[0]["thread"]) =>
   render(<ThreadCard thread={t} repository={repository} />).container.firstElementChild as HTMLElement;
@@ -148,6 +152,168 @@ describe("resolved threads", () => {
     await userEvent.click(summary);
     expect((el as HTMLDetailsElement).open).toBe(true);
     expect(within(el).getByText("Done")).toBeTruthy();
+  });
+});
+
+function withActions(t: Parameters<typeof ThreadCard>[0]["thread"], over: Partial<ThreadActions> = {}) {
+  const actions: ThreadActions = {
+    signedIn: true,
+    onSignIn: vi.fn(),
+    reply: vi.fn(async () => {}),
+    setResolved: vi.fn(async () => {}),
+    ...over,
+  };
+  const view = render(<ThreadCard thread={t} repository={repository} actions={actions} />);
+  const rerender = (next: typeof t) =>
+    view.rerender(<ThreadCard thread={next} repository={repository} actions={actions} />);
+  return { actions, rerender };
+}
+
+const REPLY = "Reply to thread by alice, GitHub line comment · L3";
+
+describe("replies", () => {
+  it("opens a reply box with focus in it, sends with Ctrl+Enter and returns focus to Reply", async () => {
+    const t = thread("t1", lineAnchor(3), "unresolved");
+    const { actions } = withActions(t);
+    await userEvent.click(screen.getByRole("button", { name: REPLY }));
+    const box = screen.getByRole("textbox", { name: "Reply to thread by alice" });
+    expect(document.activeElement).toBe(box);
+    await userEvent.type(box, "Thanks{Control>}{Enter}{/Control}");
+    expect(actions.reply).toHaveBeenCalledWith(t, "Thanks");
+    expect(screen.queryByRole("textbox")).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: REPLY }));
+  });
+
+  it("previews the reply as Markdown", async () => {
+    withActions(thread("t1", lineAnchor(3), "unresolved"));
+    await userEvent.click(screen.getByRole("button", { name: REPLY }));
+    await userEvent.type(screen.getByRole("textbox"), "Very **bold**");
+    await userEvent.click(screen.getByRole("button", { name: "Preview" }));
+    expect(screen.getByText("bold").tagName).toBe("STRONG");
+    expect(screen.queryByRole("textbox")).toBeNull();
+  });
+
+  it("cancels on Escape, asking before discarding what was written", async () => {
+    const confirm = vi.fn(() => false);
+    vi.stubGlobal("confirm", confirm);
+    withActions(thread("t1", lineAnchor(3), "unresolved"));
+    await userEvent.click(screen.getByRole("button", { name: REPLY }));
+    await userEvent.keyboard("{Escape}");
+    expect(confirm).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: REPLY }));
+
+    await userEvent.click(screen.getByRole("button", { name: REPLY }));
+    await userEvent.type(screen.getByRole("textbox"), "Half a thought");
+    await userEvent.keyboard("{Escape}");
+    expect(confirm).toHaveBeenCalledWith("Discard this reply?");
+    expect(screen.getByRole("textbox")).toHaveProperty("value", "Half a thought");
+    confirm.mockReturnValue(true);
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("textbox")).toBeNull();
+  });
+
+  it("sends once while a reply is being posted", async () => {
+    let finish!: () => void;
+    const reply = vi.fn(() => new Promise<void>((resolve) => (finish = resolve)));
+    withActions(thread("t1", lineAnchor(3), "unresolved"), { reply });
+    await userEvent.click(screen.getByRole("button", { name: REPLY }));
+    await userEvent.type(screen.getByRole("textbox"), "Once");
+    const send = screen.getByRole("button", { name: "Reply" });
+    await userEvent.click(send);
+    await userEvent.keyboard("{Control>}{Enter}{/Control}");
+    expect(send).toHaveProperty("disabled", true);
+    expect(reply).toHaveBeenCalledTimes(1);
+    await act(async () => finish());
+    expect(screen.queryByRole("textbox")).toBeNull();
+  });
+
+  it("does not send an empty reply", async () => {
+    const { actions } = withActions(thread("t1", lineAnchor(3), "unresolved"));
+    await userEvent.click(screen.getByRole("button", { name: REPLY }));
+    expect(screen.getByRole("button", { name: "Reply" })).toHaveProperty("disabled", true);
+    await userEvent.keyboard("{Control>}{Enter}{/Control}");
+    expect(actions.reply).not.toHaveBeenCalled();
+  });
+
+  it("shows a refusal inline and keeps the text", async () => {
+    const reply = vi.fn(async () => {
+      throw new Error("GitHub's rate limit was reached. Try again later.");
+    });
+    withActions(thread("t1", lineAnchor(3), "unresolved"), { reply });
+    await userEvent.click(screen.getByRole("button", { name: REPLY }));
+    await userEvent.type(screen.getByRole("textbox"), "Try");
+    await userEvent.click(screen.getByRole("button", { name: "Reply" }));
+    expect((await screen.findByRole("alert")).textContent).toBe("GitHub's rate limit was reached. Try again later.");
+    expect(screen.getByRole("textbox")).toHaveProperty("value", "Try");
+  });
+
+  it("says where an application thread's reply goes", async () => {
+    withActions(appThread());
+    await userEvent.click(screen.getByRole("button", { name: "Reply to thread by alice, Selected text · L3" }));
+    expect(screen.getByText("Will post as PR conversation comment")).toBeTruthy();
+  });
+
+  it("offers sign-in instead of reply and resolve to signed-out readers", async () => {
+    const { actions } = withActions(appThread(), { signedIn: false });
+    await userEvent.click(screen.getByRole("button", { name: "Sign in to reply" }));
+    expect(actions.onSignIn).toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: /^(Reply|Resolve)/ })).toBeNull();
+  });
+
+  it("shows no reply controls when sign-in isn't offered", () => {
+    withActions(thread("t1", lineAnchor(3), "unknown"), { signedIn: false, onSignIn: undefined });
+    expect(screen.queryByRole("button")).toBeNull();
+  });
+});
+
+describe("resolution controls", () => {
+  it("resolves an open thread and moves focus to it once it collapses", async () => {
+    const t = thread("t1", lineAnchor(3), "unresolved");
+    const { actions, rerender } = withActions(t);
+    await userEvent.click(screen.getByRole("button", { name: "Resolve thread by alice, GitHub line comment · L3" }));
+    expect(actions.setResolved).toHaveBeenCalledWith(t, true);
+    rerender({ ...t, resolution: "resolved" });
+    expect(document.activeElement).toBe(screen.getByText("Resolved").closest("summary"));
+  });
+
+  it("reopens a resolved thread", async () => {
+    const t = thread("t1", lineAnchor(3), "resolved");
+    const { actions } = withActions(t);
+    await userEvent.click(screen.getByText("Resolved").closest("summary")!);
+    await userEvent.click(screen.getByRole("button", { name: "Reopen thread by alice, GitHub line comment · L3" }));
+    expect(actions.setResolved).toHaveBeenCalledWith(t, false);
+  });
+
+  it("resolves once while pending and shows a refusal inline", async () => {
+    let fail!: (e: Error) => void;
+    const setResolved = vi.fn(() => new Promise<void>((_, reject) => (fail = reject)));
+    withActions(thread("t1", lineAnchor(3), "unresolved"), { setResolved });
+    const resolve = screen.getByRole("button", { name: /^Resolve thread/ });
+    await userEvent.click(resolve);
+    await userEvent.click(resolve);
+    expect(setResolved).toHaveBeenCalledTimes(1);
+    expect(resolve.getAttribute("aria-disabled")).toBe("true");
+    await act(async () => fail(new Error("Your GitHub sign-in has expired. Sign in again, then retry.")));
+    expect(screen.getByRole("alert").textContent).toBe("Your GitHub sign-in has expired. Sign in again, then retry.");
+    expect(resolve.getAttribute("aria-disabled")).toBeNull();
+  });
+
+  it("explains why a thread can't be resolved when its state is unknown", async () => {
+    const { actions } = withActions(thread("t1", lineAnchor(3), "unknown"));
+    const resolve = screen.getByRole("button", { name: /^Resolve thread/ });
+    expect(resolve.getAttribute("aria-disabled")).toBe("true");
+    expect(resolve.getAttribute("aria-describedby")).toBeTruthy();
+    expect(document.getElementById(resolve.getAttribute("aria-describedby")!)!.textContent).toBe(
+      "GitHub didn't report whether this thread is resolved.",
+    );
+    await userEvent.click(resolve);
+    expect(actions.setResolved).not.toHaveBeenCalled();
+  });
+
+  it("hides Resolve while a reply is being written, so the card can't collapse over it", async () => {
+    withActions(thread("t1", lineAnchor(3), "unresolved"));
+    await userEvent.click(screen.getByRole("button", { name: REPLY }));
+    expect(screen.queryByRole("button", { name: /^Resolve/ })).toBeNull();
   });
 });
 

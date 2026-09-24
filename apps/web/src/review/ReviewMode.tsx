@@ -24,6 +24,7 @@ import { DraftCard } from "./DraftCard";
 import { type Draft, useDrafts } from "./drafts";
 import { type Publisher, publishErrorMessage, useGitHubPublisher } from "./publish";
 import { SubmitReview } from "./SubmitReview";
+import { useThreadActions } from "./thread-actions";
 import { threadDomId } from "./ThreadCard";
 
 const AS_FILE: Representation = {
@@ -55,6 +56,14 @@ export function useReviewMode({ pr, id, files, entry, doc, viewer }: ReviewModeI
   // Outcome worth telling after the composer closes; kept until dismissed or the next comment.
   const [notice, setNotice] = useState<string | null>(null);
   const signedIn = !!viewer?.signedIn;
+  // Screen-reader announcement of a thread reply or resolution; the card itself shows failures.
+  // Keyed by count, so the same message twice is announced twice.
+  const [announcement, setAnnouncement] = useState({ text: "", n: 0 });
+  const threadActions = useThreadActions(id, {
+    signedIn,
+    onSignIn: viewer?.signInEnabled ? () => void signIn() : undefined,
+    announce: (text) => setAnnouncement((a) => ({ text, n: a.n + 1 })),
+  });
 
   /** Publishes `comment` on `annotation`, as a file comment if GitHub refuses the diff lines. */
   async function publishNow(
@@ -226,9 +235,13 @@ export function useReviewMode({ pr, id, files, entry, doc, viewer }: ReviewModeI
     /** The selection to highlight in the document: the one being commented on or edited. */
     highlighted: composing ?? editedDraft?.selection,
     extras,
+    threadActions,
     /** Always rendered, so screen readers announce what appears in it. */
     status: (
       <div className="rr-rail-status" role="status" aria-label="Publishing status">
+        <span key={announcement.n} className="rr-sr-only">
+          {announcement.text}
+        </span>
         {notice && (
           <p className="rr-composer-note">
             {notice}{" "}

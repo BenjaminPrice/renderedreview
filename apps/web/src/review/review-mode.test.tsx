@@ -346,6 +346,73 @@ it("asks GitHub for public-repository comment permission when publishing needs i
   expect(posted.find((p) => p.url === "/api/auth/link-social")!.body).toMatchObject({ provider: "github-public" });
 });
 
+// hamishwillee's suggestion on index.md, moved onto head line 30 so its thread is current.
+const SUGGESTION = 3945848286;
+function suggestionThread(isResolved: boolean) {
+  const comments = JSON.parse(fixture("review-comments.json")) as Record<string, unknown>[];
+  Object.assign(
+    comments.find((c) => c.id === SUGGESTION)!,
+    { line: 30, commit_id: HEAD },
+  );
+  responses[`${API}/pulls/45377/comments?per_page=100`] = JSON.stringify(comments);
+  responses[`${API}/pulls/45377/review-threads`] = JSON.stringify([
+    {
+      nodeId: "PRRT_suggestion",
+      isResolved,
+      isOutdated: false,
+      resolvedBy: null,
+      path: INDEX,
+      line: 30,
+      originalLine: 30,
+      startLine: null,
+      originalStartLine: null,
+      diffSide: "RIGHT",
+      subjectType: "LINE",
+      commentIds: [SUGGESTION],
+    },
+  ]);
+}
+const suggestionCard = async () =>
+  within(await screen.findByRole("complementary", { name: /Comments/ })).findByRole("region", {
+    name: /GitHub line comment · L30, by hamishwillee/,
+  });
+
+it("replies to a review thread and resolves it, announcing each outcome", async () => {
+  suggestionThread(false);
+  renderPage();
+  const card = await suggestionCard();
+  await userEvent.click(within(card).getByRole("button", { name: /^Reply to thread by hamishwillee/ }));
+  responses[`${WRITE}/reply`] = JSON.stringify({ comment: { id: 1 } });
+  await userEvent.type(within(card).getByRole("textbox", { name: "Reply to thread by hamishwillee" }), "Agreed.");
+  await userEvent.click(within(card).getByRole("button", { name: "Reply" }));
+  const status = screen.getByRole("status", { name: "Publishing status" });
+  await vi.waitFor(() => expect(status.textContent).toContain("Reply posted"));
+  expect(posted.at(-1)).toEqual({
+    url: `${WRITE}/reply`,
+    body: { inReplyTo: SUGGESTION, body: "Agreed.", expectedHeadOid: HEAD },
+  });
+
+  responses[`${WRITE}/resolve`] = JSON.stringify({ thread: { nodeId: "PRRT_suggestion", isResolved: true } });
+  suggestionThread(true);
+  await userEvent.click(within(card).getByRole("button", { name: /^Resolve thread by hamishwillee/ }));
+  await vi.waitFor(() => expect(status.textContent).toContain("Thread resolved"));
+  expect(posted.at(-1)).toEqual({
+    url: `${WRITE}/resolve`,
+    body: { threadNodeId: "PRRT_suggestion", resolved: true },
+  });
+  // Refetched as resolved: the thread collapses in place.
+  expect(await screen.findByLabelText(/^Resolved thread by hamishwillee/)).toBeTruthy();
+});
+
+it("signed out, thread cards offer sign-in instead of reply and resolve", async () => {
+  responses["/api/auth/viewer"] = "null";
+  suggestionThread(false);
+  renderPage();
+  const card = await suggestionCard();
+  expect(within(card).getByRole("button", { name: "Sign in to reply" })).toBeTruthy();
+  expect(within(card).queryByRole("button", { name: /^(Reply|Resolve)/ })).toBeNull();
+});
+
 const LINE_26 =
   "  - : This interim response indicates that the client should continue the request or ignore the response if the request is already finished.";
 
