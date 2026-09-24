@@ -14,6 +14,7 @@ import { Route as HealthRouteImport } from './routes/health'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiGithubPublicSplatRouteImport } from './routes/api/github/public/$'
 import { Route as ApiGithubUserSplatRouteImport } from './routes/api/github/user/$'
+import { Route as ApiGithubWriteSplatRouteImport } from './routes/api/github/write/$'
 import { Route as HostOwnerRepoPullNumberRouteImport } from './routes/$host.$owner.$repo.pull.$number'
 
 const IndexRoute = IndexRouteImport.update({
@@ -41,6 +42,11 @@ const ApiGithubUserSplatRoute = ApiGithubUserSplatRouteImport.update({
   path: '/api/github/user/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiGithubWriteSplatRoute = ApiGithubWriteSplatRouteImport.update({
+  id: '/api/github/write/$',
+  path: '/api/github/write/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const HostOwnerRepoPullNumberRoute = HostOwnerRepoPullNumberRouteImport.update({
   id: '/$host/$owner/$repo/pull/$number',
   path: '/$host/$owner/$repo/pull/$number',
@@ -53,6 +59,7 @@ export interface FileRoutesByFullPath {
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/github/public/$': typeof ApiGithubPublicSplatRoute
   '/api/github/user/$': typeof ApiGithubUserSplatRoute
+  '/api/github/write/$': typeof ApiGithubWriteSplatRoute
   '/$host/$owner/$repo/pull/$number': typeof HostOwnerRepoPullNumberRoute
 }
 export interface FileRoutesByTo {
@@ -61,6 +68,7 @@ export interface FileRoutesByTo {
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/github/public/$': typeof ApiGithubPublicSplatRoute
   '/api/github/user/$': typeof ApiGithubUserSplatRoute
+  '/api/github/write/$': typeof ApiGithubWriteSplatRoute
   '/$host/$owner/$repo/pull/$number': typeof HostOwnerRepoPullNumberRoute
 }
 export interface FileRoutesById {
@@ -70,6 +78,7 @@ export interface FileRoutesById {
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/github/public/$': typeof ApiGithubPublicSplatRoute
   '/api/github/user/$': typeof ApiGithubUserSplatRoute
+  '/api/github/write/$': typeof ApiGithubWriteSplatRoute
   '/$host/$owner/$repo/pull/$number': typeof HostOwnerRepoPullNumberRoute
 }
 export interface FileRouteTypes {
@@ -80,6 +89,7 @@ export interface FileRouteTypes {
     | '/api/auth/$'
     | '/api/github/public/$'
     | '/api/github/user/$'
+    | '/api/github/write/$'
     | '/$host/$owner/$repo/pull/$number'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -88,6 +98,7 @@ export interface FileRouteTypes {
     | '/api/auth/$'
     | '/api/github/public/$'
     | '/api/github/user/$'
+    | '/api/github/write/$'
     | '/$host/$owner/$repo/pull/$number'
   id:
     | '__root__'
@@ -96,6 +107,7 @@ export interface FileRouteTypes {
     | '/api/auth/$'
     | '/api/github/public/$'
     | '/api/github/user/$'
+    | '/api/github/write/$'
     | '/$host/$owner/$repo/pull/$number'
   fileRoutesById: FileRoutesById
 }
@@ -105,6 +117,7 @@ export interface RootRouteChildren {
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiGithubPublicSplatRoute: typeof ApiGithubPublicSplatRoute
   ApiGithubUserSplatRoute: typeof ApiGithubUserSplatRoute
+  ApiGithubWriteSplatRoute: typeof ApiGithubWriteSplatRoute
   HostOwnerRepoPullNumberRoute: typeof HostOwnerRepoPullNumberRoute
 }
 
@@ -145,6 +158,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiGithubUserSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/github/write/$': {
+      id: '/api/github/write/$'
+      path: '/api/github/write/$'
+      fullPath: '/api/github/write/$'
+      preLoaderRoute: typeof ApiGithubWriteSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/$host/$owner/$repo/pull/$number': {
       id: '/$host/$owner/$repo/pull/$number'
       path: '/$host/$owner/$repo/pull/$number'
@@ -161,6 +181,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiGithubPublicSplatRoute: ApiGithubPublicSplatRoute,
   ApiGithubUserSplatRoute: ApiGithubUserSplatRoute,
+  ApiGithubWriteSplatRoute: ApiGithubWriteSplatRoute,
   HostOwnerRepoPullNumberRoute: HostOwnerRepoPullNumberRoute,
 }
 export const routeTree = rootRouteImport
