@@ -23,6 +23,28 @@ const MUTABLE = new RegExp(
 );
 // Trees and blobs are only proxied by full OID, so the content behind a URL can never change.
 const IMMUTABLE = new RegExp(String.raw`^${REPO}/git/(?:trees|blobs)/${OID}$`);
+// A file at a commit, by full commit OID only (`ref`), so it is as immutable as a blob.
+const CONTENTS = new RegExp(String.raw`^${REPO}/contents/(.+)$`);
+const FULL_OID = new RegExp(`^${OID}$`);
+/**
+ * The file path re-encoded from its decoded names, or `undefined` unless every segment decodes
+ * to a plain name: no traversal, no smuggled separators, and no `%` left over (a double-encoded
+ * name could decode again upstream). What was validated is exactly what is forwarded.
+ */
+function plainFilePath(path: string): string | undefined {
+  const names: string[] = [];
+  for (const segment of path.split("/")) {
+    let name: string;
+    try {
+      name = decodeURIComponent(segment);
+    } catch {
+      return undefined;
+    }
+    if (name === "" || name === "." || name === ".." || /[/\\%\0]/.test(name)) return undefined;
+    names.push(encodeURIComponent(name));
+  }
+  return names.join("/");
+}
 const QUERY: Record<string, RegExp> = { per_page: /^\d{1,3}$/, page: /^\d{1,6}$/, recursive: /^1$/ };
 export const ACCEPT = new Set(["application/vnd.github+json", "application/vnd.github.raw+json"]);
 const FORWARD_RESPONSE = [
@@ -40,11 +62,23 @@ const FORWARD_RESPONSE = [
 
 export const apiBase = (host: string) => (host === "github.com" ? "https://api.github.com" : `https://${host}/api/v3`);
 
-/** Classifies `path` (no leading slash) and query; `undefined` when not allowlisted. */
-export function classifyPath(path: string, query: URLSearchParams): "immutable" | "mutable" | undefined {
+/**
+ * Classifies `path` (no leading slash) and query; `undefined` when not allowlisted. `path` is the
+ * canonical form to forward.
+ */
+export function classifyPath(
+  path: string,
+  query: URLSearchParams,
+): { kind: "immutable" | "mutable"; path: string } | undefined {
+  const contents = CONTENTS.exec(path);
+  if (contents) {
+    const [only, ...rest] = query;
+    const file = only?.[0] === "ref" && FULL_OID.test(only[1]) && rest.length === 0 && plainFilePath(contents[1]!);
+    return file ? { kind: "immutable", path: path.slice(0, -contents[1]!.length) + file } : undefined;
+  }
   for (const [key, value] of query) if (!QUERY[key]?.test(value)) return undefined;
-  if (IMMUTABLE.test(path)) return "immutable";
-  if (MUTABLE.test(path)) return "mutable";
+  if (IMMUTABLE.test(path)) return { kind: "immutable", path };
+  if (MUTABLE.test(path)) return { kind: "mutable", path };
   return undefined;
 }
 
@@ -118,9 +152,10 @@ export async function proxyPublicGitHub(
   const url = new URL(request.url);
   const target = parseProxyPath(url, PROXY_PREFIX, allowedHosts);
   if (target instanceof Response) return target;
-  const { host, path } = target;
-  const kind = classifyPath(path, url.searchParams);
-  if (!kind) return reject(403, "Path not allowed");
+  const allowed = classifyPath(target.path, url.searchParams);
+  if (!allowed) return reject(403, "Path not allowed");
+  const { host } = target;
+  const { kind, path } = allowed;
 
   const accept = request.headers.get("accept") ?? "";
   const headers: Record<string, string> = {

@@ -9,7 +9,7 @@ import { toJsxRuntime } from "hast-util-to-jsx-runtime";
 import { useMemo, type MouseEvent, type Ref } from "react";
 import { Fragment, jsx, jsxs } from "react/jsx-runtime";
 import { isMarkdownPath } from "../pr-url";
-import { blobQuery, type PrIdentity, treeQuery } from "../github/queries";
+import { blobQuery, fileAtCommitQuery, type PrIdentity } from "../github/queries";
 import { type ChangeKind, changedLines, type DocEntry, type LineChange, sourceUrl, splitLines } from "./docs";
 
 // ponytail: fixed size cap on the main thread; move parsing to a cancellable Web Worker and
@@ -68,10 +68,9 @@ export function useDocument(id: PrIdentity, entry: DocEntry | undefined): Loaded
   const deleted = entry?.status === "deleted";
   const diffBase = entry?.status === "modified" || entry?.status === "renamed";
   const head = useQuery({ ...blobQuery(id, entry?.oid ?? ""), enabled: !!entry });
-  const baseTree = useQuery({ ...treeQuery(id, id.baseSha), enabled: diffBase });
-  const basePath = entry?.previousPath ?? entry?.path;
-  const baseOid = diffBase ? baseTree.data?.entries.find((e) => e.path === basePath)?.oid : undefined;
-  const base = useQuery({ ...blobQuery(id, baseOid ?? ""), enabled: !!baseOid });
+  // Read by path: listing the base tree to find the blob costs megabytes on large repositories.
+  const basePath = entry?.previousPath ?? entry?.path ?? "";
+  const base = useQuery({ ...fileAtCommitQuery(id, id.baseSha, basePath), enabled: diffBase });
 
   const source = head.data;
   const sha = deleted ? id.baseSha : id.headSha;

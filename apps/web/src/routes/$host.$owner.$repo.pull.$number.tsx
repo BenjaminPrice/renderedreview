@@ -13,7 +13,7 @@ import { createFileRoute, Link, notFound, stripSearchParams, useLocation } from 
 import { createServerFn } from "@tanstack/react-start";
 import { useEffect, useEffectEvent, useMemo, useState, useSyncExternalStore } from "react";
 import { MAX_RENDER_CHARS, nodeElement, RawDocument, RenderedDocument, useDocument } from "../document/document";
-import { allDocs, changedDocs, selectedPath, sourceUrl } from "../document/docs";
+import { allDocs, changedDocs, sourceUrl } from "../document/docs";
 import {
   DocsWithComments,
   docsWithComments,
@@ -48,6 +48,7 @@ import {
   type ThreadState,
 } from "../review";
 import { AppShell } from "../ui/AppShell";
+import { GuestNotice } from "../ui/GuestNotice";
 import { signIn } from "../ui/Viewer";
 import { parsePrParams, validatePrSearch } from "../pr-url";
 
@@ -115,10 +116,13 @@ function ReviewPage({ pr, id, files }: { pr: PullRequest; id: PrIdentity; files:
   const search = Route.useSearch();
   const { docs: changed, otherCount } = useMemo(() => changedDocs(files), [files]);
   const review = useReview(id);
-  // Overview: asked for, a `thread` link to a conversation comment, or nothing else to show.
+  // The active thread lives in the URL (`thread`: root comment id) so it can be shared.
+  const threads = review.data?.threads;
+  const active = threads?.find((t) => t.id === search.thread || t.comments.some((c) => c.id === search.thread));
   const threadIsComment = review.data?.conversation.some((e) => String(e.comment.id) === String(search.thread));
-  const overview = search.view === "overview" || !!threadIsComment || (!search.doc && !changed.length);
-  const path = overview ? undefined : selectedPath(search.doc, changed);
+  // A document when the link names one, or one of its threads; otherwise (or asked for) the Overview.
+  const path = search.view === "overview" || threadIsComment ? undefined : (search.doc ?? active?.path);
+  const overview = path === undefined;
   const changedEntry = changed.find((d) => d.path === path);
   const tree = useQuery({
     ...treeQuery(id, id.headSha),
@@ -147,10 +151,7 @@ function ReviewPage({ pr, id, files }: { pr: PullRequest; id: PrIdentity; files:
   const unresolved = useMemo(() => new Map(Object.entries(review.data?.unresolvedByPath ?? {})), [review.data]);
   const [filters, setFilters] = useState<ReadonlySet<ThreadState>>(DEFAULT_FILTERS);
 
-  // The active thread lives in the URL (`thread`: root comment id) so it can be shared.
   const navigate = Route.useNavigate();
-  const threads = review.data?.threads;
-  const active = threads?.find((t) => t.id === search.thread || t.comments.some((c) => c.id === search.thread));
   const setActive = (threadId: string | null) => {
     const root = threads?.find((t) => t.id === threadId)?.comments[0];
     void navigate({ search: (s) => ({ ...s, thread: root?.id }), replace: true });
@@ -165,6 +166,10 @@ function ReviewPage({ pr, id, files }: { pr: PullRequest; id: PrIdentity; files:
   useLineTarget(article, doc.rendered);
 
   const { state } = prState(pr);
+  // Guests reading GitHub directly (not through the token-backed proxy) get the sign-in suggestion.
+  const viewer = useQuery(viewerQuery).data;
+  const proxied = useQuery(allowedHostsQuery).data?.proxyFirst.includes(id.host);
+  const guest = viewer?.signInEnabled && !viewer.signedIn && proxied === false;
   const link = entry && { ...id, sha: doc.sha, path: entry.path };
 
   return (
@@ -299,7 +304,8 @@ function ReviewPage({ pr, id, files }: { pr: PullRequest; id: PrIdentity; files:
       }
     >
       <RateLimitBanner />
-      {overview || !path ? (
+      {guest && <GuestNotice host={id.host} />}
+      {overview ? (
         <PrOverview
           pr={pr}
           id={id}

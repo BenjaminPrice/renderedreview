@@ -8,6 +8,7 @@ import {
   type GitHubClient,
   GitHubError,
   NetworkError,
+  type RateLimit,
   RateLimitError,
   type ReviewThread,
 } from "@rendered-review/github-integration";
@@ -56,13 +57,24 @@ function noteRateLimit(resetAt: Date) {
   limitListeners.forEach((listener) => listener());
 }
 
-/** When GitHub's rate limit last hit resets: pages show cached data until then. Subscribe with `useSyncExternalStore`. */
+// The browser's own anonymous limit per host (per network), from direct responses' headers.
+const guestLimits = new Map<string, RateLimit>();
+function noteGuestLimit(host: string, limit: RateLimit) {
+  guestLimits.set(host, limit);
+  limitListeners.forEach((listener) => listener());
+}
+
+/**
+ * When GitHub's rate limit last hit resets: pages show cached data until then. `guest(host)`: the
+ * last observed anonymous limit for direct reads of `host`. Subscribe with `useSyncExternalStore`.
+ */
 export const rateLimit = {
   subscribe(listener: () => void) {
     limitListeners.add(listener);
     return () => limitListeners.delete(listener);
   },
   resetAt: () => limitedUntil,
+  guest: (host: string) => guestLimits.get(host),
 };
 
 const clients = new Map<string, HostClients>();
@@ -72,7 +84,12 @@ function clientsFor(host: string): HostClients {
   if (!entry) {
     entry = {
       // No retries on the direct path: a CORS failure would only repeat, and the proxy retries.
-      direct: createGitHubClient({ host, cache, maxRetries: 0 }),
+      direct: createGitHubClient({
+        host,
+        cache,
+        maxRetries: 0,
+        onMetric: (m) => m.rateLimit?.resource === "core" && noteGuestLimit(host, m.rateLimit),
+      }),
       // The last resort: once it is rate-limited too, answer from the cache however old.
       proxy: createGitHubClient({
         host,

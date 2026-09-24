@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { describe, expect, it } from "vitest";
 import {
+  dismissGuestNotice,
+  guestNoticeDismissed,
   nextTheme,
   PREFS_SCRIPT,
   readConnectors,
@@ -106,5 +108,22 @@ describe("PREFS_SCRIPT (pre-paint)", () => {
   it("leaves defaults (system theme, pinned rail) untouched", () => {
     expect(run(memory({ "rr-theme": "sepia", "rr-rail": "pinned" }))).toEqual({});
     expect(run(broken)).toEqual({});
+  });
+});
+
+describe("guest notice dismissal", () => {
+  const DAY = 24 * 3600_000;
+
+  it("lasts a week", () => {
+    const s = memory();
+    expect(guestNoticeDismissed(s, 0)).toBe(false);
+    dismissGuestNotice(s, 0);
+    expect(guestNoticeDismissed(s, 7 * DAY - 1)).toBe(true);
+    expect(guestNoticeDismissed(s, 7 * DAY)).toBe(false);
+  });
+
+  it("shows the notice when storage is unavailable", () => {
+    dismissGuestNotice(broken);
+    expect(guestNoticeDismissed(broken)).toBe(false);
   });
 });

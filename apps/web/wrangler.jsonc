@@ -13,12 +13,12 @@
 //   secrets  Set with `wrangler secret put NAME --env <env>` (locally: apps/web/.dev.vars). Listing a
 //            name under `secrets.required` makes `wrangler deploy` refuse to run while it is unset.
 //
-// Hosted environments serve public pull requests only (ACCESS_POLICY=disabled) until the production
-// GitHub App and billing exist. Switching to HOSTING_MODE=hosted needs these secrets, which should
-// then be added to `secrets.required`: GITHUB_APP_ID, GITHUB_APP_CLIENT_ID, GITHUB_APP_CLIENT_SECRET,
-// GITHUB_APP_PRIVATE_KEY, GITHUB_APP_WEBHOOK_SECRET, GITHUB_OAUTH_CLIENT_ID,
-// GITHUB_OAUTH_CLIENT_SECRET, ENCRYPTION_KEY, BETTER_AUTH_SECRET, BILLING_API_KEY, BILLING_WEBHOOK_SECRET
-// (plus the BILLING_PROVIDER var).
+// Hosted environments serve public pull requests only (HOSTING_MODE=community, ACCESS_POLICY=disabled).
+// Production also offers GitHub sign-in, which in this mode needs the GitHub App, encryption and
+// session secrets listed in its `secrets.required` (setup: docs/deploy-cloudflare.md, "Enable GitHub
+// sign-in"). Preview has no sign-in and no secrets. Switching to HOSTING_MODE=hosted (private
+// repositories) additionally needs GITHUB_OAUTH_CLIENT_ID, GITHUB_OAUTH_CLIENT_SECRET, BILLING_API_KEY
+// and BILLING_WEBHOOK_SECRET (plus the BILLING_PROVIDER var); add them to `secrets.required` then.
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "rendered-review",
@@ -59,6 +59,18 @@
       // Served from renderedreview.dev, a custom domain attached in the dashboard.
       "workers_dev": false,
       "vars": { "HOSTING_MODE": "community", "ACCESS_POLICY": "disabled" },
+      // GitHub sign-in. `wrangler deploy` refuses to run while any of these is unset.
+      "secrets": {
+        "required": [
+          "GITHUB_APP_ID",
+          "GITHUB_APP_CLIENT_ID",
+          "GITHUB_APP_CLIENT_SECRET",
+          "GITHUB_APP_PRIVATE_KEY",
+          "GITHUB_APP_WEBHOOK_SECRET",
+          "ENCRYPTION_KEY",
+          "BETTER_AUTH_SECRET",
+        ],
+      },
       "d1_databases": [
         {
           "binding": "DB",

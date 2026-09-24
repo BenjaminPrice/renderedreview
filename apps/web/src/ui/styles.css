@@ -1045,6 +1045,45 @@ samp {
   margin: 0;
   padding: 4px 8px 12px;
 }
+/* All docs: a filter, then a virtualized list that scrolls on its own. */
+.rr-sidebar-filter {
+  padding: 0 12px 4px;
+}
+.rr-sidebar-filter input {
+  width: 100%;
+  padding: 5px 8px;
+  font: inherit;
+  font-size: var(--rr-text-sm);
+  color: var(--rr-text);
+  background: var(--rr-surface);
+  border: 1px solid var(--rr-border);
+  border-radius: var(--rr-radius);
+}
+.rr-filter-count:empty {
+  padding: 0;
+}
+.rr-filescroll {
+  flex: 1 1 0;
+  min-height: 160px;
+  overflow: auto;
+}
+.rr-filelist-virtual {
+  position: relative;
+  box-sizing: content-box;
+}
+.rr-filelist-virtual > li {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  height: 34px; /* ROW_H in Sidebar.tsx */
+}
+.rr-filelist-virtual .rr-file {
+  height: 100%;
+}
+/* Fixed-height rows: the old path stays in the accessible name. */
+.rr-filelist-virtual .rr-file-sub {
+  display: none;
+}
 .rr-file {
   display: flex;
   align-items: center;
@@ -1170,6 +1209,31 @@ samp {
   border-radius: var(--rr-radius);
   background: var(--rr-deleted-bg);
   font: var(--rr-text-sm) / 1.45 var(--rr-font-ui);
+}
+/* Guest sign-in suggestion: quiet by default, a warning (icon and bold count too) once few requests are left. */
+.rr-guest {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 24px;
+  padding: 6px 6px 6px 12px;
+  border: 1px solid var(--rr-border);
+  border-radius: var(--rr-radius);
+  background: var(--rr-surface-sunken);
+  color: var(--rr-text-muted);
+  font: var(--rr-text-sm) / 1.45 var(--rr-font-ui);
+}
+.rr-guest p {
+  flex: 1;
+  margin: 0;
+}
+.rr-guest[data-low] {
+  border-color: var(--rr-modified-fg);
+  background: var(--rr-modified-bg);
+  color: var(--rr-text);
+}
+.rr-guest[data-low] > .rr-icon {
+  color: var(--rr-modified-fg);
 }
 
 /* External links in rendered documents and comments open in a new tab (the renderer sets target).

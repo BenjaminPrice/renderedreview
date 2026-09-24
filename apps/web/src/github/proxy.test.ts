@@ -42,6 +42,7 @@ describe("proxyPublicGitHub", () => {
     ["github.com/repositories/42/pulls/1/files?per_page=100&page=3", "mutable"],
     [`github.com/repos/acme/widgets/git/trees/${OID}?recursive=1`, "immutable"],
     [`github.com/repos/acme/widgets/git/blobs/${OID}`, "immutable"],
+    [`github.com/repos/acme/widgets/contents/docs/a%20b.md?ref=${OID}`, "immutable"],
   ])("forwards %s anonymously", async (path, kind) => {
     const { fetch, call } = setup();
     const res = await call(path, { headers: { authorization: "Bearer secret", cookie: "s=1" } });
@@ -61,6 +62,16 @@ describe("proxyPublicGitHub", () => {
     "github.com/user",
     "github.com/repos/acme/widgets",
     "github.com/repos/acme/widgets/contents/README.md",
+    "github.com/repos/acme/widgets/contents/README.md?ref=main",
+    `github.com/repos/acme/widgets/contents/README.md?ref=${OID}&per_page=1`,
+    `github.com/repos/acme/widgets/contents/README.md?ref=${OID}&ref=main`,
+    `github.com/repos/acme/widgets/contents/%2e%2e/%2E%2E/%2e%2e/user?ref=${OID}`,
+    `github.com/repos/acme/widgets/contents/docs%2F..%2F..%2Fpulls?ref=${OID}`,
+    `github.com/repos/acme/widgets/contents/?ref=${OID}`,
+    `github.com/repos/acme/widgets/contents/%252e%252e/%252e%252e/user?ref=${OID}`,
+    `github.com/repos/acme/widgets/contents/%25252e%25252e/user?ref=${OID}`,
+    `github.com/repos/acme/widgets/contents/%2E%2e/%2e%2E/user?ref=${OID}`,
+    `github.com/repos/acme/widgets/git/blobs/${OID}?ref=${OID}`,
     "github.com/repos/acme/widgets/pulls/1/merge",
     "github.com/repos/acme/widgets/git/trees/main",
     "github.com/repos/acme/widgets/git/blobs/abc",
@@ -79,6 +90,15 @@ describe("proxyPublicGitHub", () => {
     expect(res.status).toBe(403);
     expect(res.headers.get("cache-control")).toBe("no-store");
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("forwards a file path re-encoded from the validated names", async () => {
+    const { fetch, call } = setup();
+    const res = await call(`github.com/repos/acme/widgets/contents/docs/My Notes/caf%c3%a9%20(1).md?ref=${OID}`);
+    expect(res.status).toBe(200);
+    expect(fetch.mock.calls[0]![0]).toBe(
+      `https://api.github.com/repos/acme/widgets/contents/docs/My%20Notes/caf%C3%A9%20(1).md?ref=${OID}`,
+    );
   });
 
   it("forwards to an allowed Enterprise Server host", async () => {

@@ -2,7 +2,7 @@
 import type { ChangedFile, Tree } from "@rendered-review/github-integration";
 import { renderMarkdown } from "@rendered-review/markdown-domain";
 import { describe, expect, it } from "vitest";
-import { allDocs, changedDocs, changedLines, selectedPath, sourceUrl } from "./docs";
+import { allDocs, changedDocs, changedLines, sourceUrl } from "./docs";
 import type { PrIdentity } from "../github/queries";
 import { changeMarks, inAppDocLink } from "./document";
 
@@ -65,15 +65,6 @@ describe("allDocs", () => {
       ["CONTRIBUTING.md", "unchanged"],
       ["docs/new.md", "added"],
     ]);
-  });
-});
-
-describe("selectedPath", () => {
-  const { docs } = changedDocs(files);
-  it("prefers the doc search param, else the first changed doc", () => {
-    expect(selectedPath("CONTRIBUTING.md", docs)).toBe("CONTRIBUTING.md");
-    expect(selectedPath(undefined, docs)).toBe("docs/new.md");
-    expect(selectedPath(undefined, [])).toBeUndefined();
   });
 });
 
