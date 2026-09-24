@@ -231,7 +231,7 @@ export function blocksForLines(doc: RenderedMarkdown, startLine: number, endLine
 }
 
 /** Raw HTML counts as a block at the top level or nested in raw HTML, not inline in Markdown text. */
-function isBlock(doc: RenderedMarkdown, n: SourceNode): boolean {
+export function isBlock(doc: RenderedMarkdown, n: SourceNode): boolean {
   if (n.type !== "html") return BLOCK_TYPES.has(n.type);
   return n.parentId === null || doc.nodes[n.parentId]!.type === "html";
 }
