@@ -309,6 +309,7 @@ function ReviewPage({ pr, id, files }: { pr: PullRequest; id: PrIdentity; files:
                 activeThreadId={active?.id ?? null}
                 onActiveThreadChange={setActive}
                 extras={reviewMode.extras}
+                threadActions={reviewMode.threadActions}
               />
               {reviewMode.unplacedDrafts}
             </>

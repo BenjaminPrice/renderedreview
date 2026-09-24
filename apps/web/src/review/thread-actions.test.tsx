@@ -91,7 +91,9 @@ describe("replies", () => {
     const { actions, sent, announce } = setup();
     const t = thread("PRRT_1", lineAnchor(3), "unresolved", [comment({ id: 55 }), comment({ id: 56 })]);
     await actions().reply(t, "Agreed.");
-    expect(sent()).toEqual([{ url: `${WRITE}/reply`, body: { inReplyTo: 55, body: "Agreed.", expectedHeadOid: HEAD } }]);
+    expect(sent()).toEqual([
+      { url: `${WRITE}/reply`, body: { inReplyTo: 55, body: "Agreed.", expectedHeadOid: HEAD } },
+    ]);
     expect(announce).toHaveBeenCalledWith("Reply posted");
   });
 

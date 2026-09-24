@@ -17,6 +17,7 @@ import { createPortal } from "react-dom";
 import { useShell } from "../ui/AppShell";
 import { layoutCards, THREAD_STATES, threadState, type ThreadState, type Wire } from "./model";
 import { ConnectorLayer, drawIn, drawOut, MarginMarkers, type Marker } from "./overlays";
+import type { ThreadActions } from "./thread-actions";
 import { ThreadCard, threadDomId } from "./ThreadCard";
 
 const CARD_GAP = 10;
@@ -43,6 +44,8 @@ export interface CommentRailProps {
    * carry the DOM id `threadDomId(id)`.
    */
   extras?: { id: string; blockId: number; element: ReactNode }[];
+  /** Reply and resolve controls for every thread card. */
+  threadActions?: ThreadActions;
 }
 
 export function CommentRail(props: CommentRailProps) {
@@ -240,6 +243,7 @@ export function CommentRail(props: CommentRailProps) {
       active={p.thread.id === active}
       unplaced={!p.blocks.length}
       onActivate={() => p.thread.id !== active && activate(p.thread.id)}
+      actions={props.threadActions}
     />
   );
 

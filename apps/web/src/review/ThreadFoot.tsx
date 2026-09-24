@@ -7,7 +7,10 @@ import { RepresentationHint } from "./Composer";
 import { Markdown } from "./Markdown";
 import { isAppThread, type ThreadActions } from "./thread-actions";
 
-const NATIVE_HINT = { kind: "conversation", reason: "Will post as review thread reply · GitHub shows it in this thread" } as const;
+const NATIVE_HINT = {
+  kind: "conversation",
+  reason: "Will post as review thread reply · GitHub shows it in this thread",
+} as const;
 const APP_HINT = {
   kind: "conversation",
   reason: "Will post as PR conversation comment · its metadata links it to this thread",
@@ -96,43 +99,43 @@ export function ThreadFoot({ thread, actions, context, resolving, children }: Th
     }
   };
 
-  const controls = !actions ? null : !actions.signedIn ? (
-    actions.onSignIn && (
-      <button type="button" className="rr-btn rr-btn-sm rr-btn-ghost" onClick={actions.onSignIn}>
-        Sign in to reply
-      </button>
-    )
-  ) : (
-    !open && (
-      <>
-        <button
-          ref={replyButton}
-          type="button"
-          className="rr-btn rr-btn-sm rr-btn-ghost"
-          aria-label={`Reply to ${context}`}
-          onClick={() => setOpen(true)}
-        >
-          Reply
-        </button>
-        <button
-          type="button"
-          className="rr-btn rr-btn-sm rr-btn-ghost"
-          aria-label={`${resolved ? "Reopen" : "Resolve"} ${context}`}
-          aria-disabled={!known || busy || undefined}
-          aria-describedby={known ? undefined : ids.unknown}
-          title={known ? undefined : "GitHub didn't report whether this thread is resolved."}
-          onClick={() => void toggleResolved()}
-        >
-          {resolved ? "Reopen" : "Resolve"}
-        </button>
-        {!known && (
-          <span id={ids.unknown} className="rr-sr-only">
-            GitHub didn't report whether this thread is resolved.
-          </span>
-        )}
-      </>
-    )
-  );
+  const controls = !actions
+    ? null
+    : !actions.signedIn
+      ? actions.onSignIn && (
+          <button type="button" className="rr-btn rr-btn-sm rr-btn-ghost" onClick={actions.onSignIn}>
+            Sign in to reply
+          </button>
+        )
+      : !open && (
+          <>
+            <button
+              ref={replyButton}
+              type="button"
+              className="rr-btn rr-btn-sm rr-btn-ghost"
+              aria-label={`Reply to ${context}`}
+              onClick={() => setOpen(true)}
+            >
+              Reply
+            </button>
+            <button
+              type="button"
+              className="rr-btn rr-btn-sm rr-btn-ghost"
+              aria-label={`${resolved ? "Reopen" : "Resolve"} ${context}`}
+              aria-disabled={!known || busy || undefined}
+              aria-describedby={known ? undefined : ids.unknown}
+              title={known ? undefined : "GitHub didn't report whether this thread is resolved."}
+              onClick={() => void toggleResolved()}
+            >
+              {resolved ? "Reopen" : "Resolve"}
+            </button>
+            {!known && (
+              <span id={ids.unknown} className="rr-sr-only">
+                GitHub didn't report whether this thread is resolved.
+              </span>
+            )}
+          </>
+        );
 
   return (
     <>
