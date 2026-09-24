@@ -1,0 +1,25 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: jetify-com/devbox-install-action@8c6a66ed6273138b1915457069de78cb52fe3bd7 # v0.15.0
+        with:
+          devbox-version: 0.17.2
+          enable-cache: true
+      - run: devbox run -- pnpm install --frozen-lockfile
+      - run: devbox run -- pnpm format:check
+      - run: devbox run -- pnpm lint
+      - run: devbox run -- pnpm typecheck
+      - run: devbox run -- pnpm test
+      - run: devbox run -- pnpm build

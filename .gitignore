@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.output/
+.nitro/
+.tanstack/
+.vinxi/
+.wrangler/
+coverage/
+*.tsbuildinfo
+.devbox/
+.direnv/
+.env.local
+.env.*.local
+.DS_Store
+.ai
+.claude/
+.serena/
