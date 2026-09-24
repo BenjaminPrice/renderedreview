@@ -141,12 +141,14 @@ export function renderMarkdown(source: string, options: RenderOptions = {}): Ren
   const alerts = extractAlerts(mdast, source);
   const mdxLabels = inertMdx(mdast, source);
 
-  const mdastTypes = new Map<string, { type: string; lang?: string }>();
+  // Every mdast node per range, outermost first: nested elements with one range (a single-item
+  // list and its item, a paragraph that is all emphasis) take them in order.
+  const mdastTypes = new Map<string, { type: string; lang?: string }[]>();
   visit(mdast, (node) => {
     if (node.type === "root" || !node.position) return;
     const k = key(node.position);
-    if (!mdastTypes.has(k))
-      mdastTypes.set(k, { type: node.type, lang: node.type === "code" ? (node.lang ?? undefined) : undefined });
+    const md = { type: node.type, lang: node.type === "code" ? (node.lang ?? undefined) : undefined };
+    mdastTypes.set(k, [...(mdastTypes.get(k) ?? []), md]);
   });
 
   const tree = toSafeHast.runSync(structuredClone(mdast)) as HastRoot;
@@ -156,27 +158,31 @@ export function renderMarkdown(source: string, options: RenderOptions = {}): Ren
   const first = mdast.children[0];
   if (first?.type === "yaml") {
     const front = renderFrontmatter(source, first);
-    for (const [p, type] of front.types) mdastTypes.set(key(p), { type });
+    for (const [p, type] of front.types) mdastTypes.set(key(p), [{ type }]);
     tree.children.unshift(front.element, { type: "text", value: "\n" });
   }
   markExternalLinks(tree);
   const nodes: SourceNode[] = [];
   const headings: { depth: number; text: string }[] = [];
 
-  const walk = (el: Element, parentId: number | null, topLevel: boolean) => {
+  // `nth`: how many enclosing elements share this element's range.
+  const walk = (el: Element, parentId: number | null, topLevel: boolean, parentKey = "", nth = 0) => {
     const pos = el.position;
     if (pos?.start.offset === undefined || pos.end.offset === undefined) {
       el.properties.dataRrUnmapped = true;
       for (const child of el.children) if (child.type === "element") walk(child, parentId, false);
       return;
     }
+    const k = key(pos);
+    if (k !== parentKey) nth = 0;
     const text = normalizeText(toString(el));
     const depth = topLevel ? Number(/^h([1-6])$/.exec(el.tagName)?.[1] ?? 0) : 0;
     if (depth) {
       while (headings.length && headings[headings.length - 1]!.depth >= depth) headings.pop();
       headings.push({ depth, text });
     }
-    const md = STRUCTURAL.has(el.tagName) ? undefined : mdastTypes.get(key(pos));
+    const types = mdastTypes.get(k);
+    const md = STRUCTURAL.has(el.tagName) ? undefined : types?.[Math.min(nth, types.length - 1)];
     const id = nodes.length;
     el.properties.dataRrId = id;
     nodes.push({
@@ -189,7 +195,7 @@ export function renderMarkdown(source: string, options: RenderOptions = {}): Ren
       text,
       ...(md?.lang ? { lang: md.lang } : {}),
     });
-    for (const child of el.children) if (child.type === "element") walk(child, id, false);
+    for (const child of el.children) if (child.type === "element") walk(child, id, false, k, nth + 1);
   };
   for (const child of tree.children) if (child.type === "element") walk(child, null, true);
 
