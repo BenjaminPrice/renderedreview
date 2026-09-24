@@ -1392,6 +1392,34 @@ samp {
   white-space: pre-wrap;
 }
 
+/* MDX: JSX, imports/exports and expressions shown as inert source, never run */
+.rr-markdown .rr-mdx {
+  margin: 0 0 20px;
+  padding: 8px 12px;
+  border: 1px dashed var(--rr-border);
+  border-radius: var(--rr-radius-lg);
+}
+.rr-markdown .rr-mdx > pre {
+  margin: 0 0 12px;
+  padding: 6px 10px;
+}
+.rr-markdown .rr-mdx > :last-child {
+  margin-bottom: 0;
+}
+.rr-markdown .rr-mdx-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--rr-text-muted);
+  font: var(--rr-text-xs) / 1.4 var(--rr-font-ui);
+}
+.rr-markdown .rr-mdx-inline .rr-mdx-label {
+  display: inline;
+  margin: 0 3px 0 0;
+  font-size: 0.7em;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 /* GitHub alerts: colour per type, with the icon and title as the non-colour cue */
 .rr-markdown .markdown-alert {
   --rr-alert: var(--rr-accent-text);

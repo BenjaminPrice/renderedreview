@@ -83,4 +83,4 @@ export function parsePullRequestUrl(input: string): PrParams | undefined {
   return parsePrParams({ host: url.host.replace(/^www\./, ""), owner, repo, number });
 }
 
-export const isMarkdownPath = (path: string) => /\.(md|markdown)$/i.test(path);
+export const isMarkdownPath = (path: string) => /\.(md|markdown|mdx)$/i.test(path);

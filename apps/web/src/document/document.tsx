@@ -17,7 +17,7 @@ import { type ChangeKind, changedLines, type DocEntry, type LineChange, sourceUr
 export const MAX_RENDER_CHARS = 1_000_000;
 
 const RENDER_CACHE_SIZE = 32;
-const renderCache = new Map<string, RenderedMarkdown>();
+const renderCache = new Map<string, RenderedMarkdown | Error>();
 
 /** In-app route for a repository Markdown file; other links keep GitHub's default. */
 export function inAppDocLink(id: PrIdentity, path: string, suffix: string): string | undefined {
@@ -29,15 +29,21 @@ export function inAppDocLink(id: PrIdentity, path: string, suffix: string): stri
 /**
  * `renderMarkdown` memoized by blob and location, so UI state changes and revisits never
  * reparse. Relative links and images resolve at `sha`; Markdown links open in this PR.
+ * `.mdx` files parse as MDX; invalid MDX yields its parse error.
  */
-function renderBlob(id: PrIdentity, sha: string, entry: DocEntry, source: string): RenderedMarkdown {
+function renderBlob(id: PrIdentity, sha: string, entry: DocEntry, source: string): RenderedMarkdown | Error {
   const key = `${entry.oid}:${sha}:${entry.path}`;
   let rendered = renderCache.get(key);
   if (!rendered) {
-    rendered = renderMarkdown(source, {
-      location: { host: id.host, owner: id.owner, repo: id.repo, commitOid: sha, path: entry.path },
-      resolveLink: (path, suffix) => inAppDocLink(id, path, suffix),
-    });
+    try {
+      rendered = renderMarkdown(source, {
+        location: { host: id.host, owner: id.owner, repo: id.repo, commitOid: sha, path: entry.path },
+        resolveLink: (path, suffix) => inAppDocLink(id, path, suffix),
+        format: /\.mdx$/i.test(entry.path) ? "mdx" : "md",
+      });
+    } catch (error) {
+      rendered = error instanceof Error ? error : new Error(String(error));
+    }
     if (renderCache.size >= RENDER_CACHE_SIZE) renderCache.delete(renderCache.keys().next().value!);
     renderCache.set(key, rendered);
   }
@@ -46,8 +52,10 @@ function renderBlob(id: PrIdentity, sha: string, entry: DocEntry, source: string
 
 export interface LoadedDocument {
   source?: string;
-  /** Undefined while loading, or when the source exceeds `MAX_RENDER_CHARS`. */
+  /** Undefined while loading, when the source exceeds `MAX_RENDER_CHARS`, or on `renderError`. */
   rendered?: RenderedMarkdown;
+  /** Why the source could not be rendered (invalid MDX); show it raw instead. */
+  renderError?: Error;
   tooLarge: boolean;
   /** Head lines changed by the PR; empty for unchanged and deleted documents. */
   changes: LineChange[];
@@ -68,7 +76,7 @@ export function useDocument(id: PrIdentity, entry: DocEntry | undefined): Loaded
   const source = head.data;
   const sha = deleted ? id.baseSha : id.headSha;
   const tooLarge = (source?.length ?? 0) > MAX_RENDER_CHARS;
-  const rendered = useMemo(
+  const result = useMemo(
     () => (entry && source !== undefined && !tooLarge ? renderBlob(id, sha, entry, source) : undefined),
     [id, sha, entry, source, tooLarge],
   );
@@ -79,7 +87,8 @@ export function useDocument(id: PrIdentity, entry: DocEntry | undefined): Loaded
   );
   return {
     source,
-    rendered,
+    rendered: result instanceof Error ? undefined : result,
+    renderError: result instanceof Error ? result : undefined,
     tooLarge,
     changes,
     sha,
