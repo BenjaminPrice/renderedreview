@@ -2,7 +2,7 @@
 import { useLocation, useNavigate, useRouter, useSearch } from "@tanstack/react-router";
 import type { KeyboardEvent } from "react";
 import { Icon } from "../ui/AppShell";
-import { ExternalIcon } from "./document";
+import { ExternalLink } from "../ui/ExternalLink";
 import { type DocEntry, STATUS_LETTER } from "./docs";
 
 const ROUTE = "/$host/$owner/$repo/pull/$number";
@@ -67,10 +67,7 @@ export function Sidebar(props: SidebarProps) {
       {props.otherCount > 0 && (
         <p className="rr-sidebar-foot">
           {props.otherCount} other {props.otherCount === 1 ? "file" : "files"} changed ·{" "}
-          <a href={props.filesUrl}>
-            view on GitHub
-            <ExternalIcon />
-          </a>
+          <ExternalLink href={props.filesUrl}>view on GitHub</ExternalLink>
         </p>
       )}
     </>

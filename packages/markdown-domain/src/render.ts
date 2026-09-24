@@ -13,6 +13,7 @@ import type { Position } from "unist";
 import { visit } from "unist-util-visit";
 import { extractAlerts, renderAlerts } from "./alerts.js";
 import { renderFrontmatter } from "./frontmatter.js";
+import { markExternalLinks } from "./links.js";
 import { normalizeText } from "./normalize.js";
 import { resolveResources, type ResourceOptions } from "./resources.js";
 
@@ -22,8 +23,9 @@ import { resolveResources, type ResourceOptions } from "./resources.js";
  * Pipeline: remark-parse + remark-gfm + remark-frontmatter (YAML) -> GitHub alert markers removed
  * (./alerts.ts) -> remark-rehype -> rehype-raw -> rehype-sanitize (GitHub allowlist) -> resource
  * resolution (./resources.ts) -> alert callout markup (./alerts.ts) -> front matter
- * (./frontmatter.ts, text nodes only) -> stamping. Generated markup is added after sanitization
- * so it can carry its own classes. Stamping runs last, so authored HTML can never supply or
+ * (./frontmatter.ts, text nodes only) -> external links (./links.ts, last so it sees every link,
+ * generated or authored) -> stamping. Generated markup is added after sanitization so it can
+ * carry its own classes. Stamping runs last, so authored HTML can never supply or
  * forge the markers, and the sanitizer (which keeps `position`) cannot strip them.
  *
  * - Each element with a source position gets `data-rr-id="<n>"`; `nodes[n]` holds its range,
@@ -138,6 +140,7 @@ export function renderMarkdown(source: string, options: ResourceOptions = {}): R
     for (const [p, type] of front.types) mdastTypes.set(key(p), { type });
     tree.children.unshift(front.element, { type: "text", value: "\n" });
   }
+  markExternalLinks(tree);
   const nodes: SourceNode[] = [];
   const headings: { depth: number; text: string }[] = [];
 

@@ -185,7 +185,7 @@ describe("GitHub Flavored Markdown", () => {
 
   test("strikethrough and autolinks", () => {
     expect(html("~~old~~ www.example.com https://a.test <https://b.test> me@c.test")).toBe(
-      '<p><del>old</del> <a href="http://www.example.com">www.example.com</a> <a href="https://a.test">https://a.test</a> <a href="https://b.test">https://b.test</a> <a href="mailto:me@c.test">me@c.test</a></p>',
+      '<p><del>old</del> <a href="http://www.example.com" target="_blank" rel="noopener noreferrer">www.example.com</a> <a href="https://a.test" target="_blank" rel="noopener noreferrer">https://a.test</a> <a href="https://b.test" target="_blank" rel="noopener noreferrer">https://b.test</a> <a href="mailto:me@c.test">me@c.test</a></p>',
     );
   });
 

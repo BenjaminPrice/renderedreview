@@ -685,8 +685,7 @@ samp {
 .rr-md ul,
 .rr-md ol,
 .rr-md blockquote,
-.rr-md pre,
-.rr-md table {
+.rr-md pre {
   margin: 0 0 6px;
 }
 .rr-md ul,
@@ -717,6 +716,83 @@ samp {
 .rr-md img {
   max-width: 100%;
 }
+/* Comment tables: the rail is narrow and cards wrap anywhere, so tables keep whole words and
+   scroll sideways instead of wrapping letter by letter. */
+.rr-md-table {
+  margin: 0 0 6px;
+}
+.rr-md-table .rr-btn {
+  margin-top: 4px;
+}
+.rr-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  border-radius: var(--rr-radius-sm);
+}
+.rr-table-scroll:focus-visible {
+  outline: 2px solid var(--rr-accent);
+  outline-offset: 2px;
+}
+.rr-md table {
+  border-collapse: collapse;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.rr-md th,
+.rr-md td {
+  min-width: 8ch;
+  padding: 4px 8px;
+  border: 1px solid var(--rr-border);
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: normal;
+}
+.rr-md th {
+  background: var(--rr-surface-sunken);
+  font-weight: 600;
+}
+.rr-md td ul,
+.rr-md td ol {
+  margin: 0;
+}
+.rr-table-dialog {
+  max-width: 90vw;
+  max-height: 85vh;
+  padding: 0;
+  border: 1px solid var(--rr-border);
+  border-radius: var(--rr-radius-lg);
+  background: var(--rr-surface-raised);
+  color: var(--rr-text);
+  box-shadow: var(--rr-shadow);
+  overflow: auto;
+}
+.rr-table-dialog::backdrop {
+  background: light-dark(#1f232866, #010409b3);
+}
+.rr-table-dialog-head {
+  position: sticky;
+  top: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--rr-border-muted);
+  background: var(--rr-surface-raised);
+  font-weight: 600;
+}
+.rr-table-dialog .rr-table-scroll {
+  padding: 12px;
+}
+.rr-table-dialog table {
+  font-size: var(--rr-text-sm);
+}
+.rr-table-dialog th,
+.rr-table-dialog td {
+  padding: 6px 10px;
+}
+
 .rr-diff {
   margin: 6px 0 8px;
   border: 1px solid var(--rr-border);
@@ -1131,6 +1207,18 @@ samp {
   border-radius: var(--rr-radius);
   background: var(--rr-deleted-bg);
   font: var(--rr-text-sm) / 1.45 var(--rr-font-ui);
+}
+
+/* External links in rendered documents and comments open in a new tab (the renderer sets target).
+   The icon and its alt text are generated content, so no text joins the source-mapped DOM. */
+.rr-markdown a[target="_blank"]::after,
+.rr-md a[target="_blank"]::after {
+  content: "\2197" / " (opens in new tab)";
+  margin-left: 1px;
+  font-size: 0.8em;
+}
+.rr-md .rr-diff-head a::after {
+  content: none;
 }
 
 /* Changed sections: solid bar = added, dashed = modified; the alt text names the change for
