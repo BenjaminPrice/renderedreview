@@ -21,6 +21,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@hpcc-js/wasm-graphviz": "^1.29.1",
     "@rendered-review/browser-cache": "workspace:*",
     "@rendered-review/diagram-domain": "workspace:*",
     "@rendered-review/github-integration": "workspace:*",

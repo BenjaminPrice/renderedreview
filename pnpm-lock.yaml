@@ -35,6 +35,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@hpcc-js/wasm-graphviz':
+        specifier: ^1.29.1
+        version: 1.29.1
       '@rendered-review/browser-cache':
         specifier: workspace:*
         version: link:../../packages/browser-cache
@@ -815,6 +818,9 @@ packages:
     peerDependenciesMeta:
       '@noble/hashes':
         optional: true
+
+  '@hpcc-js/wasm-graphviz@1.29.1':
+    resolution: {integrity: sha512-koAQL0wlryEMeBs4/cQC3GB5ziITv66gR9DU/SWYjjup+iQ+Nbjcqxeaef+sffN4F4cBYZ3P31B5z7+cbSABbw==}
 
   '@humanfs/core@0.19.2':
     resolution: {integrity: sha512-UhXNm+CFMWcbChXywFwkmhqjs3PRCmcSa/hfBgLIb7oQ5HNb1wS0icWsGtSAUNgefHeI+eBrA8I1fxmbHsGdvA==}
@@ -3961,6 +3967,8 @@ snapshots:
   '@exodus/bytes@1.16.0(@noble/hashes@2.4.0)':
     optionalDependencies:
       '@noble/hashes': 2.4.0
+
+  '@hpcc-js/wasm-graphviz@1.29.1': {}
 
   '@humanfs/core@0.19.2':
     dependencies:

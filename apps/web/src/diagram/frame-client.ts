@@ -6,6 +6,9 @@
 import type { DiagramRenderer } from "@rendered-review/diagram-domain";
 import { sanitizeSvg } from "./sanitize";
 
+/** The frame page for a renderer bundled by this app, given its script's URL. */
+export const rendererFrameSrc = (script: string) => `/frames/renderer?script=${encodeURIComponent(script)}`;
+
 type Reply = { id: number; svg: string } | { id: number; error: string };
 
 export interface FrameRenderer {
