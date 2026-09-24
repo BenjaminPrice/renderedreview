@@ -11,7 +11,7 @@ Loading an image from a server tells that server your IP address, browser and wh
 
 - **Repository images** (`![diagram](./diagram.png)`, `/assets/logo.svg`, `../img/a.png`) load from the same repository at the commit you are reviewing. For a pull request that is the head commit being reviewed, so the image always matches the text. A path that would leave the repository is not loaded.
 - **Images already hosted on GitHub** load directly.
-- **Every other image** (`https://example.com/badge.svg`, status badges, tracking pixels) is not loaded. It is shown as a link naming its host, for example "build status (external image from img.shields.io)". Following the link opens the image in a new tab, so the image's server only sees you if you click. The page sends no referrer when you do.
+- **Every other image** (`https://example.com/badge.svg`, status badges, tracking pixels) is not loaded. It is shown as a link naming its host, for example "build status (external image from img.shields.io)". Following the link opens the image in a new tab, so the image's server only sees you if you click. The page sends no referrer when you do (`Referrer-Policy: no-referrer` on every response, and `rel="noreferrer"` on every external link).
 
 Private repository images need your GitHub credentials, and a plain image request can't send them. They may not display yet.
 
