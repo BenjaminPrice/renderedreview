@@ -30,7 +30,7 @@ pnpm exec wrangler secret put ENCRYPTION_KEY --env production
 
 For local development, put secrets in `apps/web/.dev.vars` (git-ignored), one `NAME=value` per line.
 
-The hosted environments start in public-only mode (`HOSTING_MODE=community`, `ACCESS_POLICY=disabled`): public pull requests render, nothing needs a GitHub App or billing account. Moving to `HOSTING_MODE=hosted` requires the GitHub App, OAuth, encryption and billing secrets listed at the top of `wrangler.jsonc`; add them to that environment's `secrets.required` so a deploy refuses to run while one is missing.
+Both hosted environments serve public pull requests only (`HOSTING_MODE=community`, `ACCESS_POLICY=disabled`); neither needs a billing account. Preview needs no secrets. Production also offers GitHub sign-in (see [Enable GitHub sign-in](#enable-github-sign-in)), so its `secrets.required` lists the seven sign-in secrets and `wrangler deploy` refuses to run while one of them is unset. `wrangler deploy --dry-run` does not check them. Moving to `HOSTING_MODE=hosted` (private repositories) also needs the OAuth and billing secrets listed at the top of `wrangler.jsonc`; add them to `secrets.required` at that point.
 
 ## One-time setup
 
@@ -49,6 +49,44 @@ Nothing here is automated; each step needs a Cloudflare account.
 3. In the GitHub repository, create the environments `preview` and `production` (**Settings → Environments**). Give `production` required reviewers and restrict it to the `main` branch. Add `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` as secrets on both.
 4. Deploy `preview` once (below) and check it.
 5. Custom domain (manual): add the `renderedreview.dev` zone to the same Cloudflare account, deploy `production` once, then in the dashboard open **Workers & Pages → rendered-review → Settings → Domains & Routes → Add → Custom domain** and enter `renderedreview.dev`. Cloudflare creates the DNS record and certificate. (Alternatively add `"routes": [{ "pattern": "renderedreview.dev", "custom_domain": true }]` to the production environment so deploys manage it.)
+
+## Enable GitHub sign-in
+
+Signed-in readers use their own GitHub token: 5,000 requests an hour instead of the shared anonymous limit, and real resolved/unresolved thread state. The site still serves public pull requests only. Sign-in turns on when the GitHub App credentials, `ENCRYPTION_KEY`, `BETTER_AUTH_SECRET` and the D1 binding are all present, and it needs no config change beyond the secrets. Production is set up this way; preview has no sign-in.
+
+1. Attach the custom domain first (one-time setup, step 5), because the callback URL uses it.
+2. Create a GitHub App for production at <https://github.com/settings/apps/new>. Keep it separate from any app you use for local development, so keys, secrets and rate limits stay isolated.
+   - **GitHub App name:** `Rendered Review`. **Homepage URL:** `https://<domain>`.
+   - **Callback URL:** `https://<domain>/api/auth/callback/github`. You can add more, for example the `workers.dev` URL.
+   - **Expire user authorization tokens:** on. **Request user authorization (OAuth) during installation:** off.
+   - **Webhook:** turn off **Active**. Nothing receives webhooks yet.
+   - **Repository permissions:** Contents, Issues, Metadata and Pull requests, all **Read-only**. **Account permissions:** Email addresses, **Read-only**.
+   - **Where can this GitHub App be installed?** Start with **Only on this account**.
+   - After creating the app, generate a client secret and a private key (a `.pem` download).
+3. Set the Worker secrets for production. Cloudflare stores them encrypted and they are never committed. Run these from `apps/web`; each one prompts for its value:
+
+   ```sh
+   pnpm exec wrangler secret put GITHUB_APP_ID --env production             # App ID from the app's page
+   pnpm exec wrangler secret put GITHUB_APP_CLIENT_ID --env production      # Client ID
+   pnpm exec wrangler secret put GITHUB_APP_CLIENT_SECRET --env production  # the client secret
+   pnpm exec wrangler secret put GITHUB_APP_PRIVATE_KEY --env production    # contents of the .pem
+   pnpm exec wrangler secret put GITHUB_APP_WEBHOOK_SECRET --env production # openssl rand -hex 32
+   pnpm exec wrangler secret put ENCRYPTION_KEY --env production            # openssl rand -base64 32
+   pnpm exec wrangler secret put BETTER_AUTH_SECRET --env production        # openssl rand -base64 32
+   ```
+
+   - Generate fresh values. Never reuse the ones from a development `.env.local`.
+   - Keep a backup of `ENCRYPTION_KEY` somewhere safe, such as a password manager. It encrypts the stored GitHub tokens, so losing or changing it signs everyone out.
+   - Workers can't read files, so `GITHUB_APP_PRIVATE_KEY_FILE` doesn't work here. Paste the whole PEM, with its real line breaks, for example `pnpm exec wrangler secret put GITHUB_APP_PRIVATE_KEY --env production < key.pem`. A one-line value with literal `\n` also works.
+
+4. Secrets apply to the running Worker right away. Later deploys keep them, and a deploy fails if one is missing.
+5. Verify on `https://<domain>`:
+   - Signing in from a pull request brings you back to the same pull request, and your avatar shows.
+   - `/api/github/user/...` responses (browser devtools) carry `x-ratelimit-limit: 5000`.
+   - Signing out works.
+   - A second GitHub account can sign in. An app installable **Only on this account** may refuse other users. If it does, switch it to **Any account** under the app's **Advanced → Make public**. Private repositories need that later anyway.
+
+`pnpm --filter @rendered-review/web smoke:workers` checks the same wiring locally. It runs the built Worker with fake app credentials and a throwaway local D1, then checks that `/api/auth/viewer` answers and sign-in redirects to GitHub with the right callback URL.
 
 ## Deploying
 
