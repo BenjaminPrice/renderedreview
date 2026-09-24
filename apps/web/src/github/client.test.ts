@@ -69,6 +69,14 @@ describe("withPublicGitHub", () => {
     expect(info).toHaveBeenCalledWith("github public fallback: network");
   });
 
+  it("keeps production browsers silent: the fallback is only logged in development", async () => {
+    vi.stubEnv("DEV", false);
+    const { info } = stubFetch(() => Promise.reject(new TypeError("Failed to fetch")));
+    await getTree("quiet.example.com");
+    expect(info).not.toHaveBeenCalled();
+    vi.unstubAllEnvs();
+  });
+
   it("switches to the proxy until the rate limit resets", async () => {
     const reset = String(Math.floor(Date.now() / 1000) + 3600);
     const { urls, info } = stubFetch(() =>

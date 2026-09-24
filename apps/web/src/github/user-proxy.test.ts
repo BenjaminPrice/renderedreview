@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { captureLogs } from "../test-utils";
 import { proxyUserGitHub, USER_PREFIX } from "./user-proxy";
 
 const OID = "a".repeat(40);
@@ -36,6 +37,8 @@ function setup({
 }
 
 const body = async (res: Response) => (await res.json()) as { code?: string };
+
+afterEach(() => vi.restoreAllMocks());
 
 describe("proxyUserGitHub", () => {
   it("forwards an allowlisted read with the user's token, never shared-cacheable", async () => {
@@ -207,12 +210,16 @@ describe("proxyUserGitHub", () => {
     expect(sent.variables).toEqual({ owner: "acme", name: "threads", number: 12, after: null });
   });
 
-  it("logs categories only, never tokens", async () => {
-    const info = vi.spyOn(console, "info").mockImplementation(() => {});
-    const { call } = setup({ token: null });
-    await call("github.com/repos/acme/log/pulls/1");
-    expect(info).toHaveBeenCalledWith("github user read: reauth");
-    expect(JSON.stringify(info.mock.calls)).not.toMatch(/token|acme/);
-    info.mockRestore();
+  it("logs categories and GitHub request metrics only, never tokens or repositories", async () => {
+    const logs = captureLogs();
+    await setup({ token: null }).call("github.com/repos/acme/log/pulls/1");
+    await setup().call("github.com/repos/acme/logged/pulls/1");
+    expect(logs.events()).toContainEqual(
+      expect.objectContaining({ event: "github.user_proxy", category: "reauth", status: 401 }),
+    );
+    expect(logs.events()).toContainEqual(
+      expect.objectContaining({ event: "github.request", route: "/repos/:/:/pulls/:", status: 200 }),
+    );
+    expect(logs.raw()).not.toMatch(/token|acme|logged|octocat/);
   });
 });

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { loadConfig } from "@rendered-review/runtime";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { captureLogs } from "../test-utils";
 import { allowedHosts, proxyFirstHosts, proxyPublicGitHub } from "./proxy";
 
 const OID = "a".repeat(40);
@@ -32,7 +33,23 @@ it("prefers the proxy only for the host the server token belongs to", () => {
   expect(hosts({ GITHUB_PUBLIC_READ_TOKEN: "t", GITHUB_URL: "https://ghe.example.com" })).toEqual(["ghe.example.com"]);
 });
 
+afterEach(() => vi.restoreAllMocks());
+
 describe("proxyPublicGitHub", () => {
+  it("logs each GitHub request by host and route template, never the repository", async () => {
+    const logs = captureLogs();
+    await setup().call("github.com/repos/acme/widgets/pulls/1/files?per_page=100");
+    expect(logs.events()).toEqual([
+      expect.objectContaining({
+        event: "github.request",
+        host: "api.github.com",
+        route: "/repos/:/:/pulls/:/files",
+        status: 200,
+      }),
+    ]);
+    expect(logs.raw()).not.toMatch(/acme|widgets/);
+  });
+
   it.each([
     ["github.com/repos/acme/widgets/pulls/1", "mutable"],
     ["github.com/repos/acme/widgets/pulls/1/files?per_page=100&page=2", "mutable"],
