@@ -4,6 +4,7 @@
 import { errorName, log } from "@rendered-review/runtime";
 
 const PREFIXES = [
+  "/frames/",
   "/api/github/public/",
   "/api/github/user/",
   "/api/github/write/",
@@ -11,7 +12,7 @@ const PREFIXES = [
   "/_serverFn/",
   "/assets/",
 ];
-const EXACT = new Set(["/", "/health", "/frames/mermaid"]);
+const EXACT = new Set(["/", "/health"]);
 const PULL = /^\/[^/]+\/[^/]+\/[^/]+\/pull\/\d+\/?$/;
 
 /** The route template for `pathname`, never the concrete path. */
