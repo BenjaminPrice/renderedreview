@@ -880,6 +880,41 @@ it("shows application comments on their words in the document, not in the conver
   expect(within(list).queryByText(/right word/)).toBeNull();
 });
 
+/** A CSS Custom Highlight API registry, which happy-dom lacks. */
+function stubHighlights() {
+  const highlights = new Map<string, { ranges: Range[] }>();
+  vi.stubGlobal("CSS", { highlights });
+  vi.stubGlobal(
+    "Highlight",
+    class {
+      ranges: Range[];
+      constructor(...ranges: Range[]) {
+        this.ranges = ranges;
+      }
+    },
+  );
+  return (name: string) => highlights.get(name)?.ranges.map((r) => r.toString()) ?? [];
+}
+
+it("highlights an application comment's exact words, not its whole block; line comments keep the block", async () => {
+  const highlighted = stubHighlights();
+  suggestionOnHead();
+  editIssueComments((cs) => cs.push({ ...cs[0]!, ...appComment(11) }));
+  renderPage(`?doc=${encodeURIComponent(INDEX)}`);
+  const placed = (await screen.findByText(/right word\? \(11\)/)).closest("section")!;
+  await vi.waitFor(() => expect(highlighted("rr-comment")).toEqual(["indicates that the client"]));
+  // The block stays the click and keyboard target, without the whole-block highlight.
+  const words = anchorOf(placed)!;
+  expect(words.tabIndex).toBe(0);
+  expect(words.hasAttribute("data-rr-words")).toBe(true);
+  const line = anchorOf(await threadCard(/GitHub line comment · L30/))!;
+  expect(line.hasAttribute("data-rr-words")).toBe(false);
+
+  await userEvent.click(words);
+  await vi.waitFor(() => expect(highlighted("rr-comment-active")).toEqual(["indicates that the client"]));
+  expect(highlighted("rr-comment")).toEqual([]);
+});
+
 it("keeps an annotation copied from another pull request in the conversation, marked damaged", async () => {
   editIssueComments((cs) => cs.push({ ...cs[0]!, ...appComment(13, { pullRequest: 1 }) }));
   renderPage("?view=overview");
