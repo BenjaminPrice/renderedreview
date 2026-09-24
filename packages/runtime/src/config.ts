@@ -165,7 +165,14 @@ export function loadConfig(env: Env, options: LoadConfigOptions = {}): AppConfig
   };
 }
 
-const secretKeys = new Set(["clientSecret", "privateKey", "webhookSecret", "encryptionKey", "apiKey", "publicReadToken"]);
+const secretKeys = new Set([
+  "clientSecret",
+  "privateKey",
+  "webhookSecret",
+  "encryptionKey",
+  "apiKey",
+  "publicReadToken",
+]);
 
 /** JSON dump of the config that is safe to log: secrets replaced, database password stripped. */
 export function redactConfig(config: AppConfig): string {
