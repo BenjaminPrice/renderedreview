@@ -41,22 +41,47 @@ export type Env = Readonly<Record<string, string | undefined>>;
 export interface LoadConfigOptions {
   /** The runtime provides the database as a platform binding (Workers D1), so DATABASE_URL is not needed. */
   databaseBinding?: boolean;
+  /**
+   * Contents of the file named by GITHUB_APP_PRIVATE_KEY_FILE, read by a runtime with a filesystem (Node).
+   * Config stays platform-neutral, so the loader never reads files itself.
+   */
+  githubAppPrivateKeyFile?: string;
 }
 
 export class ConfigError extends Error {
-  constructor(readonly problems: string[]) {
-    super(`Invalid configuration:\n${problems.map((p) => `  - ${p}`).join("\n")}`);
+  constructor(
+    readonly problems: string[],
+    headline?: string,
+  ) {
+    super(`${headline ? `${headline}\n` : ""}Invalid configuration:\n${problems.map((p) => `  - ${p}`).join("\n")}`);
     this.name = "ConfigError";
   }
 }
 
 const allowlistEntry = /^[A-Za-z0-9-]+(\/[A-Za-z0-9._-]+)?$/;
 const databaseProtocols = ["postgres:", "postgresql:", "sqlite:", "file:"];
+// The group label for the key, whichever variable supplies it.
+const privateKeyVar = "GITHUB_APP_PRIVATE_KEY (or GITHUB_APP_PRIVATE_KEY_FILE)";
 
 /** Validates `env` and returns typed config, or throws a ConfigError listing every problem. */
 export function loadConfig(env: Env, options: LoadConfigOptions = {}): AppConfig {
   const problems: string[] = [];
-  const read = (name: string) => env[name]?.trim() || undefined;
+  // Tracks whether any configuration variable is set, to spot an env file that was never loaded.
+  let anySet = false;
+  const vars: Env = { ...env, [privateKeyVar]: env.GITHUB_APP_PRIVATE_KEY || options.githubAppPrivateKeyFile };
+  const read = (name: string) => {
+    const value = vars[name]?.trim() || undefined;
+    if (value) anySet = true;
+    return value;
+  };
+
+  if (read("GITHUB_APP_PRIVATE_KEY_FILE")) {
+    if (read("GITHUB_APP_PRIVATE_KEY")) {
+      problems.push("Set GITHUB_APP_PRIVATE_KEY or GITHUB_APP_PRIVATE_KEY_FILE, not both");
+    } else if (options.githubAppPrivateKeyFile === undefined) {
+      problems.push("GITHUB_APP_PRIVATE_KEY_FILE is not supported by this runtime; set GITHUB_APP_PRIVATE_KEY");
+    }
+  }
 
   function oneOf<T extends string>(name: string, values: readonly T[], fallback?: T): T {
     const value = read(name) ?? fallback;
@@ -108,7 +133,7 @@ export function loadConfig(env: Env, options: LoadConfigOptions = {}): AppConfig
       id: "GITHUB_APP_ID",
       clientId: "GITHUB_APP_CLIENT_ID",
       clientSecret: "GITHUB_APP_CLIENT_SECRET",
-      privateKey: "GITHUB_APP_PRIVATE_KEY",
+      privateKey: privateKeyVar,
       webhookSecret: "GITHUB_APP_WEBHOOK_SECRET",
     },
     hostingMode !== "community"
@@ -172,7 +197,12 @@ export function loadConfig(env: Env, options: LoadConfigOptions = {}): AppConfig
     if (creds) billing = { provider, ...creds };
   }
 
-  if (problems.length > 0) throw new ConfigError(problems);
+  if (problems.length > 0) {
+    throw new ConfigError(
+      problems,
+      anySet ? undefined : "No configuration found — is your env file being loaded? (see README: .env.local + direnv)",
+    );
+  }
   return {
     hostingMode,
     accessPolicy,

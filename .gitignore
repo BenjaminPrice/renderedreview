@@ -9,6 +9,7 @@ coverage/
 *.tsbuildinfo
 .devbox/
 .direnv/
+.data/
 .env.local
 .env.*.local
 .dev.vars*

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { describe, expect, it } from "vitest";
-import { ConfigError, loadConfig, redactConfig, type Env } from "./config";
+import { ConfigError, loadConfig, redactConfig, type Env, type LoadConfigOptions } from "./config";
 
 const key = btoa("k".repeat(32));
 const github = {
@@ -25,9 +25,9 @@ const hosted: Env = {
   GITHUB_PUBLIC_READ_TOKEN: "public-read-token-value",
 };
 
-function problems(env: Env): string[] {
+function problems(env: Env, options?: LoadConfigOptions): string[] {
   try {
-    loadConfig(env);
+    loadConfig(env, options);
   } catch (error) {
     if (error instanceof ConfigError) return error.problems;
     throw error;
@@ -101,9 +101,11 @@ describe("loadConfig", () => {
   });
 
   it("reports every missing required value in one readable error", () => {
-    expect(() => loadConfig({})).toThrow(/^Invalid configuration:\n {2}- HOSTING_MODE is required/);
+    expect(() => loadConfig({ HOSTING_MODE: "cloud" })).toThrow(
+      /^Invalid configuration:\n {2}- HOSTING_MODE must be one of/,
+    );
     expect(problems({ HOSTING_MODE: "hosted" })).toEqual([
-      "GITHUB_APP_ID, GITHUB_APP_CLIENT_ID, GITHUB_APP_CLIENT_SECRET, GITHUB_APP_PRIVATE_KEY, GITHUB_APP_WEBHOOK_SECRET required when HOSTING_MODE is hosted",
+      "GITHUB_APP_ID, GITHUB_APP_CLIENT_ID, GITHUB_APP_CLIENT_SECRET, GITHUB_APP_PRIVATE_KEY (or GITHUB_APP_PRIVATE_KEY_FILE), GITHUB_APP_WEBHOOK_SECRET required when HOSTING_MODE is hosted",
       "GITHUB_OAUTH_CLIENT_ID, GITHUB_OAUTH_CLIENT_SECRET required when HOSTING_MODE is hosted",
       "DATABASE_URL required when HOSTING_MODE is hosted",
       "BILLING_PROVIDER is required (one of polar, stripe)",
@@ -113,7 +115,7 @@ describe("loadConfig", () => {
 
   it("requires the GitHub App, encryption key and database for private access in community mode", () => {
     expect(problems({ HOSTING_MODE: "community", ACCESS_POLICY: "installed" })).toEqual([
-      "GITHUB_APP_ID, GITHUB_APP_CLIENT_ID, GITHUB_APP_CLIENT_SECRET, GITHUB_APP_PRIVATE_KEY, GITHUB_APP_WEBHOOK_SECRET required for private repository access (ACCESS_POLICY is installed)",
+      "GITHUB_APP_ID, GITHUB_APP_CLIENT_ID, GITHUB_APP_CLIENT_SECRET, GITHUB_APP_PRIVATE_KEY (or GITHUB_APP_PRIVATE_KEY_FILE), GITHUB_APP_WEBHOOK_SECRET required for private repository access (ACCESS_POLICY is installed)",
     ]);
     expect(problems({ HOSTING_MODE: "community", ACCESS_POLICY: "installed", ...github, ENCRYPTION_KEY: "" })).toEqual([
       "ENCRYPTION_KEY required when GitHub credentials are set: 32 random bytes, base64-encoded (openssl rand -base64 32)",
@@ -144,6 +146,30 @@ describe("loadConfig", () => {
     expect(loadConfig(env, { databaseBinding: true }).databaseUrl).toBeUndefined();
   });
 
+  it("leads with a hint when no configuration variable is set at all", () => {
+    for (const env of [{}, { PATH: "/usr/bin", HOME: "/home/me" }]) {
+      expect(() => loadConfig(env)).toThrow(
+        /^No configuration found — is your env file being loaded\? \(see README: \.env\.local \+ direnv\)\nInvalid configuration:\n {2}- HOSTING_MODE is required/,
+      );
+    }
+    expect(() => loadConfig({ ACCESS_POLICY: "disabled" })).toThrow(/^Invalid configuration:/);
+  });
+
+  it("takes the GitHub App private key from a file the runtime read", () => {
+    const pem = "-----BEGIN RSA PRIVATE KEY-----\nfile-key-value\n-----END RSA PRIVATE KEY-----\n";
+    const env = { ...hosted, GITHUB_APP_PRIVATE_KEY: undefined, GITHUB_APP_PRIVATE_KEY_FILE: "github-app.pem" };
+    const config = loadConfig(env, { githubAppPrivateKeyFile: pem });
+    expect(config.github.app?.privateKey).toBe(pem.trim());
+    expect(redactConfig(config)).not.toContain("file-key-value");
+    expect(
+      problems({ ...env, GITHUB_APP_PRIVATE_KEY: hosted.GITHUB_APP_PRIVATE_KEY }, { githubAppPrivateKeyFile: pem }),
+    ).toEqual(["Set GITHUB_APP_PRIVATE_KEY or GITHUB_APP_PRIVATE_KEY_FILE, not both"]);
+    // Runtimes without a filesystem (Workers) never pass file contents.
+    expect(problems(env)).toContain(
+      "GITHUB_APP_PRIVATE_KEY_FILE is not supported by this runtime; set GITHUB_APP_PRIVATE_KEY",
+    );
+  });
+
   it("rejects malformed values", () => {
     expect(
       problems({
@@ -159,7 +185,7 @@ describe("loadConfig", () => {
       'HOSTING_MODE must be one of community, dedicated, hosted (got "cloud")',
       'ACCESS_ALLOWLIST entry "acme/docs/extra" is not owner or owner/repo',
       'GITHUB_URL must be an http(s) URL (got "ghe.example.com")',
-      "GITHUB_APP_ID, GITHUB_APP_CLIENT_ID, GITHUB_APP_CLIENT_SECRET, GITHUB_APP_PRIVATE_KEY, GITHUB_APP_WEBHOOK_SECRET required for private repository access (ACCESS_POLICY is allowlist)",
+      "GITHUB_APP_ID, GITHUB_APP_CLIENT_ID, GITHUB_APP_CLIENT_SECRET, GITHUB_APP_PRIVATE_KEY (or GITHUB_APP_PRIVATE_KEY_FILE), GITHUB_APP_WEBHOOK_SECRET required for private repository access (ACCESS_POLICY is allowlist)",
       "GITHUB_OAUTH_CLIENT_SECRET required (set all or none of GITHUB_OAUTH_CLIENT_ID, GITHUB_OAUTH_CLIENT_SECRET)",
       "ENCRYPTION_KEY must be 32 random bytes, base64-encoded (openssl rand -base64 32)",
       "DATABASE_URL must be a postgres://, postgresql://, sqlite://, file:// URL",

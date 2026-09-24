@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { sqlDatabaseContract } from "@rendered-review/control-plane/contract";
+import { chmodSync, mkdirSync, mkdtempSync, statSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { openDatabase, toPostgresPlaceholders } from "./database";
+import { openDatabase, resolveLocalPath, toPostgresPlaceholders } from "./database";
 
 sqlDatabaseContract("SQLite", async () => {
   const db = openDatabase("sqlite::memory:");
@@ -47,5 +50,56 @@ describe("openDatabase", () => {
       expect(await db.all("SELECT 1 AS one")).toEqual([{ one: 1 }]);
       await db.close();
     }
+  });
+
+  it("creates missing parent directories for a SQLite file", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "rr-db-"));
+    for (const url of [`sqlite://${dir}/a/b/one.db`, `sqlite:${dir}/c/two.db`, `file://${dir}/d/three.db`]) {
+      const db = openDatabase(url);
+      expect(await db.all("SELECT 1 AS one")).toEqual([{ one: 1 }]);
+      await db.close();
+    }
+  });
+});
+
+describe.skipIf(process.platform === "win32")("SQLite file permissions", () => {
+  const mode = (path: string) => statSync(path).mode & 0o777;
+
+  it("creates the database owner-only: directory 0700, file 0600", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "rr-perm-"));
+    const db = openDatabase(`sqlite:${dir}/data/app.db`);
+    await db.run("CREATE TABLE t (x)");
+    await db.close();
+    expect(mode(join(dir, "data"))).toBe(0o700);
+    expect(mode(join(dir, "data/app.db"))).toBe(0o600);
+  });
+
+  it("leaves existing directories and database files as they are", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "rr-perm-"));
+    chmodSync(dir, 0o755);
+    const file = join(dir, "app.db");
+    writeFileSync(file, "");
+    chmodSync(file, 0o644);
+    const db = openDatabase(`sqlite:${file}`);
+    await db.close();
+    expect(mode(dir)).toBe(0o755);
+    expect(mode(file)).toBe(0o644);
+  });
+});
+
+describe("resolveLocalPath", () => {
+  it("resolves relative paths against the workspace root, from any directory inside it", () => {
+    const root = mkdtempSync(join(tmpdir(), "rr-root-"));
+    writeFileSync(join(root, "pnpm-workspace.yaml"), "");
+    mkdirSync(join(root, "apps/web"), { recursive: true });
+    for (const cwd of [root, join(root, "apps/web")]) {
+      expect(resolveLocalPath("./.data/x.db", cwd)).toBe(join(root, ".data/x.db"));
+    }
+  });
+
+  it("falls back to the working directory outside a workspace, and keeps absolute paths", () => {
+    const cwd = mkdtempSync(join(tmpdir(), "rr-cwd-"));
+    expect(resolveLocalPath(".data/x.db", cwd)).toBe(join(cwd, ".data/x.db"));
+    expect(resolveLocalPath("/abs/x.db", cwd)).toBe("/abs/x.db");
   });
 });
