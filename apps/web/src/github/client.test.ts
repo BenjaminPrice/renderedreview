@@ -99,6 +99,30 @@ describe("withPublicGitHub", () => {
     expect(urls()).toEqual([`/api/github/public/token.example.com/repos/a/b/git/trees/${OID}`]);
   });
 
+  it.each([
+    [
+      "an anonymous GraphQL 403",
+      "graphql-403.example.com",
+      () =>
+        Response.json(
+          { message: "Forbidden" },
+          { status: 403, headers: { "x-ratelimit-limit": "0", "x-ratelimit-remaining": "0" } },
+        ),
+    ],
+    [
+      "a GraphQL rate limit",
+      "graphql-limit.example.com",
+      () => Response.json({ errors: [{ type: "RATE_LIMITED", message: "limit" }] }),
+    ],
+  ])("keeps REST reads direct after %s", async (_, host, graphql) => {
+    const { urls } = stubFetch(() => Response.json(TREE));
+    const fetch = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+    fetch.mockImplementationOnce(async () => graphql());
+    await withPublicGitHub(host, (c) => c.listReviewThreads("a", "b", 1)).catch(() => {});
+    expect(await getTree(host)).toBe("ok");
+    expect(urls()).toEqual([`https://${host}/api/graphql`, `https://${host}/api/v3/repos/a/b/git/trees/${OID}`]);
+  });
+
   it("does not fall back on 404", async () => {
     const { urls } = stubFetch(() => Response.json({ message: "Not Found" }, { status: 404 }));
     expect(await getTree("missing.example.com")).toBeInstanceOf(NotFoundError);

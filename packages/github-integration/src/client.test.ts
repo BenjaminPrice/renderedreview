@@ -274,6 +274,17 @@ describe("errors and retries", () => {
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
+  it("does not treat an anonymous GraphQL 403 with a zero limit as a rate limit", async () => {
+    const { client } = setup([
+      json({ message: "Forbidden" }, 403, {
+        "x-ratelimit-limit": "0",
+        "x-ratelimit-remaining": "0",
+        "x-ratelimit-resource": "graphql",
+      }),
+    ]);
+    await expect(client.listReviewThreads("mdn", "content", 1)).rejects.toBeInstanceOf(ForbiddenError);
+  });
+
   it("maps GraphQL errors", async () => {
     const { client } = setup([
       json({ data: null, errors: [{ type: "RATE_LIMITED", message: "API rate limit exceeded" }] }),
