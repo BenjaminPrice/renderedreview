@@ -2,6 +2,7 @@
 // The write boundary against a mocked GitHub: nothing here reaches the network.
 import { encodeAnnotation, type RenderedReviewAnnotationV1 } from "@rendered-review/annotation-domain";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { captureLogs } from "../test-utils";
 import { publishToGitHub, WRITE_PREFIX } from "./publish";
 
 const origin = "https://app.example";
@@ -319,13 +320,19 @@ describe("comment", () => {
     expect((await call("review", review("s2", 11))).status).toBe(429);
   });
 
-  it("logs categories only, never bodies or tokens", async () => {
-    const info = vi.spyOn(console, "info").mockImplementation(() => {});
-    const { call } = setup({ head: OTHER });
-    await call("comment", comment({ body: "secret words" }));
-    const logged = JSON.stringify(info.mock.calls);
-    expect(logged).toMatch(/stale-head/);
-    expect(logged).not.toMatch(/secret words|app-token/);
+  it("logs outcome categories and GitHub request metrics only, never bodies, tokens or repositories", async () => {
+    const logs = captureLogs();
+    await setup({ head: OTHER }).call("comment", comment({ body: "secret words" }));
+    await setup({ routes: { "POST /pulls/7/comments": created() } }).call(
+      "comment",
+      comment({ body: withMarker("more secret words") }),
+    );
+    expect(logs.events()).toContainEqual({ level: "info", event: "github.publish", category: "stale-head", status: 409 });
+    expect(logs.events()).toContainEqual({ level: "info", event: "github.publish", category: "published", status: 200 });
+    expect(logs.events()).toContainEqual(
+      expect.objectContaining({ event: "github.request", method: "POST", route: "/repos/:/:/pulls/:/comments", status: 201 }),
+    );
+    expect(logs.raw()).not.toMatch(/secret words|app-token|acme|widgets|rendered-review:|docs\/a\.md|octocat/);
   });
 });
 
