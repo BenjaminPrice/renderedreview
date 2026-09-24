@@ -16,6 +16,7 @@ import type { PrIdentity } from "../github/queries";
 import { isMarkdownPath } from "../pr-url";
 import { filterCounts, Markdown, THREAD_STATES } from "../review";
 import { blobUrl, relativeTime } from "../review/model";
+import { NewConversationComment } from "../review/NewComment";
 import { Badge, initials, MetadataNotice, ReviewIcon, type ReviewIconName } from "../review/ThreadCard";
 import { Icon } from "../ui/AppShell";
 import { ExternalLink } from "../ui/ExternalLink";
@@ -170,6 +171,7 @@ export function PrOverview({
             )}
           </ol>
         )}
+        <NewConversationComment id={id} isPrivate={pr.base.repository?.private !== false} />
       </div>
     </div>
   );
