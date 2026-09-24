@@ -7,7 +7,7 @@ import { suggestionEligible, type Representation } from "@rendered-review/review
 import { useId, useState, type KeyboardEvent } from "react";
 import { linesLabel } from "../document/SelectionPopover";
 import { selectedLines } from "./compose";
-import { ChangeDiff, Markdown } from "./Markdown";
+import { ChangeDiff, diffLines, Markdown } from "./Markdown";
 
 const QUOTE_CHARS = 280;
 
@@ -193,8 +193,8 @@ export function Composer(props: ComposerProps) {
               />
               <ChangeDiff
                 label="Preview of the change"
-                original={lines(original ?? "")}
-                proposed={lines(replacement)}
+                original={diffLines(original ?? "")}
+                proposed={diffLines(replacement)}
               />
               {unchanged && <p className="rr-composer-note">Edit the replacement to suggest a change.</p>}
             </>
@@ -248,8 +248,6 @@ export function Composer(props: ComposerProps) {
     </section>
   );
 }
-
-const lines = (text: string) => (text === "" ? [] : text.split("\n"));
 
 /** "line 24" or "lines 22–24": the whole lines a suggestion replaces. */
 function wholeLinesLabel(selection: SourceSelection) {

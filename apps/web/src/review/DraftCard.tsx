@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // A comment added to the review but not published yet, shown in the rail at its anchor.
 import { linesLabel } from "../document/SelectionPopover";
-import { Quote, RepresentationHint } from "./Composer";
+import { Quote, RepresentationHint, suggestionReason } from "./Composer";
 import type { Draft } from "./drafts";
-import { Markdown } from "./Markdown";
+import { ChangeDiff, diffLines, Markdown } from "./Markdown";
 import { Badge } from "./ThreadCard";
 
 export function DraftCard({
@@ -20,8 +20,13 @@ export function DraftCard({
   onDelete: () => void;
   id?: string;
 }) {
+  const { suggestion } = draft;
   return (
-    <section id={id} className="rr-thread rr-draft" aria-label={`Draft comment on ${linesLabel(draft.selection)}`}>
+    <section
+      id={id}
+      className="rr-thread rr-draft"
+      aria-label={`Draft ${suggestion ? "suggestion" : "comment"} on ${linesLabel(draft.selection)}`}
+    >
       <div className="rr-composer-top">
         <Badge tone="neutral">Draft</Badge>
         {stale && (
@@ -31,15 +36,26 @@ export function DraftCard({
         )}
       </div>
       <Quote selection={draft.selection} />
-      <div className="rr-draft-body">
-        <Markdown source={draft.comment} />
-      </div>
+      {draft.comment.trim() && (
+        <div className="rr-draft-body">
+          <Markdown source={draft.comment} />
+        </div>
+      )}
+      {suggestion && (
+        <ChangeDiff
+          label="Suggested change"
+          original={diffLines(suggestion.original)}
+          proposed={diffLines(suggestion.replacement)}
+        />
+      )}
       {stale && (
         <p className="rr-composer-note">
           Written against <code>{draft.headOid.slice(0, 7)}</code>; the pull request has changed since.
         </p>
       )}
-      <RepresentationHint representation={draft.representation} />
+      <RepresentationHint
+        representation={suggestion ? { reason: suggestionReason(draft.representation) } : draft.representation}
+      />
       <div className="rr-composer-actions">
         <button type="button" className="rr-btn rr-btn-sm" onClick={onEdit}>
           Edit

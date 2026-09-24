@@ -70,6 +70,15 @@ describe("submit review dialog", () => {
     expect(within(group(/^PR conversation comments/)).getByRole("listitem").textContent).toContain("README.md");
   });
 
+  it("marks suggestion drafts in the list", () => {
+    const { dialog } = mount({
+      drafts: [{ ...draft("s1", line(3)), comment: "", suggestion: { original: "a", replacement: "b" } }],
+    });
+    expect(within(dialog).getByRole("group", { name: /^Native review comments/ }).textContent).toContain(
+      "Suggested change",
+    );
+  });
+
   it("submits intents with the summary and verdict, removing published drafts and reporting failures", async () => {
     const submitReview = vi.fn(async (intents: { id: string }[]) =>
       intents.map(({ id }) =>
@@ -149,6 +158,20 @@ describe("draft card", () => {
     expect(onEdit).toHaveBeenCalled();
     await userEvent.click(within(card).getByRole("button", { name: "Delete" }));
     expect(onDelete).toHaveBeenCalled();
+  });
+
+  it("shows a suggestion draft's change and how it will post", () => {
+    const suggestion = { original: "old line\nsecond", replacement: "new line" };
+    render(<DraftCard draft={{ ...drafts[0]!, suggestion }} stale={false} onEdit={vi.fn()} onDelete={vi.fn()} />);
+    const card = screen.getByRole("region", { name: "Draft suggestion on line 3" });
+    const change = within(card).getByRole("group", { name: "Suggested change" });
+    expect([...change.querySelectorAll(".rr-diff-del, .rr-diff-add")].map((r) => r.textContent)).toEqual([
+      "Removed: old line",
+      "Removed: second",
+      "Added: new line",
+    ]);
+    expect(within(card).getByText("Will post as a native suggestion")).toBeTruthy();
+    expect(within(card).queryByRole("link", { name: /apply/i })).toBeNull();
   });
 
   it("marks a draft written against an older head as stale", () => {

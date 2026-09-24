@@ -81,6 +81,9 @@ function ProposedChange({ original, proposed, href }: { original: string[] | nul
   );
 }
 
+/** A change's lines; an empty text is no lines (a deletion). */
+export const diffLines = (text: string) => (text === "" ? [] : text.split("\n"));
+
 /** Removed then added lines, in the change styles; text only, never HTML. */
 export function ChangeDiff({
   label,

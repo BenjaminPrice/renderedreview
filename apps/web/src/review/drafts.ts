@@ -6,6 +6,7 @@ import type { SourceSelection } from "@rendered-review/markdown-domain";
 import type { Representation } from "@rendered-review/review-domain";
 import { useEffect, useState } from "react";
 import { browserCache } from "../github/client";
+import type { SuggestedChange } from "./compose";
 
 /** A comment added to the review. Written against `headOid`; stale once the PR head moves. */
 export interface Draft {
@@ -16,6 +17,8 @@ export interface Draft {
   representation: Representation;
   /** What the reviewer wrote. */
   comment: string;
+  /** Present for a suggestion: the replacement for the selection's source lines. */
+  suggestion?: SuggestedChange;
   /** The GitHub body: quote, comment, permalink where needed, annotation marker. */
   body: string;
   annotation: RenderedReviewAnnotationV1;
