@@ -215,7 +215,7 @@ function ReviewPage({ pr, id, files }: { pr: PullRequest; id: PrIdentity; files:
     const root = threads?.find((t) => t.id === threadId)?.comments[0];
     void navigate({ search: (s) => ({ ...s, thread: root?.id }), replace: true });
   };
-  useAnchors(article, rendered, doc.source, placements, filters, active?.id ?? null, setActive);
+  const wordRanges = useAnchors(article, rendered, doc.source, placements, filters, active?.id ?? null, setActive);
 
   // A new document starts at its top, unless a thread link targets it: focusing the thread scrolls there.
   const scrollTop = useEffectEvent(() => {
@@ -409,6 +409,7 @@ function ReviewPage({ pr, id, files }: { pr: PullRequest; id: PrIdentity; files:
                 repository={repository}
                 filters={filters}
                 docContainerRef={docColumn}
+                wordRanges={wordRanges}
                 activeThreadId={active?.id ?? null}
                 onActiveThreadChange={setActive}
                 extras={historical ? undefined : reviewMode.extras}

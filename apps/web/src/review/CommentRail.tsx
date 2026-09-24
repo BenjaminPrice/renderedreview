@@ -32,7 +32,7 @@ const MARKER_GAP = 4;
 export interface CommentRailProps {
   /**
    * Threads of the displayed document, from `placeThreads`. Threads without blocks are listed
-   * unanchored. Annotation ranges are highlighted by their blocks until word-level highlighting exists.
+   * unanchored.
    */
   placements: ThreadPlacement[];
   repository: RepositoryRef;
@@ -44,6 +44,8 @@ export interface CommentRailProps {
   docContainerRef: RefObject<HTMLElement | null>;
   /** Element of a rendered block. Defaults to `[data-rr-id="<id>"]` inside the document container. */
   getAnchorElement?: (rrId: number) => Element | null;
+  /** Highlighted words of word-level anchors, by thread id: their cards and connectors align to the words. */
+  wordRanges?: ReadonlyMap<string, Range[]>;
   /** Controlled active thread; highlight its anchor with the same id. Uncontrolled when omitted. */
   activeThreadId?: string | null;
   onActiveThreadChange?: (threadId: string | null) => void;
@@ -95,13 +97,17 @@ export function CommentRail(props: CommentRailProps) {
     const origin = doc.getBoundingClientRect();
     // Right edge of the text column; the document's right padding is the marker and connector gutter.
     const textRight = origin.width - parseFloat(getComputedStyle(doc).paddingRight);
-    const rows = aligned.map((a) => ({
-      id: a.id,
-      anchor: find(a.blockId)?.getBoundingClientRect(),
-      card: document.getElementById(threadDomId(a.id)),
-      count: a.placement?.thread.comments.length ?? 0,
-      state: a.placement && placementState(a.placement),
-    }));
+    const rows = aligned.map((a) => {
+      const words = props.wordRanges?.get(a.id)?.[0]?.getBoundingClientRect();
+      return {
+        id: a.id,
+        words,
+        anchor: words ?? find(a.blockId)?.getBoundingClientRect(),
+        card: document.getElementById(threadDomId(a.id)),
+        count: a.placement?.thread.comments.length ?? 0,
+        state: a.placement && placementState(a.placement),
+      };
+    });
 
     if (!pinned) {
       box.style.height = "";
@@ -146,7 +152,7 @@ export function CommentRail(props: CommentRailProps) {
                 id: r.id,
                 cardX: boxRect.left + r.card.offsetLeft - origin.left,
                 cardY: boxRect.top + tops.get(r.id)! - origin.top + 18,
-                anchorX: textRight + 12,
+                anchorX: r.words ? r.words.right - origin.left + 2 : textRight + 12,
                 anchorY: r.anchor.top - origin.top + Math.min(r.anchor.height / 2, 13),
               },
             ]
@@ -155,7 +161,7 @@ export function CommentRail(props: CommentRailProps) {
     );
     setMarkers([]);
     // `anchored` is derived from these props each render.
-  }, [doc, getAnchorElement, pinned, active, placements, filters, props.extras]);
+  }, [doc, getAnchorElement, pinned, active, placements, filters, props.extras, props.wordRanges]);
 
   useLayoutEffect(relayout, [relayout]);
 
