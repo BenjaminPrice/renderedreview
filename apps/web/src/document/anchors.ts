@@ -2,16 +2,34 @@
 // Comment anchors in the rendered document: the blocks threads point at, and the exact words of verified annotations.
 import type { RenderedMarkdown } from "@rendered-review/markdown-domain";
 import type { ThreadPlacement } from "@rendered-review/review-domain";
-import { useEffect, useEffectEvent } from "react";
+import { useEffect, useEffectEvent, useState } from "react";
 import { threadState, type ThreadState } from "../review/model";
 import { threadDomId } from "../review/ThreadCard";
 import { nodeElement } from "./document";
+import { highlightsSupported } from "./highlight";
+import { highlightRanges } from "./selection";
+
+const NAMES = ["rr-comment", "rr-comment-resolved", "rr-comment-active"] as const;
+const NONE: ReadonlyMap<string, Range[]> = new Map();
+
+/** Where a click landed in the text, if the browser can tell. */
+function caretAt(x: number, y: number): [Node, number] | null {
+  const p = document.caretPositionFromPoint?.(x, y);
+  if (p) return [p.offsetNode, p.offset];
+  const r = document.caretRangeFromPoint?.(x, y);
+  return r ? [r.startContainer, r.startOffset] : null;
+}
 
 /**
  * Marks the rendered blocks of visible threads: `aria-details` points at their cards, and
  * `data-rr-anchor` / `data-rr-active` drive the highlight. Clicking a block, or Enter/Space on it,
  * activates its thread. Attributes are set on React-rendered elements, so they are removed again
  * before every update.
+ *
+ * Verified annotations (placements with a `range`) highlight exactly their words with the CSS Custom
+ * Highlight API (`::highlight(rr-comment)`, `-resolved`, `-active`); blocks whose threads all do so get
+ * `data-rr-words` instead of the whole-block highlight, and a click on the words activates their
+ * thread. Without the API every thread keeps its block highlight. Returns each thread's word ranges.
  */
 export function useAnchors(
   article: HTMLElement | null,
@@ -23,6 +41,36 @@ export function useAnchors(
   activate: (threadId: string) => void,
 ) {
   const onActivate = useEffectEvent(activate);
+  const [ranges, setRanges] = useState(NONE);
+  useEffect(() => {
+    if (!article || !rendered || source === undefined || !highlightsSupported()) return setRanges(NONE);
+    const measure = () =>
+      setRanges(
+        new Map(
+          placements.flatMap(({ thread, range }) => {
+            if (!range || !filters.has(threadState(thread))) return [];
+            const found = highlightRanges(article, rendered, source, range.textPosition);
+            return found.length ? [[thread.id, found]] : [];
+          }),
+        ),
+      );
+    measure();
+    // Re-rendered document parts (a diagram's source view, lazy content) invalidate the ranges.
+    const observer = new MutationObserver(measure);
+    observer.observe(article, { childList: true, subtree: true, characterData: true });
+    return () => observer.disconnect();
+  }, [article, rendered, source, placements, filters]);
+
+  useEffect(() => {
+    if (!ranges.size) return;
+    const resolved = new Set(placements.filter((p) => threadState(p.thread) === "resolved").map((p) => p.thread.id));
+    const named = Object.fromEntries(NAMES.map((n) => [n, [] as Range[]]));
+    for (const [id, r] of ranges)
+      named[id === activeId ? "rr-comment-active" : resolved.has(id) ? "rr-comment-resolved" : "rr-comment"]!.push(...r);
+    for (const name of NAMES) CSS.highlights.set(name, new Highlight(...named[name]!));
+    return () => NAMES.forEach((name) => CSS.highlights.delete(name));
+  }, [ranges, placements, activeId]);
+
   useEffect(() => {
     if (!article) return;
     const threadsOf = new Map<HTMLElement, ThreadPlacement["thread"][]>();
@@ -37,6 +85,7 @@ export function useAnchors(
       el.setAttribute("aria-details", threads.map((t) => threadDomId(t.id)).join(" "));
       el.dataset.rrAnchor = threadState(threads[0]!);
       if (threads.some((t) => t.id === activeId)) el.dataset.rrActive = "";
+      if (threads.every((t) => ranges.has(t.id))) el.dataset.rrWords = "";
       el.tabIndex = 0;
     }
     const handle = (event: MouseEvent | KeyboardEvent) => {
@@ -48,7 +97,10 @@ export function useAnchors(
         if (target !== anchor || (event.key !== "Enter" && event.key !== " ")) return;
         event.preventDefault();
       } else if (target.closest("a, button, summary, input")) return; // links inside keep working
-      onActivate(threads[0]!.id);
+      // Clicked words activate their thread; elsewhere in the block, its first thread.
+      const caret = event instanceof MouseEvent ? caretAt(event.clientX, event.clientY) : null;
+      const hit = caret && threads.find((t) => ranges.get(t.id)?.some((r) => r.isPointInRange(...caret)));
+      onActivate((hit ?? threads[0]!).id);
     };
     article.addEventListener("click", handle);
     article.addEventListener("keydown", handle);
@@ -59,8 +111,10 @@ export function useAnchors(
         el.removeAttribute("aria-details");
         el.removeAttribute("data-rr-anchor");
         el.removeAttribute("data-rr-active");
+        el.removeAttribute("data-rr-words");
         el.removeAttribute("tabindex");
       }
     };
-  }, [article, placements, filters, activeId]);
+  }, [article, placements, filters, activeId, ranges]);
+  return ranges;
 }

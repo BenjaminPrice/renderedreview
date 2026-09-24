@@ -1706,6 +1706,16 @@ samp {
 .rr-markdown [data-rr-anchor][data-rr-active] {
   outline: 2px solid var(--rr-hl-comment-line);
 }
+/* Blocks whose threads all highlight their exact words: the words carry the highlight, the block
+   stays the click and keyboard target with a subtle outline on hover (focus ring below). */
+.rr-markdown [data-rr-anchor][data-rr-words] {
+  background: none;
+  box-shadow: none;
+  outline: none;
+}
+.rr-markdown [data-rr-words]:hover {
+  outline: 1px dashed var(--rr-border-strong);
+}
 /* Keyboard focus on an anchored block: the standard focus ring replaces the anchor outline (WCAG 2.4.7). Keep last. */
 .rr-markdown [data-rr-anchor]:focus-visible {
   outline: 2px solid var(--rr-focus);
@@ -2300,6 +2310,22 @@ samp {
   border: 1px solid var(--rr-border);
   border-radius: var(--rr-radius);
   background: var(--rr-surface);
+}
+
+/* The exact words an app comment was written on. */
+::highlight(rr-comment) {
+  background-color: var(--rr-hl-comment);
+  text-decoration: underline 2px var(--rr-hl-comment-line);
+  text-underline-offset: 3px;
+}
+::highlight(rr-comment-active) {
+  background-color: var(--rr-hl-comment-active);
+  text-decoration: underline 2px var(--rr-hl-comment-line);
+  text-underline-offset: 3px;
+}
+::highlight(rr-comment-resolved) {
+  text-decoration: underline 2px dotted var(--rr-border-strong);
+  text-underline-offset: 3px;
 }
 
 /* The selection a comment is being written on. Text-exact where supported, whole blocks otherwise. */
