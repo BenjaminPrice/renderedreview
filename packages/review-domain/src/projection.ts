@@ -165,12 +165,13 @@ export interface ThreadPlacement {
 
 /**
  * Place a file's threads on its rendered documents: RIGHT-side lines on the head blob, LEFT-side
- * lines on the base blob. Outdated threads stay unplaced for the historical view.
+ * lines on the base blob. Outdated threads stay unplaced for the historical view. A deleted file
+ * has no head: pass only `base`.
  */
 export function placeThreads(
   threads: NativeThread[],
   path: string,
-  docs: { head: RenderedMarkdown; base?: RenderedMarkdown },
+  docs: { head?: RenderedMarkdown; base?: RenderedMarkdown },
 ): ThreadPlacement[] {
   return threads
     .filter((t) => t.path === path)

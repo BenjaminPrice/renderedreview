@@ -157,6 +157,14 @@ describe("placeThreads", () => {
     expect(place({ line: 3 }, "other.md")).toEqual([]);
     expect(placeThreads(groupThreads([rc({ side: "LEFT" })]), "doc.md", { head })[0]!.blocks).toEqual([]);
   });
+
+  it("places a deleted file's LEFT side on the base and leaves RIGHT unplaced", () => {
+    const threads = groupThreads([rc({ side: "LEFT", line: 3 }), rc({ side: "RIGHT", line: 3 })]);
+    expect(placeThreads(threads, "doc.md", { base }).map((p) => p.blocks.map((b) => b.text))).toEqual([
+      ["Removed paragraph."],
+      [],
+    ]);
+  });
 });
 
 describe("integration notice exclusion", () => {
