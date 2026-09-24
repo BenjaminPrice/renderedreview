@@ -28,7 +28,11 @@ const placements: ThreadPlacement[] = [
   },
 ];
 
-function Page({ items = placements, originalLink }: { items?: ThreadPlacement[] } & Partial<CommentRailProps>) {
+function Page({
+  items = placements,
+  originalLink,
+  wordRanges,
+}: { items?: ThreadPlacement[] } & Partial<CommentRailProps>) {
   const docRef = useRef<HTMLElement>(null);
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   return (
@@ -42,6 +46,7 @@ function Page({ items = placements, originalLink }: { items?: ThreadPlacement[] 
           filters={filters}
           docContainerRef={docRef}
           originalLink={originalLink}
+          wordRanges={wordRanges}
         />
       }
     >
@@ -263,6 +268,17 @@ describe("connector visibility", () => {
     // Pinned again: they come back.
     await userEvent.click(commentsButton());
     await vi.waitFor(() => expect(wires()?.querySelectorAll("path")).toHaveLength(2));
+  });
+
+  it("points a word-level anchor's connector at its highlighted words, others at the block edge", async () => {
+    localStorage.setItem("rr-connectors", "on");
+    const rect = { left: 40, right: 100, top: 20, bottom: 36, width: 60, height: 16, x: 40, y: 20 };
+    const words = { getBoundingClientRect: () => rect } as Range;
+    await renderPage(undefined, { wordRanges: new Map([["current", [words]]]) });
+    await vi.waitFor(() => expect(wires()?.querySelectorAll("circle")).toHaveLength(2));
+    const [onWords, onBlock] = [...wires()!.querySelectorAll("circle")];
+    expect([onWords!.getAttribute("cx"), onWords!.getAttribute("cy")]).toEqual(["102", "28"]);
+    expect(onBlock!.getAttribute("cx")).not.toBe("102");
   });
 
   it("removes connectors when switched off", async () => {
