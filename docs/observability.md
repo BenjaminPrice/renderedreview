@@ -23,16 +23,16 @@ name) and a few fields. For example:
 }
 ```
 
-| Event                 | When                                                            | Fields                                                                                                                 |
-| --------------------- | --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `github.request`      | Each server call to GitHub from the read proxies and publishing | `host`, `method`, `route`, `status`, `durationMs`, `rateLimitRemaining`, `outcome` (`ok`, `error`, `network`), `error` |
-| `github.user_proxy`   | A signed-in read is refused                                     | `category` (`unauthenticated`, `reauth`, `private-repo-unsupported`, `too-large`, `graphql-error`), `status`           |
-| `github.publish`      | Each publish request finishes                                   | `category` (`published` or the refusal code, such as `stale-head`, `rate-limited`, `reauth`), `status`                 |
-| `auth.failure`        | A sign-in, link or token refresh fails                          | `route` (such as `/callback/github`), `category` (the error code, or `refresh-rejected`), or `status`                  |
-| `auth.library`        | The sign-in library reports a warning or error                  | `category` (its level; the library's message is not logged)                                                            |
-| `server.error`        | A request ends in a 5xx or throws                               | `method`, `route` (a template such as `/:host/:owner/:repo/pull/:number`), `status` or `error`                         |
-| `background.failed`   | Background work fails (Node)                                    | `error`                                                                                                                |
-| `db.migration_failed` | Database migrations fail (Node)                                 | `error`                                                                                                                |
+| Event                 | When                                                            | Fields                                                                                                                         |
+| --------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `github.request`      | Each server call to GitHub from the read proxies and publishing | `host`, `method`, `route`, `status`, `durationMs`, `rateLimitRemaining`, `outcome` (`ok`, `error`, `network`), `error`         |
+| `github.user_proxy`   | A signed-in read is refused                                     | `category` (`unauthenticated`, `reauth`, `private-repo-unsupported`, `too-large`, `graphql-error`), `status`                   |
+| `github.publish`      | Each publish request finishes                                   | `category` (`published` or the refusal code, such as `stale-head`, `rate-limited`, `reauth`, `oauth-org-restricted`), `status` |
+| `auth.failure`        | A sign-in, link or token refresh fails                          | `route` (such as `/callback/github`), `category` (the error code, or `refresh-rejected`), or `status`                          |
+| `auth.library`        | The sign-in library reports a warning or error                  | `category` (its level; the library's message is not logged)                                                                    |
+| `server.error`        | A request ends in a 5xx or throws                               | `method`, `route` (a template such as `/:host/:owner/:repo/pull/:number`), `status` or `error`                                 |
+| `background.failed`   | Background work fails (Node)                                    | `error`                                                                                                                        |
+| `db.migration_failed` | Database migrations fail (Node)                                 | `error`                                                                                                                        |
 
 At startup, the Node server also prints its configuration (secrets redacted) or the list of configuration
 problems.

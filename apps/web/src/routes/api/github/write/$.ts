@@ -9,12 +9,15 @@ export const Route = createFileRoute("/api/github/write/$")({
   // ANY so other methods get an explicit 405 instead of the app shell.
   server: {
     handlers: {
-      ANY: async ({ request, context }) =>
-        publishToGitHub(request, {
+      ANY: async ({ request, context }) => {
+        const { github } = context.config;
+        return publishToGitHub(request, {
           allowedHosts: allowedHosts(context.config),
           identity: await identityFor(context, new URL(request.url).origin),
           installed: installationCheckFor(context.config),
-        }),
+          approvalUrl: github.oauth && `${github.url}/settings/connections/applications/${github.oauth.clientId}`,
+        });
+      },
     },
   },
 });

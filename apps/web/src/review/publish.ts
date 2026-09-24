@@ -14,10 +14,10 @@ export type Verdict = "COMMENT" | "APPROVE" | "REQUEST_CHANGES";
 
 /**
  * Outcome for one draft of a submitted review; failed drafts are kept for another try.
- * `retryAs`: GitHub refused the diff location, a file comment should work.
+ * `retryAs`: GitHub refused the diff location, a file comment should work. `cause`: the refusal.
  */
 export type DraftOutcome = { draftId: string } & (
-  { ok: true } | { ok: false; message: string; retryAs?: "review-file" }
+  { ok: true } | { ok: false; message: string; retryAs?: "review-file"; cause?: unknown }
 );
 
 export interface Publisher {
@@ -69,7 +69,13 @@ export function useGitHubPublisher(id: PrIdentity): Publisher {
         return result.results.map((r) =>
           r.ok
             ? { draftId: r.draftId, ok: true }
-            : { draftId: r.draftId, ok: false, message: publishErrorMessage(r.error), retryAs: r.error.retryAs },
+            : {
+                draftId: r.draftId,
+                ok: false,
+                message: publishErrorMessage(r.error),
+                retryAs: r.error.retryAs,
+                cause: r.error,
+              },
         );
       } catch (error) {
         // Refused before publishing anything: a changed submission gets a new id anyway.

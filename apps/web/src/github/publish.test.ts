@@ -30,6 +30,10 @@ const annotation = (target: Partial<RenderedReviewAnnotationV1["target"]> = {}):
   },
   motivation: "commenting",
 });
+/** GitHub's exact 403 message when an organization restricts OAuth Apps. */
+const ORG_RESTRICTED =
+  "Although you appear to have the correct authorization credentials, the `Call-for-Code` organization has enabled OAuth App access restrictions, meaning that data access to third-parties is limited. For more information on these restrictions, including how to enable this app, visit https://docs.github.com/articles/restricting-access-to-your-organization-s-data/";
+
 const withMarker = (text: string, a = annotation()) => `${text}\n\n${encodeAnnotation(a)}`;
 
 type Route = (init: RequestInit) => Response | Promise<Response>;
@@ -50,6 +54,7 @@ function setup({
   visibility = "public" as "public" | "private",
   head = HEAD,
   routes = {} as Record<string, Route>,
+  approvalUrl = undefined as string | undefined,
 } = {}) {
   const repo = `widgets-${++repoCounter}`;
   // Its own user too: the per-user publish limit is process-wide.
@@ -81,7 +86,7 @@ function setup({
         },
         ...(method === "POST" && { body: typeof body === "string" ? body : JSON.stringify(body) }),
       }),
-      { allowedHosts: ["github.com"], identity, installed: async () => installed, fetch },
+      { allowedHosts: ["github.com"], identity, installed: async () => installed, fetch, approvalUrl },
     );
   const writes = () => fetch.mock.calls.filter(([, init]) => init?.method === "POST");
   const sent = (i: number) => JSON.parse(writes()[i]![1]!.body as string) as Record<string, unknown>;
@@ -280,6 +285,61 @@ describe("comment", () => {
     const res = await call("comment", comment());
     expect(res.status).toBe(422);
     expect(await json(res)).toMatchObject({ code: "github-rejected", retryAs: "review-file" });
+  });
+
+  it("names an organization's OAuth App restriction instead of forwarding GitHub's message", async () => {
+    const logs = captureLogs();
+    const { call } = setup({
+      publicToken: "oauth-token",
+      installed: false,
+      routes: { "POST /pulls/7/comments": () => Response.json({ message: ORG_RESTRICTED }, { status: 403 }) },
+    });
+    const res = await call("comment", comment());
+    expect(res.status).toBe(403);
+    expect(await json(res)).toEqual({
+      code: "oauth-org-restricted",
+      message: "The Call-for-Code organization restricts third-party apps",
+      org: "Call-for-Code",
+      approvalUrl: "https://docs.github.com/articles/restricting-access-to-your-organization-s-data/",
+    });
+    expect(logs.events()).toContainEqual(
+      expect.objectContaining({ event: "github.publish", category: "oauth-org-restricted", status: 403 }),
+    );
+    expect(logs.raw()).not.toContain("Although you appear");
+  });
+
+  it("links to the OAuth App's page, where users ask an organization to approve it, when configured", async () => {
+    const { call } = setup({
+      publicToken: "oauth-token",
+      installed: false,
+      approvalUrl: "https://github.com/settings/connections/applications/Ov23abc",
+      routes: { "POST /issues/7/comments": () => Response.json({ message: ORG_RESTRICTED }, { status: 403 }) },
+    });
+    const res = await call("comment", { expectedHeadOid: HEAD, representation: "conversation", body: "b" });
+    expect(await json(res)).toMatchObject({
+      code: "oauth-org-restricted",
+      approvalUrl: "https://github.com/settings/connections/applications/Ov23abc",
+    });
+  });
+
+  it.each([
+    ["not a GitHub login", "Call for Code"],
+    ["longer than a GitHub login", "a".repeat(40)],
+  ])("names no organization when the one in the message is %s", async (_, org) => {
+    const { call } = setup({
+      publicToken: "oauth-token",
+      installed: false,
+      routes: {
+        "POST /pulls/7/comments": () =>
+          Response.json({ message: ORG_RESTRICTED.replace("Call-for-Code", org) }, { status: 403 }),
+      },
+    });
+    const body = await json(await call("comment", comment()));
+    expect(body).toMatchObject({
+      code: "oauth-org-restricted",
+      message: "This organization restricts third-party apps",
+    });
+    expect(body).not.toHaveProperty("org");
   });
 
   it("reports GitHub's rate limit with its reset time", async () => {
@@ -547,6 +607,24 @@ describe("resolve", () => {
     expect(await json(res)).toEqual({ thread: { nodeId: "PRRT_1", isResolved: resolved } });
     expect(queries.map((q) => q.variables)).toEqual([{ id: "PRRT_1" }, { id: "PRRT_1" }]);
     expect(queries[1]!.query).toMatch(new RegExp(`^mutation\\(\\$id: ID!\\) \\{ ${mutation}\\(`));
+  });
+
+  it("names an organization's OAuth App restriction reported as a GraphQL FORBIDDEN error", async () => {
+    const { routes } = graphql({ repositoryId: REPO_ID, number: 7 });
+    const threadQuery = routes["POST /graphql"];
+    const { call } = setup({
+      publicToken: "oauth-token",
+      installed: false,
+      routes: {
+        "POST /graphql": (init) =>
+          (init.body as string).includes("mutation")
+            ? Response.json({ data: null, errors: [{ type: "FORBIDDEN", message: ORG_RESTRICTED }] })
+            : threadQuery(init),
+      },
+    });
+    const res = await call("resolve", { threadNodeId: "PRRT_1", resolved: true });
+    expect(res.status).toBe(403);
+    expect(await json(res)).toMatchObject({ code: "oauth-org-restricted", org: "Call-for-Code" });
   });
 
   it("refuses a thread from another pull request", async () => {
