@@ -266,7 +266,7 @@ export async function createIdentity({
     let response: Response;
     if (path === "/viewer" && request.method === "GET") {
       const user = await getSessionUser(request.headers);
-      let viewer: Viewer | null = user && { login: user.login, avatarUrl: user.avatarUrl };
+      const viewer: Viewer | null = user && { login: user.login, avatarUrl: user.avatarUrl };
       if (viewer && oauth) {
         const accounts = await (await auth.$context).internalAdapter.findAccounts(user!.id);
         viewer.publicComments = accounts.some((a) => a.providerId === PUBLIC_PROVIDER) ? "linked" : "unlinked";
