@@ -22,14 +22,7 @@ export function filterCounts(threads: NativeThread[]): Record<ThreadState, numbe
   return counts;
 }
 
-// ponytail: REST has no edit timestamp; comments submitted with a pending review also get a later
-// updated_at. GraphQL `lastEditedAt` is exact if this threshold misleads.
-const EDIT_THRESHOLD_MS = 60_000;
-
-/** GitHub bumps `updatedAt` a little on creation; only a later change counts as an edit. */
-export function isEdited(c: { createdAt: string; updatedAt: string }): boolean {
-  return Date.parse(c.updatedAt) - Date.parse(c.createdAt) > EDIT_THRESHOLD_MS;
-}
+export { isEdited } from "@rendered-review/review-domain";
 
 const lines = (a: { startLine: number; endLine: number }) =>
   a.startLine === a.endLine ? `L${a.startLine}` : `L${a.startLine}–L${a.endLine}`;
