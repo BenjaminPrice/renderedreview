@@ -70,8 +70,11 @@ export function representationFor(files: ChangedFile[], path: string, selection:
 }
 
 /** The GitHub body for `comment` on the annotated selection. */
-export const composeDraftBody = (annotation: RenderedReviewAnnotationV1, comment: string, representation: Representation) =>
-  composeCommentBody({ annotation, comment, location: representation.kind });
+export const composeDraftBody = (
+  annotation: RenderedReviewAnnotationV1,
+  comment: string,
+  representation: Representation,
+) => composeCommentBody({ annotation, comment, location: representation.kind });
 
 /** What the publish boundary needs for one comment. */
 export function commentIntent(

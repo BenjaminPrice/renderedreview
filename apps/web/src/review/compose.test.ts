@@ -53,7 +53,12 @@ describe("prepareAnnotation", () => {
           commitOid: HEAD,
           blobOid: BLOB,
           selectors: [
-            { type: "TextQuoteSelector", exact: "full jitter", prefix: "Each delay includes ", suffix: " of up to 20%" },
+            {
+              type: "TextQuoteSelector",
+              exact: "full jitter",
+              prefix: "Each delay includes ",
+              suffix: " of up to 20%",
+            },
             { type: "TextPositionSelector", start: 120, end: 131 },
             { type: "MarkdownSourceRangeSelector", startLine: 24, startColumn: 21, endLine: 24, endColumn: 32 },
           ],
@@ -110,7 +115,17 @@ describe("commentIntent", () => {
     const base = { body: "b", path: "docs/retry.md" };
     expect(
       commentIntent(
-        { ...base, representation: { kind: "review-line", line: 25, side: "RIGHT", startLine: 23, startSide: "RIGHT", reason: "" } },
+        {
+          ...base,
+          representation: {
+            kind: "review-line",
+            line: 25,
+            side: "RIGHT",
+            startLine: 23,
+            startSide: "RIGHT",
+            reason: "",
+          },
+        },
         HEAD,
       ),
     ).toEqual({

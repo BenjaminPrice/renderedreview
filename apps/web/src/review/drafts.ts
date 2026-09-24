@@ -55,7 +55,9 @@ export function useDrafts(scope: DraftScope, cache: BrowserCache = browserCache)
   return {
     drafts,
     save: (draft: Draft) =>
-      update((ds) => (ds.some((d) => d.id === draft.id) ? ds.map((d) => (d.id === draft.id ? draft : d)) : [...ds, draft])),
+      update((ds) =>
+        ds.some((d) => d.id === draft.id) ? ds.map((d) => (d.id === draft.id ? draft : d)) : [...ds, draft],
+      ),
     remove: (ids: string[]) => update((ds) => ds.filter((d) => !ids.includes(d.id))),
   };
 }

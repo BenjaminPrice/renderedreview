@@ -26,4 +26,5 @@ export interface Publisher {
 
 export const PublisherContext = createContext<Publisher | undefined>(undefined);
 
-export const PUBLISHING_UNAVAILABLE = "Publishing to GitHub is coming soon. Drafts are kept in this browser until then.";
+export const PUBLISHING_UNAVAILABLE =
+  "Publishing to GitHub is coming soon. Drafts are kept in this browser until then.";
