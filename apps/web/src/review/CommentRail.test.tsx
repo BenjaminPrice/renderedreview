@@ -148,7 +148,7 @@ describe("threads and filters", () => {
       state: "moved" as const,
       evidence: "structure" as const,
       confidence: 0.7,
-      approximate: true,
+      approximate: true as const,
       sourceRange,
       candidates: [],
     };

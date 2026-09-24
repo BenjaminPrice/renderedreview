@@ -149,8 +149,8 @@ export interface ThreadCardProps {
   verified?: boolean;
   /** Its annotation does not match the document it names: why. */
   damaged?: string;
-  /** Re-anchored from an earlier revision to these lines of the displayed document. */
-  moved?: { startLine: number; endLine: number };
+  /** Re-anchored from an earlier revision to these lines of the displayed document; `approximate` when its text changed. */
+  moved?: { startLine: number; endLine: number; approximate?: boolean };
   onActivate?: () => void;
 }
 
@@ -240,6 +240,8 @@ export function ThreadCard({
         <span className={reason ? "rr-t-loc rr-t-why" : "rr-t-loc"}>
           {reason ? (
             `${label} · ${reason}`
+          ) : moved?.approximate ? (
+            `${label} · Text changed since this comment · approximate location`
           ) : a.type === "outdated" ? (
             <>
               From <code>{a.commitOid.slice(0, 7)}</code> · {label.replace("GitHub line comment · ", "")}

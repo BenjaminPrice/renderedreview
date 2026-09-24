@@ -124,7 +124,7 @@ describe("moved: a unique match elsewhere", () => {
     expect(result.confidence).toBeLessThan(0.8);
     expect(result.textPosition).toBeUndefined();
     // The block's range: the whole paragraph.
-    expect(result.sourceRange).toEqual({ startLine: 3, startColumn: 1, endLine: 3, endColumn: 60 });
+    expect(result.sourceRange).toEqual({ startLine: 3, startColumn: 1, endLine: 3, endColumn: 58 });
   });
 
   test("exact-quote placements are word-precise, not approximate", () => {

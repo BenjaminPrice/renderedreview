@@ -24,7 +24,8 @@ import {
  * 4. structural: exactly one exact hit of the stored node type that keeps its heading path or one
  *    side of its context (a renamed heading changes both the path and the prefix below it) -> moved (0.8);
  *    no exact hit, and exactly one context-anchored window of similarity >= 0.85, a single block
- *    in the stored heading path and node type -> moved (0.8 x similarity, so below 0.8)
+ *    in the stored heading path and node type -> moved (0.8 x similarity, so below 0.8), but
+ *    `approximate`: its words changed, so it is placed on that whole block, never on words
  * 5. anything else is never placed: several exact hits -> ambiguous; otherwise unplaced, with
  *    candidates for the reader to confirm (a lone exact hit elsewhere at 0.6, context-anchored
  *    windows of similarity >= 0.4 at 0.6 x similarity).
@@ -51,9 +52,11 @@ export interface ReanchorResult {
   evidence: "same-blob" | "same-range" | "quote-context" | "structure" | "none";
   /** 0 when not placed. */
   confidence: number;
-  /** Where the annotation sits in the current blob (current and moved only). */
+  /** Where the annotation sits in the current blob (current and moved only); no `textPosition` when approximate. */
   textPosition?: Offsets;
   sourceRange?: Range;
+  /** Moved to reworded text: `sourceRange` is the whole block it is now in, not the words. */
+  approximate?: true;
   /** Suggested locations for the reader to confirm; never placed automatically. */
   candidates: ReanchorCandidate[];
 }
@@ -176,7 +179,17 @@ function compute({ annotation, blobOid, source, doc, original }: ReanchorInput):
     .sort((a, b) => b.similarity - a.similarity);
   const strong = windows.filter((w) => w.similarity >= STRUCTURAL);
   const only = strong.length === 1 ? strong[0]! : undefined;
-  if (only && structural(only.s) && !only.s.expanded) return placed(only.s, "structure", 0.8 * only.similarity);
+  if (only && structural(only.s) && !only.s.expanded) {
+    const { start, end } = doc.nodes[only.s.blockIds[0]!]!.range;
+    return {
+      state: "moved",
+      evidence: "structure",
+      confidence: 0.8 * only.similarity,
+      sourceRange: { startLine: start.line, startColumn: start.column, endLine: end.line, endColumn: end.column },
+      approximate: true,
+      candidates: [],
+    };
+  }
   return unplaced(windows.map((w) => candidate(w.s, 0.6 * w.similarity)));
 }
 

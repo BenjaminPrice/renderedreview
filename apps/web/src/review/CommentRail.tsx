@@ -246,7 +246,11 @@ export function CommentRail(props: CommentRailProps) {
       // A moved thread keeps its original quote visible: the highlighted words may differ.
       verified={!!p.range && p.reanchor?.state !== "moved"}
       damaged={p.damaged}
-      moved={p.reanchor?.state === "moved" ? rangeLines(p.reanchor.sourceRange!) : undefined}
+      moved={
+        p.reanchor?.state === "moved"
+          ? { ...rangeLines(p.reanchor.sourceRange!), approximate: p.reanchor.approximate }
+          : undefined
+      }
       onActivate={() => p.thread.id !== active && activate(p.thread.id)}
     />
   );

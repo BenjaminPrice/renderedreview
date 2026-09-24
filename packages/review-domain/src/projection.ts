@@ -328,6 +328,13 @@ export function placeThreads(
       };
       if (blob.oid !== a.annotation.target.blobOid) {
         const r = reanchor({ annotation: a.annotation, blobOid: blob.oid, source: blob.source, doc: head });
+        // Reworded text is placed on its block only: no word range claims precision it lacks.
+        if (r.approximate)
+          return {
+            thread,
+            blocks: blocksForLines(head, r.sourceRange!.startLine, rangeLines(r.sourceRange!).endLine),
+            reanchor: r,
+          };
         if (r.sourceRange) return at(r.sourceRange, { reanchor: r });
         return a.fallback
           ? { thread, blocks: lineBlocks(a.fallback), reanchor: r }
