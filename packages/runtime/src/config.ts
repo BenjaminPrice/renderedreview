@@ -22,6 +22,8 @@ export interface AppConfig {
     apiUrl: string;
     app?: { id: string; clientId: string; clientSecret: string; privateKey: string; webhookSecret: string };
     oauth?: { clientId: string; clientSecret: string };
+    /** Operator token for public reads through the server proxy (local dev, self-hosting). */
+    publicReadToken?: string;
   };
   /** Base64 of 32 bytes; encrypts persisted GitHub tokens. Present whenever GitHub credentials are. */
   encryptionKey?: string;
@@ -156,14 +158,14 @@ export function loadConfig(env: Env, options: LoadConfigOptions = {}): AppConfig
     hostingMode,
     accessPolicy,
     allowlist,
-    github: { ...github, app, oauth },
+    github: { ...github, app, oauth, publicReadToken: read("GITHUB_PUBLIC_READ_TOKEN") },
     encryptionKey,
     databaseUrl,
     billing,
   };
 }
 
-const secretKeys = new Set(["clientSecret", "privateKey", "webhookSecret", "encryptionKey", "apiKey"]);
+const secretKeys = new Set(["clientSecret", "privateKey", "webhookSecret", "encryptionKey", "apiKey", "publicReadToken"]);
 
 /** JSON dump of the config that is safe to log: secrets replaced, database password stripped. */
 export function redactConfig(config: AppConfig): string {
