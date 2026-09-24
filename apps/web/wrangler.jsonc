@@ -1,0 +1,64 @@
+// Cloudflare Workers build of Rendered Review. `pnpm build:workers` writes the deployable config
+// to dist/server/wrangler.json, which `wrangler deploy` picks up automatically.
+// Setup, deploy and rollback: docs/deploy-cloudflare.md.
+//
+// Environments: the top level is local development (`pnpm dev:workers`, `wrangler dev`).
+// `preview` and `production` are hosted; select one at build time with CLOUDFLARE_ENV.
+// Environments do not inherit `vars`, bindings or `secrets`, so each one repeats them.
+//
+// Bindings:
+//   DB       D1 database for the control plane.
+//   vars     Non-secret configuration, the same variables the Node build reads from its environment.
+//   secrets  Set with `wrangler secret put NAME --env <env>` (locally: apps/web/.dev.vars). Listing a
+//            name under `secrets.required` makes `wrangler deploy` refuse to run while it is unset.
+//
+// Hosted environments serve public pull requests only (ACCESS_POLICY=disabled) until the production
+// GitHub App and billing exist. Switching to HOSTING_MODE=hosted needs these secrets, which should
+// then be added to `secrets.required`: GITHUB_APP_ID, GITHUB_APP_CLIENT_ID, GITHUB_APP_CLIENT_SECRET,
+// GITHUB_APP_PRIVATE_KEY, GITHUB_APP_WEBHOOK_SECRET, GITHUB_OAUTH_CLIENT_ID,
+// GITHUB_OAUTH_CLIENT_SECRET, ENCRYPTION_KEY, BILLING_API_KEY, BILLING_WEBHOOK_SECRET
+// (plus the BILLING_PROVIDER var).
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "rendered-review",
+  "main": "./src/server.ts",
+  // Node.js compatibility is on by default from 2026-08-04, and this Worker needs it: TanStack
+  // Router's SSR statically imports node:stream and Start keeps request state in node:async_hooks'
+  // AsyncLocalStorage. Opting out (no_nodejs_compat + nodejs_als) fails at startup with
+  // `No such module "node:stream"`. Application code itself uses Web APIs only.
+  "compatibility_date": "2026-09-20",
+  "observability": { "enabled": true },
+  "vars": { "HOSTING_MODE": "community", "ACCESS_POLICY": "disabled" },
+  // Local only: workerd keeps this database under .wrangler/state.
+  "d1_databases": [{ "binding": "DB", "database_name": "rendered-review-local", "database_id": "local" }],
+
+  "env": {
+    "preview": {
+      "name": "rendered-review-preview",
+      "workers_dev": true,
+      "vars": { "HOSTING_MODE": "community", "ACCESS_POLICY": "disabled" },
+      // Replace with the ID printed by `wrangler d1 create rendered-review-preview`.
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "rendered-review-preview",
+          "database_id": "00000000-0000-0000-0000-000000000000",
+        },
+      ],
+    },
+    "production": {
+      "name": "rendered-review",
+      // Served from renderedreview.dev, a custom domain attached in the dashboard.
+      "workers_dev": false,
+      "vars": { "HOSTING_MODE": "community", "ACCESS_POLICY": "disabled" },
+      // Replace with the ID printed by `wrangler d1 create rendered-review-production`.
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "rendered-review-production",
+          "database_id": "00000000-0000-0000-0000-000000000000",
+        },
+      ],
+    },
+  },
+}
