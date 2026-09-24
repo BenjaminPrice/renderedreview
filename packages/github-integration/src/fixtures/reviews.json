@@ -1,0 +1,53 @@
+[
+  {
+    "id": 5232333241,
+    "node_id": "PRR_kwDOEaEoos8AAAABN98RuQ",
+    "user": {
+      "login": "Josh-Cena",
+      "id": 55398995,
+      "node_id": "MDQ6VXNlcjU1Mzk4OTk1",
+      "type": "User",
+      "site_admin": false
+    },
+    "body": "",
+    "state": "COMMENTED",
+    "commit_id": "4b42bf971c078e5a5dc8ff8cd9c5e357d80db264",
+    "submitted_at": "2026-09-17T07:09:22Z",
+    "html_url": "https://github.com/mdn/content/pull/45752#pullrequestreview-5232333241",
+    "author_association": "MEMBER"
+  },
+  {
+    "id": 5234514372,
+    "node_id": "PRR_kwDOEaEoos8AAAABOABZxA",
+    "user": {
+      "login": "chrisdavidmills",
+      "id": 47647,
+      "node_id": "MDQ6VXNlcjQ3NjQ3",
+      "type": "User",
+      "site_admin": false
+    },
+    "body": "The learning area fix, and others in areas I've been involved with, look fine. I won't merge this until others have had a chance to look it over.",
+    "state": "APPROVED",
+    "commit_id": "4b42bf971c078e5a5dc8ff8cd9c5e357d80db264",
+    "submitted_at": "2026-09-17T10:46:15Z",
+    "html_url": "https://github.com/mdn/content/pull/45752#pullrequestreview-5234514372",
+    "author_association": "CONTRIBUTOR"
+  },
+  {
+    "id": 5237656927,
+    "node_id": "PRR_kwDOEaEoos8AAAABODBNXw",
+    "user": {
+      "login": "wbamberg",
+      "id": 432915,
+      "node_id": "MDQ6VXNlcjQzMjkxNQ==",
+      "type": "User",
+      "site_admin": false
+    },
+    "body": "",
+    "state": "COMMENTED",
+    "commit_id": "4b42bf971c078e5a5dc8ff8cd9c5e357d80db264",
+    "submitted_at": "2026-09-17T15:08:40Z",
+    "html_url": "https://github.com/mdn/content/pull/45752#pullrequestreview-5237656927",
+    "author_association": "COLLABORATOR"
+  }
+]

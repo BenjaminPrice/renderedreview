@@ -1,0 +1,58 @@
+{
+  "data": {
+    "repository": {
+      "pullRequest": {
+        "reviewThreads": {
+          "pageInfo": { "hasNextPage": false, "endCursor": "Y3Vyc29yOnYyOpK0MjAyNi0wOS0xN1QxNTo1MToxOVrOo28chw==" },
+          "nodes": [
+            {
+              "id": "PRRT_kwDOEaEoos6jPvru",
+              "isResolved": false,
+              "isOutdated": true,
+              "isCollapsed": false,
+              "path": "files/en-us/web/security/authentication/passkeys/index.md",
+              "line": null,
+              "originalLine": 85,
+              "startLine": null,
+              "originalStartLine": null,
+              "diffSide": "RIGHT",
+              "subjectType": "LINE",
+              "resolvedBy": null,
+              "comments": { "nodes": [{ "databaseId": 4034118605 }, { "databaseId": 4038414070 }] }
+            },
+            {
+              "id": "PRRT_kwDOEaEoos6jbxiz",
+              "isResolved": true,
+              "isOutdated": true,
+              "isCollapsed": true,
+              "path": "files/en-us/web/security/authentication/passkeys/index.md",
+              "line": null,
+              "originalLine": 85,
+              "startLine": null,
+              "originalStartLine": null,
+              "diffSide": "RIGHT",
+              "subjectType": "LINE",
+              "resolvedBy": { "login": "Josh-Cena" },
+              "comments": { "nodes": [{ "databaseId": 4038891173 }] }
+            },
+            {
+              "id": "PRRT_kwDOEaEoos6jbxyH",
+              "isResolved": true,
+              "isOutdated": true,
+              "isCollapsed": true,
+              "path": "files/en-us/web/security/authentication/passkeys/index.md",
+              "line": null,
+              "originalLine": 188,
+              "startLine": null,
+              "originalStartLine": null,
+              "diffSide": "RIGHT",
+              "subjectType": "LINE",
+              "resolvedBy": { "login": "Josh-Cena" },
+              "comments": { "nodes": [{ "databaseId": 4038892679 }] }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

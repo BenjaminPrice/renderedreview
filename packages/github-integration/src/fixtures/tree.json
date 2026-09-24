@@ -1,0 +1,37 @@
+{
+  "sha": "d4cfcbadcb368b109d7b0e04e72a3a64df10ab14",
+  "truncated": false,
+  "tree": [
+    {
+      "path": ".editorconfig",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "afc63ba199812277a9cb2c2f8708ddd30c38c168",
+      "size": 270,
+      "url": "https://api.github.com/repos/mdn/content/git/blobs/afc63ba199812277a9cb2c2f8708ddd30c38c168"
+    },
+    {
+      "path": ".env-dist",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "cea2e9bae4f8f5f8b0a578a2e19f48cad17bd2e5",
+      "size": 322,
+      "url": "https://api.github.com/repos/mdn/content/git/blobs/cea2e9bae4f8f5f8b0a578a2e19f48cad17bd2e5"
+    },
+    {
+      "path": ".gitattributes",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "28aeafeb013ca18288224479ce2f5638375f64dc",
+      "size": 181,
+      "url": "https://api.github.com/repos/mdn/content/git/blobs/28aeafeb013ca18288224479ce2f5638375f64dc"
+    },
+    {
+      "path": ".github",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "52d690471705ae97a3d7c9263deaca0b93feb848",
+      "url": "https://api.github.com/repos/mdn/content/git/trees/52d690471705ae97a3d7c9263deaca0b93feb848"
+    }
+  ]
+}
