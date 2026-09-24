@@ -42,5 +42,7 @@ it("serves auth routes for this request's origin when the GitHub App is configur
   expect(response.status).toBe(200);
   expect(await response.json()).toBeNull();
   expect(await identityFor(context, "http://localhost:3000")).toBe(await identityFor(context, "http://localhost:3000"));
-  expect(await identityFor(context, "https://rr.example")).not.toBe(await identityFor(context, "http://localhost:3000"));
+  expect(await identityFor(context, "https://rr.example")).not.toBe(
+    await identityFor(context, "http://localhost:3000"),
+  );
 });
