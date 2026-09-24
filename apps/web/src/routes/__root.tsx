@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import type { QueryClient } from "@tanstack/react-query";
-import { createRootRouteWithContext, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
+import { createRootRouteWithContext, HeadContent, Outlet, ScriptOnce, Scripts } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { PREFS_SCRIPT } from "../ui/prefs";
 import styles from "../ui/styles.css?url";
@@ -30,7 +30,8 @@ function RootComponent() {
     // The pre-paint script sets data-theme / data-rail on <html> before React hydrates.
     <html lang="en" suppressHydrationWarning>
       <head>
-        <script dangerouslySetInnerHTML={{ __html: PREFS_SCRIPT }} />
+        {/* ScriptOnce carries the CSP nonce and removes itself, so hydration sees no <script>. */}
+        <ScriptOnce>{PREFS_SCRIPT}</ScriptOnce>
         <HeadContent />
       </head>
       <body>

@@ -2,6 +2,7 @@
 // Content Security Policy for every app response. Web APIs only, so it works on any runtime.
 import { githubContentOrigins } from "@rendered-review/markdown-domain";
 import type { AppConfig } from "@rendered-review/runtime";
+import { allowedHosts, apiBase } from "./github/proxy";
 
 /** A fresh base64 nonce for one response. */
 export function createNonce(): string {
@@ -9,23 +10,28 @@ export function createNonce(): string {
 }
 
 /**
- * GitHub origins come from config (`GITHUB_URL`), so an Enterprise Server deployment allows its
- * own host, its subdomains (raw, media, avatars) and its API instead of github.com's.
+ * GitHub origins come from the hosts this deployment serves (github.com plus `GITHUB_URL`), so an
+ * Enterprise Server deployment also allows its own host, its subdomains (raw, media, avatars)
+ * and its API.
  *
- * Start stamps `nonce` on the hydration and asset scripts it renders, so no inline script runs
- * without it. Nothing else is inline: Markdown is sanitized and may not carry scripts or styles.
+ * Start stamps `nonce` on the hydration and asset scripts it renders, and on `ScriptOnce` scripts
+ * such as the theme pre-paint script (__root.tsx). No other inline script runs.
+ * Markdown is sanitized and may not carry scripts or styles.
  */
-export function contentSecurityPolicy(github: AppConfig["github"], nonce: string): string {
-  const web = new URL(github.url);
-  const content = githubContentOrigins(web.host);
-  const api = new URL(github.apiUrl).origin;
+export function contentSecurityPolicy(config: AppConfig, nonce: string): string {
+  const hosts = allowedHosts(config);
+  const content = hosts.flatMap(githubContentOrigins);
+  const api = hosts.map((host) => new URL(apiBase(host)).origin);
   const directives = {
     "default-src": ["'self'"],
     "script-src": ["'self'", `'nonce-${nonce}'`],
     "style-src": ["'self'", `'nonce-${nonce}'`],
+    // React `style` props render as attributes. They cannot run script, url() loads are still
+    // limited by img-src/font-src, and sanitized Markdown never carries them.
+    "style-src-attr": ["'unsafe-inline'"],
     "img-src": ["'self'", ...content],
     // Public blobs and metadata are fetched from the browser directly.
-    "connect-src": ["'self'", api, ...content],
+    "connect-src": ["'self'", ...api, ...content],
     "font-src": ["'self'"],
     "object-src": ["'none'"],
     "base-uri": ["'none'"],

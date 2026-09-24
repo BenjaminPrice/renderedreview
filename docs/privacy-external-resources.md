@@ -5,7 +5,7 @@ Loading an image from a server tells that server your IP address, browser and wh
 ## What loads automatically
 
 - **Rendered Review itself:** its scripts, styles and fonts.
-- **GitHub:** the configured GitHub host and its content hosts. On github.com that means `github.com` and `*.githubusercontent.com` (repository files, uploaded attachments and avatars). On GitHub Enterprise Server it means the server's host and its subdomains. You already share your IP address with GitHub when you use it.
+- **GitHub:** the configured GitHub host and its content hosts. On github.com that means `github.com` and `*.githubusercontent.com` (repository files, uploaded attachments and avatars). An Enterprise Server deployment adds the server's host and its subdomains. You already share your IP address with GitHub when you use it.
 
 ## Images in documents
 
@@ -28,7 +28,7 @@ Every response carries a Content Security Policy that enforces these rules in th
 | Directive                                | Value                                                                 |
 | ---------------------------------------- | --------------------------------------------------------------------- |
 | `script-src`                             | `'self'` and a fresh per-response nonce. No other inline script runs. |
-| `style-src`                              | `'self'` and the same nonce                                           |
+| `style-src`                              | `'self'` and the same nonce; `style` attributes are allowed           |
 | `img-src`                                | `'self'` and the GitHub hosts above                                   |
 | `connect-src`                            | `'self'`, the GitHub API, and the GitHub hosts above                  |
 | `object-src`, `base-uri`                 | `'none'`                                                              |
@@ -37,6 +37,6 @@ Every response carries a Content Security Policy that enforces these rules in th
 
 ### GitHub Enterprise Server
 
-The GitHub hosts come from `GITHUB_URL`. With `GITHUB_URL=https://ghe.example.com`, the policy allows `https://ghe.example.com` and `https://*.ghe.example.com` in place of github.com's hosts, and the API origin derived from it. You don't need any other setting. The server must be reachable over HTTPS: repository images are requested with `https://` URLs.
+The GitHub hosts come from `GITHUB_URL`. With `GITHUB_URL=https://ghe.example.com`, the policy also allows `https://ghe.example.com`, `https://*.ghe.example.com` and the API origin derived from them. You don't need any other setting. The server must be reachable over HTTPS: repository images are requested with `https://` URLs.
 
 To allow another origin, for example an internal image mirror, add it to the directive lists in `apps/web/src/csp.ts`. For images, also add it to `githubContentOrigins` in `packages/markdown-domain/src/resources.ts`: the renderer only leaves an image loadable when that list includes its host.

@@ -42,7 +42,7 @@ try {
   for (const directive of ["object-src 'none'", "base-uri 'none'", "frame-ancestors 'none'"]) {
     assert.ok(csp.includes(directive), `CSP lacks ${directive}: ${csp}`);
   }
-  assert.doesNotMatch(csp, /unsafe-inline/);
+  assert.match(csp, /script-src 'self' 'nonce-[^';]+';/);
   const scripts = (await page.text()).match(/<script\b[^>]*>/g) ?? [];
   assert.ok(scripts.length > 0, "page rendered no scripts");
   for (const tag of scripts) assert.ok(tag.includes(`nonce="${nonce}"`), `script without nonce: ${tag}`);

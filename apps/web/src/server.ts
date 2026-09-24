@@ -23,7 +23,7 @@ export default createServerEntry({
     const response = await handler.fetch(request, { context: { ...context, nonce } });
     // Copy, since some responses (e.g. Response.json, redirects) have immutable headers.
     const secured = new Response(response.body, response);
-    secured.headers.set(CSP_HEADER, contentSecurityPolicy(context.config.github, nonce));
+    secured.headers.set(CSP_HEADER, contentSecurityPolicy(context.config, nonce));
     return secured;
   },
 });
