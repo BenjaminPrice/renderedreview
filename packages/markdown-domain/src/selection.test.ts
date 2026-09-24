@@ -180,3 +180,63 @@ describe("blocks map inside their own source", () => {
     expect(claimed(md, select(md, "& bold"))).toBe("&amp; <b>bold");
   });
 });
+
+describe("selections across blocks widen to whole blocks or are rejected", () => {
+  test("two paragraphs: the claim and the quote cover both", () => {
+    const md = "# H\n\nFirst para.\n\nSecond para.\n";
+    const s = ok(select(md, "para.", "Second"));
+    expect(s).toMatchObject({
+      expanded: true,
+      exact: "First para.\nSecond para.",
+      nodeType: "root",
+      sourceRange: { startLine: 3, startColumn: 1, endLine: 5, endColumn: 13 },
+      headingPath: ["H"],
+    });
+    expect(s.blockIds).toHaveLength(2);
+    expect(claimed(md, select(md, "para.", "Second"))).toBe("First para.\n\nSecond para.");
+  });
+
+  test("list items widen to the items, not the whole list", () => {
+    const md = "- one\n- two\n- three\n";
+    const s = ok(select(md, "ne", "tw"));
+    expect(claimed(md, select(md, "ne", "tw"))).toBe("- one\n- two");
+    expect(s).toMatchObject({ nodeType: "list", expanded: true });
+  });
+
+  test("a nested list widens to the enclosing item", () => {
+    const md = "- outer\n  - inner\n- next\n";
+    expect(claimed(md, select(md, "uter", "inn"))).toBe("- outer\n  - inner");
+  });
+
+  test("never claims part of a JSX element", () => {
+    const md = "<Note>\n\nInside text\n\n</Note>\n\nAfter\n";
+    expect(claimed(md, select(md, "text", "After", { format: "mdx" }))).toBe(md.trimEnd());
+  });
+
+  test("table rows widen to the rows", () => {
+    const md = "| a | b |\n|---|---|\n| c | d |\n| e | f |\n";
+    expect(claimed(md, select(md, "d", "e"))).toBe("| c | d |\n| e | f |");
+  });
+
+  test("front matter rows widen to the rows", () => {
+    const md = "---\ntitle: Hello\ntags: [a, b]\n---\n\nBody\n";
+    expect(claimed(md, select(md, "Hello", "tags"))).toBe("title: Hello\ntags: [a, b]");
+  });
+
+  test("front matter into the body is rejected", () => {
+    const md = "---\ntitle: Hello\n---\n\nBody\n";
+    expect(select(md, "Hello", "Body")).toMatchObject({ ok: false, reason: "frontmatter" });
+  });
+
+  test("a collapsed selection is rejected", () => {
+    const md = "Some text\n";
+    const doc = renderMarkdown(md);
+    const p = at(doc.tree, "text", "start");
+    expect(selectionToSource(doc, md, p, p)).toMatchObject({ ok: false, reason: "empty" });
+  });
+
+  test("into a footnote: covers the source between the reference and the definition", () => {
+    const md = "Text[^n] here.\n\nMiddle.\n\n[^n]: The note.\n";
+    expect(claimed(md, select(md, "here", "The note"))).toBe(md.trimEnd());
+  });
+});
