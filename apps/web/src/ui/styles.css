@@ -673,6 +673,15 @@ samp {
 .rr-t-loc {
   white-space: nowrap;
 }
+.rr-t-reply {
+  border-top: 1px solid var(--rr-border-muted);
+}
+.rr-t-reply .rr-composer-actions {
+  padding-top: 6px;
+}
+.rr-t-error {
+  margin-top: 8px;
+}
 
 /* Comment Markdown */
 .rr-md > :first-child {
