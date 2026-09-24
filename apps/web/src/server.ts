@@ -4,13 +4,26 @@
 import handler, { createServerEntry } from "@tanstack/react-start/server-entry";
 import { createRequestContext } from "#runtime";
 import type { RequestContext } from "@rendered-review/runtime";
+import { contentSecurityPolicy, createNonce } from "./csp";
 
 declare module "@tanstack/react-start" {
   interface Register {
-    server: { requestContext: RequestContext };
+    // `nonce` is read by getRouter (router.tsx) so Start stamps it on the scripts it renders.
+    server: { requestContext: RequestContext & { nonce: string } };
   }
 }
 
+// Vite dev injects un-nonced scripts and a websocket, so dev only reports violations.
+const CSP_HEADER = import.meta.env.DEV ? "Content-Security-Policy-Report-Only" : "Content-Security-Policy";
+
 export default createServerEntry({
-  fetch: (request) => handler.fetch(request, { context: createRequestContext() }),
+  fetch: async (request) => {
+    const context = createRequestContext();
+    const nonce = createNonce();
+    const response = await handler.fetch(request, { context: { ...context, nonce } });
+    // Copy, since some responses (e.g. Response.json, redirects) have immutable headers.
+    const secured = new Response(response.body, response);
+    secured.headers.set(CSP_HEADER, contentSecurityPolicy(context.config, nonce));
+    return secured;
+  },
 });

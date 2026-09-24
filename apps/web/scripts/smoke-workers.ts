@@ -3,6 +3,7 @@
 // `wrangler dev`, which needs no Cloudflare account, and checks the health, home and PR routes.
 import { spawn } from "node:child_process";
 import assert from "node:assert/strict";
+import { checkCsp } from "./check-csp.ts";
 
 const port = String(8800 + Math.floor(Math.random() * 800));
 const wrangler = new URL("../node_modules/wrangler/bin/wrangler.js", import.meta.url).pathname;
@@ -34,6 +35,7 @@ try {
   assert.equal(home.status, 200);
   assert.match(home.headers.get("content-type") ?? "", /text\/html/);
   console.log("ok: / renders");
+  await checkCsp(`http://127.0.0.1:${port}/`);
 
   const pr = await get("/github.com/octocat/hello-world/pull/1");
   assert.equal(pr.status, 200);

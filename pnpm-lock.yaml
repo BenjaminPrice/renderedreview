@@ -41,6 +41,9 @@ importers:
       '@rendered-review/github-integration':
         specifier: workspace:*
         version: link:../../packages/github-integration
+      '@rendered-review/markdown-domain':
+        specifier: workspace:*
+        version: link:../../packages/markdown-domain
       '@rendered-review/runtime':
         specifier: workspace:*
         version: link:../../packages/runtime
@@ -142,6 +145,9 @@ importers:
       '@types/unist':
         specifier: ^3.0.3
         version: 3.0.3
+      github-slugger:
+        specifier: ^2.0.0
+        version: 2.0.0
       hast-util-to-string:
         specifier: ^3.0.1
         version: 3.0.1
@@ -1653,6 +1659,9 @@ packages:
   gensync@1.0.0-beta.2:
     resolution: {integrity: sha512-3hN7NaskYvMDLQY55gnW3NQ+mesEAepTqlg+VEbj7zzqEMBVNhzcGYYeqFo/TlYz6eQiFcp1HcsCZO+nGgS8zg==}
     engines: {node: '>=6.9.0'}
+
+  github-slugger@2.0.0:
+    resolution: {integrity: sha512-IaOQ9puYtjrkq7Y0Ygl9KDZnrf/aiUJYUpVf89y8kyaxbRG7Y1SrX/jaumrv81vc61+kiMempujsM3Yw7w5qcw==}
 
   glob-parent@6.0.2:
     resolution: {integrity: sha512-XxwI8EOhVQgWp6iDL+3b0r86f4d6AX6zSU55HfB4ydCEuXLXc5FcYeOu+nnGftS4TEju/11rt4KJPTMgbfmv4A==}
@@ -3846,6 +3855,8 @@ snapshots:
     optional: true
 
   gensync@1.0.0-beta.2: {}
+
+  github-slugger@2.0.0: {}
 
   glob-parent@6.0.2:
     dependencies:
