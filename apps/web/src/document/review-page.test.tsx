@@ -336,7 +336,12 @@ it("places a deleted doc's LEFT-side threads on its base revision", async () => 
 });
 
 it("lists a comment on a blank line as not placed, saying why", async () => {
-  editComments((cs) => Object.assign(cs.find((c) => c.id === SUGGESTION)!, { line: 8, commit_id: HEAD }));
+  editComments((cs) =>
+    Object.assign(
+      cs.find((c) => c.id === SUGGESTION)!,
+      { line: 8, commit_id: HEAD },
+    ),
+  );
   renderPage(`?doc=${encodeURIComponent(INDEX)}`);
   const card = await threadCard(/GitHub line comment · L8, by hamishwillee/);
   expect(anchorOf(card)).toBeNull();

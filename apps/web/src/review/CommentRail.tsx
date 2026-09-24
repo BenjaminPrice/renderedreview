@@ -197,6 +197,7 @@ export function CommentRail(props: CommentRailProps) {
       thread={p.thread}
       repository={repository}
       active={p.thread.id === active}
+      unplaced={!p.blocks.length}
       onActivate={() => p.thread.id !== active && activate(p.thread.id)}
     />
   );
@@ -214,7 +215,7 @@ export function CommentRail(props: CommentRailProps) {
       {unanchored.length > 0 && (
         <section className="rr-rail-group" aria-labelledby="rr-rail-unanchored">
           <h3 id="rr-rail-unanchored" className="rr-rail-group-title">
-            File-level and outdated
+            Not placed in document
           </h3>
           {unanchored.map(card)}
         </section>
