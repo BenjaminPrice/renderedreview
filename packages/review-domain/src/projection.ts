@@ -387,9 +387,9 @@ export function historicalThreads(
     if (a.type === "annotation") {
       const { commitOid, blobOid } = a.annotation.target;
       if (commitOid !== revision.commitOid && blobOid !== revision.blobOid) return [];
+      // Its GitHub fallback lines are the head's; only lines on this revision apply here.
       const fallback = original(thread);
-      const { fallback: _, ...rest } = a;
-      return [{ ...thread, anchor: { ...rest, ...(fallback && { fallback }) } }];
+      return [{ ...thread, anchor: { type: "annotation", annotation: a.annotation, ...(fallback && { fallback }) } }];
     }
     const anchor = original(thread);
     return anchor ? [{ ...thread, anchor }] : [];
