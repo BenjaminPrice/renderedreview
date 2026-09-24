@@ -270,15 +270,17 @@ describe("connector visibility", () => {
     await vi.waitFor(() => expect(wires()?.querySelectorAll("path")).toHaveLength(2));
   });
 
-  it("points a word-level anchor's connector at its highlighted words, others at the block edge", async () => {
+  it("aligns a word-level anchor's connector with its words' line, starting in the gutter", async () => {
     localStorage.setItem("rr-connectors", "on");
     const rect = { left: 40, right: 100, top: 20, bottom: 36, width: 60, height: 16, x: 40, y: 20 };
     const words = { getBoundingClientRect: () => rect } as Range;
     await renderPage(undefined, { wordRanges: new Map([["current", [words]]]) });
     await vi.waitFor(() => expect(wires()?.querySelectorAll("circle")).toHaveLength(2));
     const [onWords, onBlock] = [...wires()!.querySelectorAll("circle")];
-    expect([onWords!.getAttribute("cx"), onWords!.getAttribute("cy")]).toEqual(["102", "28"]);
-    expect(onBlock!.getAttribute("cx")).not.toBe("102");
+    // Vertically at the words, but starting in the gutter: a wire never crosses the text column.
+    expect(onWords!.getAttribute("cy")).toBe("28");
+    expect(onWords!.getAttribute("cx")).toBe(onBlock!.getAttribute("cx"));
+    expect(Number(onWords!.getAttribute("cx"))).toBeLessThan(rect.left);
   });
 
   it("removes connectors when switched off", async () => {
