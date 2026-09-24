@@ -42,6 +42,23 @@ function expectValidRange(source: string, range: SourceRange) {
 /** Text the pipeline generates without source (footnote chrome and reference numbers). */
 const GENERATED_TEXT = new Set(["Footnotes", "↩", "1", "Note", "Tip", "Important", "Warning", "Caution"]);
 
+describe("source containment check", () => {
+  const whole = (src: string) => ({ start: { line: 1, column: 1, offset: 0 }, end: { line: 1, column: 1, offset: src.length } });
+
+  test("plain text must appear verbatim in its range", () => {
+    expect(sourceContains("Hello\nworld", whole("Hello\nworld"), "Hello\nworld", false)).toBe(true);
+    expect(sourceContains("Hello\nworld", whole("Hello"), "Hello\nworld", false)).toBe(false);
+    expect(sourceContains("x\n> y", whole("x\n> y"), "x\ny", false)).toBe(false);
+    expect(sourceContains("a\n  b", whole("a\n  b"), "a\nb", false)).toBe(false);
+  });
+
+  test("quoted text is compared without the line's blockquote markers only", () => {
+    expect(sourceContains("x\n> y", whole("x\n> y"), "x\ny", true)).toBe(true);
+    expect(sourceContains("  > x\n  > y", whole("  > x\n  > y"), "x\ny", true)).toBe(true);
+    expect(sourceContains("x\n> y", whole("x\n> y"), "x\nz", true)).toBe(false);
+  });
+});
+
 describe.each(Object.entries(fixtures))("%s fixture", (name, source) => {
   const doc = renderMarkdown(source);
 
