@@ -371,24 +371,15 @@ it("counts threads per doc in the sidebar and the doc's threads on the Comments 
   expect(screen.getByRole("button", { name: /Comments 2/ })).toBeTruthy();
 });
 
-it("shows review summaries and the PR conversation, without the Rendered Review link comment", async () => {
-  const comments = JSON.parse(fixture("issue-comments.json")) as Record<string, unknown>[];
-  comments.push({
-    ...comments[0],
-    id: 1,
-    body: "<!-- rendered-review-link:v1 -->\nReview the rendered documents",
-    html_url: "https://github.com/mdn/content/pull/45377#issuecomment-1",
-  });
-  responses[`${API}/issues/45377/comments?per_page=100`] = JSON.stringify(comments);
-  renderPage();
+it("shows only the document's threads in its rail, with a pointer to the PR conversation in Overview", async () => {
+  const router = renderPage(`?doc=${encodeURIComponent(INDEX)}`);
   await screen.findByRole("article", { name: "Rendered document" });
-  const reviews = await within(rail()).findByRole("region", { name: /Reviews/ });
-  expect(within(reviews).getByRole("article", { name: "Approved by hamishwillee" })).toBeTruthy();
-  expect(within(reviews).getByText("Looks great - thanks.")).toBeTruthy();
-  const conversation = within(rail()).getByRole("region", { name: /Conversation/ });
-  expect(within(conversation).getAllByRole("article")).toHaveLength(1);
-  expect(within(conversation).getByText("Preview URLs")).toBeTruthy();
-  expect(within(rail()).queryByText("Review the rendered documents")).toBeNull();
+  const note = await within(rail()).findByText(/PR conversation \(2\) is in/);
+  expect(within(rail()).queryByRole("region", { name: /Reviews|Conversation/ })).toBeNull();
+  expect(within(rail()).queryByText("Preview URLs")).toBeNull();
+  await userEvent.click(within(note).getByRole("link", { name: "Overview" }));
+  expect(router.state.location.search).toMatchObject({ view: "overview" });
+  expect(router.state.location.search).not.toHaveProperty("doc");
 });
 
 it("places a deleted doc's LEFT-side threads on its base revision", async () => {
@@ -423,4 +414,213 @@ it("lists a comment on a blank line as not placed, saying why", async () => {
   expect(anchorOf(card)).toBeNull();
   expect(within(rail()).getByRole("region", { name: "Not placed in document" }).contains(card)).toBe(true);
   expect(within(card).getByText(/no rendered block at this line/)).toBeTruthy();
+});
+
+// PR Overview: the pull request's description and conversation, opened from the sidebar.
+const overview = () => screen.findByRole("region", { name: "Pull request overview" });
+const prEntry = () => within(sidebar()).getByRole("link", { name: /^Pull request #45377/ });
+const LINK_COMMENT = 5454381559; // the mdn preview-URL bot's conversation comment
+
+type RawItem = Record<string, unknown> & { id: number };
+function edit(name: string, url: string, change: (items: RawItem[]) => void) {
+  const items = JSON.parse(fixture(name)) as RawItem[];
+  change(items);
+  responses[url] = JSON.stringify(items);
+}
+const editIssueComments = (change: (items: RawItem[]) => void) =>
+  edit("issue-comments.json", `${API}/issues/45377/comments?per_page=100`, change);
+const editReviews = (change: (items: RawItem[]) => void) =>
+  edit("reviews.json", `${API}/pulls/45377/reviews?per_page=100`, change);
+function editPull(change: (pr: Record<string, unknown>) => void) {
+  const pr = JSON.parse(fixture("pull.json")) as Record<string, unknown>;
+  change(pr);
+  responses[`${API}/pulls/45377`] = JSON.stringify(pr);
+}
+
+it("shows a Pull request block above the documents that opens the Overview", async () => {
+  const router = renderPage();
+  await screen.findByRole("article", { name: "Rendered document" });
+  const entry = await vi.waitFor(() => {
+    const link = prEntry();
+    expect(link.textContent).toContain("Overview · 2 comments");
+    return link;
+  });
+  expect(within(entry).getByText("1 approval")).toBeTruthy();
+  expect(within(entry).getByRole("img", { name: "Reviewers: hamishwillee, github-actions[bot]" })).toBeTruthy();
+  expect(entry.getAttribute("aria-current")).toBeNull();
+  expect(within(sidebar()).getByText("Documents")).toBeTruthy();
+
+  await userEvent.click(entry);
+  expect(router.state.location.search).toMatchObject({ view: "overview" });
+  await overview();
+  expect(prEntry().getAttribute("aria-current")).toBe("page");
+  expect(within(sidebar()).queryAllByRole("link", { current: "page" })).toHaveLength(1);
+});
+
+it("opens the Overview from the keyboard", async () => {
+  const router = renderPage();
+  await screen.findByRole("article", { name: "Rendered document" });
+  prEntry().focus();
+  await userEvent.keyboard("{Enter}");
+  expect(router.state.location.search).toMatchObject({ view: "overview" });
+});
+
+it("shows the PR header band and its description as sanitized Markdown", async () => {
+  editPull((pr) => {
+    pr.body += "\n\n<script>alert(1)</script><img src=x onerror=alert(1) alt=x>";
+  });
+  renderPage("?view=overview");
+  const region = await overview();
+  const band = within(region).getByRole("banner");
+  expect(within(band).getByText("Pull request")).toBeTruthy();
+  expect(within(band).getByRole("heading", { name: "Remove HTTP status 102 page #45377" })).toBeTruthy();
+  expect(within(band).getByText("Merged")).toBeTruthy();
+  expect(band.textContent).toContain("OnkarRuikar merged 4 commits into");
+  expect(within(band).getByText("main")).toBeTruthy();
+  expect(within(band).getByText("OnkarRuikar:delete_102_http_status_page")).toBeTruthy();
+  expect(within(band).getByText("Content:HTTP")).toBeTruthy();
+  expect(within(band).getByText("size/s")).toBeTruthy();
+
+  const description = within(region).getByRole("region", { name: "Description" });
+  expect(within(description).getByRole("heading", { name: "More Info" })).toBeTruthy();
+  expect(description.textContent).toContain("npm run content delete Web/HTTP/Reference/Status/102");
+  expectNewTab(within(description).getByRole("link", { name: /not being tracked in BCD/ }));
+  expectNewTab(within(description).getByRole("link", { name: "Edit on GitHub (opens in new tab)" }));
+  expect(description.querySelector("script")).toBeNull();
+  expect(description.querySelector("[onerror]")).toBeNull();
+});
+
+it("says when the PR has no description", async () => {
+  editPull((pr) => {
+    pr.body = null;
+  });
+  renderPage("?view=overview");
+  const description = within(await overview()).getByRole("region", { name: "Description" });
+  expect(within(description).getByText("No description provided.")).toBeTruthy();
+});
+
+it("lists the conversation and review events oldest first, without the Rendered Review link comment", async () => {
+  editIssueComments((cs) =>
+    cs.push({
+      ...cs[0]!,
+      id: 1,
+      body: "<!-- rendered-review-link:v1 -->\nReview the rendered documents",
+      created_at: "2026-09-01T00:00:00Z",
+    }),
+  );
+  editReviews((rs) =>
+    rs.push({
+      ...rs[0]!,
+      id: 2,
+      state: "CHANGES_REQUESTED",
+      body: "Please keep a note.",
+      submitted_at: "2026-08-30T00:00:00Z",
+    }),
+  );
+  renderPage("?view=overview");
+  const list = await within(await overview()).findByRole("list", { name: "Conversation, oldest first" });
+  const items = within(list).getAllByRole("listitem");
+  expect(items.map((i) => i.getAttribute("aria-label"))).toEqual([
+    "github-actions[bot] commented",
+    "hamishwillee requested changes",
+    "hamishwillee approved these changes",
+  ]);
+  expect(within(items[0]!).getByText("Preview URLs")).toBeTruthy();
+  expect(within(items[1]!).getByText("Changes requested")).toBeTruthy();
+  expect(within(items[1]!).getByText("Please keep a note.")).toBeTruthy();
+  expect(within(items[2]!).getByText("Approved")).toBeTruthy();
+  expect(within(items[2]!).getByText("Looks great - thanks.")).toBeTruthy();
+  expect(screen.queryByText("Review the rendered documents")).toBeNull();
+});
+
+it("jumps from a permalink comment to its document and focuses the lines", async () => {
+  editIssueComments((cs) =>
+    cs.push({ ...cs[0]!, id: 2, body: `Why this line? https://github.com/mdn/content/blob/${HEAD}/${INDEX}#L30` }),
+  );
+  const router = renderPage("?view=overview");
+  const jump = await within(await overview()).findByRole("link", { name: `Jump to ${INDEX} · L30` });
+  await userEvent.click(jump);
+  expect(router.state.location.search).toMatchObject({ doc: INDEX });
+  expect(router.state.location.search).not.toHaveProperty("view");
+  const article = await screen.findByRole("article", { name: "Rendered document" });
+  await vi.waitFor(() => expect(article.contains(document.activeElement)).toBe(true));
+  expect(document.activeElement!.textContent).toContain("102");
+});
+
+it("jumps from a review to its thread in the document", async () => {
+  suggestionOnHead();
+  editReviews((rs) =>
+    Object.assign(
+      rs.find((r) => r.id === 5127229684)!,
+      { body: "One suggestion." },
+    ),
+  );
+  const router = renderPage("?view=overview");
+  const item = await within(await overview()).findByRole("listitem", { name: "hamishwillee reviewed" });
+  await userEvent.click(within(item).getByRole("link", { name: `Jump to ${INDEX} · L30` }));
+  expect(router.state.location.search).toMatchObject({ doc: INDEX, thread: SUGGESTION });
+  const card = await threadCard(/GitHub line comment · L30/);
+  await vi.waitFor(() => expect(document.activeElement).toBe(card));
+});
+
+it("opens the Overview at a conversation comment linked by the thread param", async () => {
+  renderPage(`?thread=${LINK_COMMENT}`);
+  const item = await within(await overview()).findByRole("listitem", { name: "github-actions[bot] commented" });
+  await vi.waitFor(() => expect(item.contains(document.activeElement)).toBe(true));
+});
+
+it("lists documents with comments in the Overview rail, without filters, connectors or markers", async () => {
+  localStorage.setItem("rr-connectors", "on");
+  const router = renderPage("?view=overview");
+  await overview();
+  const docs = await screen.findByRole("complementary", { name: "Documents with comments 1" });
+  const row = await within(docs).findByRole("link", { name: /status\/index\.md/ });
+  expect(row.textContent).toContain("2 outdated");
+  expect(within(row).getByText("M")).toBeTruthy();
+  expect(within(docs).queryByText(/_redirects/)).toBeNull(); // not a document
+  expect(within(docs).queryByRole("group", { name: "Filter comments" })).toBeNull();
+  expect(within(docs).queryByRole("switch", { name: "Show connectors" })).toBeNull();
+  expect(document.querySelector(".rr-marker, .rr-wires")).toBeNull();
+
+  row.focus();
+  await userEvent.keyboard("{Enter}");
+  expect(router.state.location.search).toMatchObject({ doc: INDEX });
+  expect(await screen.findByRole("article", { name: "Rendered document" })).toBeTruthy();
+});
+
+it("shows no count on the Comments button in Overview, and the document's count in a document", async () => {
+  const router = renderPage("?view=overview");
+  await overview();
+  expect(screen.getByRole("button", { name: "Comments" }).getAttribute("aria-controls")).toBe("rr-rail");
+  await router.navigate({ to: ".", search: { files: "changed", doc: INDEX } });
+  expect(await screen.findByRole("button", { name: "Comments 2" })).toBeTruthy();
+});
+
+it("shows a PR breadcrumb in Overview and a file breadcrumb in a document", async () => {
+  const router = renderPage("?view=overview");
+  await overview();
+  const crumbs = screen.getByRole("navigation", { name: "Breadcrumb" });
+  expect(crumbs.textContent).toMatch(/mdn\/content.*Pull request #45377.*Overview/);
+  expect(within(crumbs).getByText("Overview").getAttribute("aria-current")).toBe("page");
+  const toolbar = crumbs.closest(".rr-toolbar") as HTMLElement;
+  expectNewTab(within(toolbar).getByRole("link", { name: "Open in GitHub (opens in new tab)" }));
+  expect(within(toolbar).queryByRole("button", { name: "Raw" })).toBeNull();
+  expect(within(toolbar).queryByRole("link", { name: /Source/ })).toBeNull();
+
+  await router.navigate({ to: ".", search: { files: "changed", doc: INDEX } });
+  await screen.findByRole("article", { name: "Rendered document" });
+  const fileCrumbs = screen.getByRole("navigation", { name: "Breadcrumb" });
+  expect(fileCrumbs.textContent).toContain(`mdn/content›#45377›${INDEX}`);
+  expect(within(fileCrumbs).getByText(INDEX.split("/").pop()!).closest("[aria-current=page]")).toBeTruthy();
+  await userEvent.click(within(fileCrumbs).getByRole("link", { name: "#45377" }));
+  expect(router.state.location.search).toMatchObject({ view: "overview" });
+});
+
+it("lands on the Overview when no Markdown changed", async () => {
+  edit("files.json", `${API}/pulls/45377/files?per_page=100`, (fs) =>
+    fs.splice(0, fs.length, ...fs.filter((f) => !String(f.filename).endsWith(".md"))),
+  );
+  renderPage();
+  expect(await overview()).toBeTruthy();
+  expect(prEntry().getAttribute("aria-current")).toBe("page");
 });
