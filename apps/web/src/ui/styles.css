@@ -674,8 +674,13 @@ samp {
   font-size: 11.5px;
   color: var(--rr-text-muted);
 }
+/* The location gives way first (wrapping its own text) so the actions stay together on one row. */
 .rr-t-loc {
-  white-space: nowrap;
+  flex: 1 1 0;
+  min-width: 6em;
+}
+.rr-t-foot .rr-btn-sm {
+  padding: 0 6px;
 }
 .rr-t-reply {
   border-top: 1px solid var(--rr-border-muted);
@@ -685,9 +690,6 @@ samp {
 }
 .rr-t-error {
   margin-top: 8px;
-}
-.rr-t-loc.rr-t-why {
-  white-space: normal;
 }
 /* Resolve/reopen events of an application thread: small rows, not comments. */
 .rr-t-events {

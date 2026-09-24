@@ -267,7 +267,7 @@ export function ThreadCard({
         </ol>
       )}
       <ThreadFoot thread={thread} actions={actions} context={`thread by ${who}, ${label}`} resolving={resolving}>
-        <span className={reason ? "rr-t-loc rr-t-why" : "rr-t-loc"}>
+        <span className="rr-t-loc">
           {reason ? (
             `${label} · ${reason}`
           ) : moved?.approximate ? (
