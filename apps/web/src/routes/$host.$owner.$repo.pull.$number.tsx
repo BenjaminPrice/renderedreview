@@ -145,6 +145,12 @@ function ReviewPage({ pr, id, files }: { pr: PullRequest; id: PrIdentity; files:
   };
   useAnchors(article, placements, filters, active?.id ?? null, setActive);
 
+  // A new document starts at its top, unless a thread link targets it: focusing the thread scrolls there.
+  const scrollTop = useEffectEvent(() => {
+    if (!search.thread) document.querySelector(".rr-scroll")?.scrollTo(0, 0);
+  });
+  useEffect(() => scrollTop(), [path]);
+
   const dir = entry ? entry.path.slice(0, entry.path.lastIndexOf("/") + 1) : "";
   const link = entry && { ...id, sha: doc.sha, path: entry.path };
 
