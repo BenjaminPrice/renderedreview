@@ -2,3 +2,4 @@
 export * from "./classify.js";
 export * from "./projection.js";
 export * from "./representation.js";
+export * from "./reanchor.js";

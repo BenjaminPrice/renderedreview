@@ -10,7 +10,7 @@ import {
 import { type ReactNode, useEffect, useRef } from "react";
 import { ExternalLink } from "../ui/ExternalLink";
 import { Markdown } from "./Markdown";
-import { anchorLabel, blobUrl, isEdited, relativeTime, suggestionOriginal, threadState } from "./model";
+import { anchorLabel, blobUrl, isEdited, lines, relativeTime, suggestionOriginal, threadState } from "./model";
 import type { ThreadActions } from "./thread-actions";
 import { ThreadFoot } from "./ThreadFoot";
 
@@ -151,6 +151,8 @@ export interface ThreadCardProps {
   verified?: boolean;
   /** Its annotation does not match the document it names: why. */
   damaged?: string;
+  /** Re-anchored from an earlier revision to these lines of the displayed document; `approximate` when its text changed. */
+  moved?: { startLine: number; endLine: number; approximate?: boolean };
   onActivate?: () => void;
   /** Reply and resolve controls; without them the card is read-only. */
   actions?: ThreadActions;
@@ -165,6 +167,7 @@ export function ThreadCard({
   reason,
   verified,
   damaged,
+  moved,
   onActivate,
   actions,
 }: ThreadCardProps) {
@@ -173,7 +176,7 @@ export function ThreadCard({
   const a =
     thread.anchor.type === "annotation" && !verified && thread.anchor.fallback ? thread.anchor.fallback : thread.anchor;
   const root = thread.comments[0]!;
-  const label = anchorLabel(a);
+  const label = moved ? `Selected text · ${lines(moved)}` : anchorLabel(a);
   const n = thread.comments.length;
   const who = root.author?.login ?? "ghost";
 
@@ -196,9 +199,15 @@ export function ThreadCard({
       Unresolved
     </Badge>
   );
-  const badges = (outdated || unresolved) && (
+  const movedBadge = moved && (
+    <Badge tone="mod" icon="history">
+      Moved
+    </Badge>
+  );
+  const badges = (outdated || movedBadge || unresolved) && (
     <>
       {outdated}
+      {movedBadge}
       {unresolved}
     </>
   );
@@ -246,6 +255,8 @@ export function ThreadCard({
         <span className={reason ? "rr-t-loc rr-t-why" : "rr-t-loc"}>
           {reason ? (
             `${label} · ${reason}`
+          ) : moved?.approximate ? (
+            `${label} · Text changed since this comment · approximate location`
           ) : a.type === "outdated" ? (
             <>
               From <code>{a.commitOid.slice(0, 7)}</code> · {label.replace("GitHub line comment · ", "")}
@@ -301,7 +312,10 @@ export function ThreadCard({
     );
 
   return (
-    <section {...common} aria-label={`${label}, by ${who}${a.type === "outdated" ? ", outdated" : ""}`}>
+    <section
+      {...common}
+      aria-label={`${label}, by ${who}${a.type === "outdated" ? ", outdated" : moved ? ", moved" : ""}`}
+    >
       {body}
     </section>
   );

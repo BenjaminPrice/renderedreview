@@ -786,7 +786,7 @@ it("lands on the Overview when no Markdown changed", async () => {
 
 // Application comments: PR conversation comments carrying Rendered Review annotation metadata.
 const HEAD_BLOB = "1a05f7e9c35e2bb310563708351758307f34a599";
-function appComment(id: number, over: { pullRequest?: number; blobOid?: string } = {}) {
+function appComment(id: number, over: { pullRequest?: number; blobOid?: string; exact?: string } = {}) {
   const annotation = {
     version: 1,
     target: {
@@ -798,7 +798,7 @@ function appComment(id: number, over: { pullRequest?: number; blobOid?: string }
       commitOid: HEAD,
       blobOid: over.blobOid ?? HEAD_BLOB,
       selectors: [
-        { type: "TextQuoteSelector", exact: "indicates that the client" },
+        { type: "TextQuoteSelector", exact: over.exact ?? "indicates that the client" },
         // Raw-blob offsets of the same span as the source range.
         { type: "TextPositionSelector", start: 999, end: 1024 },
         { type: "MarkdownSourceRangeSelector", startLine: 26, startColumn: 29, endLine: 26, endColumn: 54 },
@@ -817,7 +817,12 @@ function appComment(id: number, over: { pullRequest?: number; blobOid?: string }
 
 it("shows application comments on their words in the document, not in the conversation", async () => {
   editIssueComments((cs) =>
-    cs.push({ ...cs[0]!, ...appComment(11) }, { ...cs[0]!, ...appComment(12, { blobOid: "e".repeat(40) }) }),
+    cs.push(
+      { ...cs[0]!, ...appComment(11) },
+      // Written on an earlier blob: re-anchored onto the same words, or not placed once they are gone.
+      { ...cs[0]!, ...appComment(12, { blobOid: "e".repeat(40) }) },
+      { ...cs[0]!, ...appComment(13, { blobOid: "e".repeat(40), exact: "words no longer in the page" }) },
+    ),
   );
   renderPage(`?doc=${encodeURIComponent(INDEX)}`);
   const placed = (await screen.findByText(/right word\? \(11\)/)).closest("section")!;
@@ -825,7 +830,10 @@ it("shows application comments on their words in the document, not in the conver
   expect(within(placed).queryByText("indicates that the client")).toBeNull();
   expect(anchorOf(placed)?.textContent).toContain("indicates that the client");
   const unanchored = within(rail()).getByRole("region", { name: "Not placed in document" });
-  expect(within(unanchored).getByText(/re-anchoring pending$/)).toBeTruthy();
+  expect(within(unanchored).getByText(/The quoted text changed since this comment$/)).toBeTruthy();
+  expect(within(unanchored).queryByText(/right word\? \(12\)/)).toBeNull();
+  const reanchored = screen.getByText(/right word\? \(12\)/).closest("section")!;
+  expect(anchorOf(reanchored)?.textContent).toContain("indicates that the client");
 
   await userEvent.click(prEntry());
   const list = await within(await overview()).findByRole("list", { name: "Conversation, oldest first" });

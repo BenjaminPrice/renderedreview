@@ -136,7 +136,7 @@ function indexOf(doc: RenderedMarkdown): Index {
 }
 
 /** Index of the last segment starting at or before `offset`. */
-function segmentAt(segments: Segment[], offset: number): number {
+function segmentAt(segments: { at: number }[], offset: number): number {
   let lo = 0;
   let hi = segments.length - 1;
   while (lo < hi) {
@@ -461,4 +461,82 @@ export function sourceToRendered(
     }
   }
   return runs;
+}
+
+/** The document's searchable text; see `documentText`. */
+export interface DocumentText {
+  /** Normalized rendered text of the whole document, without generated labels: what quotes are cut from. */
+  text: string;
+  /** Claim `text[start, end)` exactly as a rendered selection of those characters would. */
+  select(start: number, end: number): SelectionResult;
+}
+
+const documentTexts = new WeakMap<RenderedMarkdown, DocumentText>();
+
+/**
+ * Search the rendered document the way selections quote it: `text` is every non-generated text
+ * node, concatenated and normalized, so a stored `exact` quote is found with `indexOf`, and any
+ * hit goes back through `selectionToSource` for its source claim, context and structure. Cached.
+ */
+export function documentText(doc: RenderedMarkdown, source: string): DocumentText {
+  const cached = documentTexts.get(doc);
+  if (cached) return cached;
+  const ix = indexOf(doc);
+  // Raw searchable offset of each non-generated segment, parallel to `segs`.
+  const segs = ix.segments.filter((s) => !s.chrome);
+  const starts: number[] = [];
+  let raw = "";
+  for (const s of segs) {
+    starts.push(raw.length);
+    raw += s.text;
+  }
+  const { text, map } = normalizeMapped(raw);
+  const toRaw = (i: number) => (map ? map[i]! : i);
+  const keyed = starts.map((at) => ({ at }));
+  // The segment holding raw offset `r`, moved `dir` to one with an owner (not a top-level gap).
+  const segmentOf = (r: number, dir: 1 | -1) => {
+    let k = segmentAt(keyed, r);
+    while (segs[k] && segs[k]!.owner === null) k += dir;
+    return k;
+  };
+  const point = (k: number, r: number): RenderedPoint => {
+    const s = segs[k]!;
+    return { id: s.owner!, offset: s.at + (r - starts[k]!) - ix.extent[s.owner!]![0] };
+  };
+  const result: DocumentText = {
+    text,
+    select(start, end) {
+      if (end <= start) return rejectSelection("empty");
+      const r0 = toRaw(start);
+      const r1 = toRaw(end);
+      const k0 = segmentOf(r0, 1);
+      const k1 = segmentOf(r1 - 1, -1);
+      if (!segs[k0] || !segs[k1] || k1 < k0) return rejectSelection("empty");
+      const a = Math.max(r0, starts[k0]!);
+      const b = Math.min(r1, starts[k1]! + segs[k1]!.text.length);
+      return selectionToSource(doc, source, point(k0, a), point(k1, b));
+    },
+  };
+  documentTexts.set(doc, result);
+  return result;
+}
+
+/**
+ * `normalizeText(raw)` with the raw offset of each normalized character (plus one past the end),
+ * or a null map when normalizing changes nothing. Normalizes per CRLF and per base character with
+ * its combining marks.
+ * ponytail: NFC compositions across a base character (Hangul jamo sequences) are not joined, so
+ * such a quote is not found; normalize whole runs if that ever matters.
+ */
+function normalizeMapped(raw: string): { text: string; map: number[] | null } {
+  if (normalizeText(raw) === raw) return { text: raw, map: null };
+  let text = "";
+  const map: number[] = [];
+  for (const m of raw.matchAll(/\r\n|\P{M}\p{M}*|\p{M}+/gsu)) {
+    const out = normalizeText(m[0]);
+    for (let i = 0; i < out.length; i++) map.push(m.index);
+    text += out;
+  }
+  map.push(raw.length);
+  return { text, map };
 }

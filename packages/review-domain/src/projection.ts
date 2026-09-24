@@ -13,6 +13,7 @@ import { ACTIONS_BOT, MARKER } from "@rendered-review/github-action";
 import type { Actor, IssueComment, Review, ReviewComment, ReviewThread } from "@rendered-review/github-integration";
 import { blocksForLines, type RenderedMarkdown, type SourceNode } from "@rendered-review/markdown-domain";
 import { type Classification, classifyComment, type CommentContext } from "./classify.js";
+import { reanchor, type ReanchorResult } from "./reanchor.js";
 import { reconstructThreads } from "./threads.js";
 
 /** `unknown` when no GraphQL thread data is available (e.g. anonymous public access). */
@@ -222,10 +223,14 @@ function anchor(c: ReviewComment): NativeAnchor {
 export function anchorLines(a: NativeAnchor): { startLine: number; endLine: number } | undefined {
   if (a.type === "file") return undefined;
   if (a.type !== "annotation") return { startLine: a.startLine, endLine: a.endLine };
-  const r = sourceRange(a.annotation);
-  // The range is half-open: ending at column 1 means the previous line was the last one selected.
-  return { startLine: r.startLine, endLine: r.endColumn === 1 && r.endLine > r.startLine ? r.endLine - 1 : r.endLine };
+  return rangeLines(sourceRange(a.annotation));
 }
+
+/** First and last line (inclusive) of a half-open source range: ending at column 1 excludes that line. */
+export const rangeLines = (r: AnnotationRange["sourceRange"]) => ({
+  startLine: r.startLine,
+  endLine: r.endColumn === 1 && r.endLine > r.startLine ? r.endLine - 1 : r.endLine,
+});
 
 const selector = <T extends RenderedReviewAnnotationV1["target"]["selectors"][number]["type"]>(
   a: RenderedReviewAnnotationV1,
@@ -274,9 +279,16 @@ export interface ThreadPlacement {
   reason?: string;
   /** The annotation does not match the blob it names: show "Metadata damaged" with this reason. */
   damaged?: string;
+  /** How an annotation made on an earlier blob was re-anchored: moved placements, suggested locations. */
+  reanchor?: ReanchorResult;
 }
 
-export const REANCHOR_PENDING = "Document changed since this comment — re-anchoring pending";
+/** Why a re-anchored annotation is not placed. */
+function unplacedReason(r: ReanchorResult): string {
+  if (r.state === "ambiguous") return `The quoted text now appears in ${r.candidates.length} places`;
+  if (r.state === "unavailable") return "The original version of this document is no longer available";
+  return "The quoted text changed since this comment";
+}
 
 /**
  * Place a file's threads on its rendered documents: RIGHT-side lines on the head blob, LEFT-side
@@ -304,24 +316,34 @@ export function placeThreads(
       if (a.type !== "annotation") return { thread, blocks: lineBlocks(a) };
       const { head, blob } = docs;
       if (!head || !blob) return { thread, blocks: lineBlocks(a.fallback) };
-      if (blob.oid !== a.annotation.target.blobOid)
+      const { exact, prefix, suffix } = selector(a.annotation, "TextQuoteSelector");
+      const textQuote = { exact, ...(prefix !== undefined && { prefix }), ...(suffix !== undefined && { suffix }) };
+      const at = (range: AnnotationRange["sourceRange"], extra: Partial<ThreadPlacement> = {}): ThreadPlacement => {
+        return {
+          thread,
+          blocks: blocksForLines(head, range.startLine, rangeLines(range).endLine),
+          range: { kind: "annotation", sourceRange: range, textQuote },
+          ...extra,
+        };
+      };
+      if (blob.oid !== a.annotation.target.blobOid) {
+        const r = reanchor({ annotation: a.annotation, blobOid: blob.oid, source: blob.source, doc: head });
+        // Reworded text is placed on its block only: no word range claims precision it lacks.
+        if (r.approximate)
+          return {
+            thread,
+            blocks: blocksForLines(head, r.sourceRange!.startLine, rangeLines(r.sourceRange!).endLine),
+            reanchor: r,
+          };
+        if (r.sourceRange) return at(r.sourceRange, { reanchor: r });
         return a.fallback
-          ? { thread, blocks: lineBlocks(a.fallback) }
-          : { thread, blocks: [], reason: REANCHOR_PENDING };
+          ? { thread, blocks: lineBlocks(a.fallback), reanchor: r }
+          : { thread, blocks: [], reason: unplacedReason(r), reanchor: r };
+      }
       const check = verifyContent(a.annotation, blob.source, head);
       if (!check.ok) return { thread, blocks: lineBlocks(a.fallback), damaged: check.reason };
       const { startLine, startColumn, endLine, endColumn } = sourceRange(a.annotation);
-      const { exact, prefix, suffix } = selector(a.annotation, "TextQuoteSelector");
-      const lines = anchorLines(a)!;
-      return {
-        thread,
-        blocks: blocksForLines(head, lines.startLine, lines.endLine),
-        range: {
-          kind: "annotation",
-          sourceRange: { startLine, startColumn, endLine, endColumn },
-          textQuote: { exact, ...(prefix !== undefined && { prefix }), ...(suffix !== undefined && { suffix }) },
-        },
-      };
+      return at({ startLine, startColumn, endLine, endColumn });
     });
 }
 

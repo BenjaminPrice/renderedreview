@@ -4,6 +4,7 @@ import { toString } from "hast-util-to-string";
 import { describe, expect, test } from "vitest";
 import { renderMarkdown, type RenderOptions } from "./render.js";
 import {
+  documentText,
   type RenderedPoint,
   renderedText,
   selectionToSource,
@@ -278,6 +279,48 @@ describe("source ranges map back to rendered runs", () => {
   test("markup-only ranges highlight nothing", () => {
     const md = "Use **bold** text\n";
     expect(sourceToRendered(renderMarkdown(md), md, { start: 4, end: 6 })).toEqual([]);
+  });
+});
+
+describe("documentText finds rendered text and claims it like a selection", () => {
+  const find = (source: string, needle: string, nth = 0, options: RenderOptions = {}) => {
+    const t = documentText(renderMarkdown(source, options), source);
+    let at = -1;
+    for (let i = 0; i <= nth; i++) at = t.text.indexOf(needle, at + 1);
+    if (at < 0) throw new Error(`"${needle}" #${nth} not in ${JSON.stringify(t.text)}`);
+    return { text: t.text, result: t.select(at, at + needle.length) };
+  };
+
+  test("text is the normalized document text a selection quotes, without generated labels", () => {
+    const src = "> [!NOTE]\n> Keep **this** safe.\n";
+    const { text } = find(src, "this");
+    expect(text).not.toContain("Note");
+    expect(text).toContain("Keep this safe.");
+  });
+
+  test("select gives the same claim as the equivalent rendered selection", () => {
+    const src = "# Title\n\nHello brave new world.\n";
+    expect(ok(find(src, "brave").result)).toEqual(ok(select(src, "brave")));
+  });
+
+  test("a later occurrence claims its own source", () => {
+    const src = "Same words.\n\nSame words.\n";
+    const s = ok(find(src, "Same words.", 1).result);
+    expect(s.textPosition).toEqual({ start: 13, end: 24 });
+  });
+
+  test("CRLF source is searched as LF and still maps to raw offsets", () => {
+    const src = "# A\r\n\r\nline one\r\nline two\r\n";
+    const { text, result } = find(src, "one\nline");
+    expect(text).not.toContain("\r");
+    expect(src.slice(ok(result).textPosition.start, ok(result).textPosition.end)).toBe("one\r\nline");
+    expect(ok(result).exact).toBe("one\nline");
+  });
+
+  test("decomposed Unicode is searched in NFC", () => {
+    const src = "Café au lait.\n";
+    const { result } = find(src, "Café au");
+    expect(ok(result)).toMatchObject({ exact: "Café au", textPosition: { start: 0, end: 8 } });
   });
 });
 
