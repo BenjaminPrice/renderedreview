@@ -38,6 +38,9 @@ importers:
       '@hpcc-js/wasm-graphviz':
         specifier: ^1.29.1
         version: 1.29.1
+      '@rendered-review/annotation-domain':
+        specifier: workspace:*
+        version: link:../../packages/annotation-domain
       '@rendered-review/browser-cache':
         specifier: workspace:*
         version: link:../../packages/browser-cache
@@ -156,6 +159,9 @@ importers:
       '@vitejs/plugin-react':
         specifier: ^6.1.1
         version: 6.1.1(vite@8.3.0(@types/node@24.13.6)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.1))
+      fake-indexeddb:
+        specifier: ^6.2.5
+        version: 6.2.5
       happy-dom:
         specifier: ^20.14.5
         version: 20.14.5
@@ -284,6 +290,9 @@ importers:
 
   packages/review-domain:
     dependencies:
+      '@rendered-review/annotation-domain':
+        specifier: workspace:*
+        version: link:../annotation-domain
       '@rendered-review/github-action':
         specifier: workspace:*
         version: link:../github-action

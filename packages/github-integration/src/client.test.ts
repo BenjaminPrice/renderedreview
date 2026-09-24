@@ -331,3 +331,121 @@ describe("errors and retries", () => {
     await expect(client.listReviewThreads("mdn", "content", 1)).rejects.toBeInstanceOf(NotFoundError);
   });
 });
+
+describe("write operations", () => {
+  const PR = `${API}/pulls/45752`;
+  const sent = (init: RequestInit) => JSON.parse(init.body as string) as Record<string, unknown>;
+
+  it("creates a multi-line review comment on the diff", async () => {
+    const { client, request } = setup([json(reviewComments[0], 201)], { auth: () => "Bearer t" });
+    const comment = await client.createReviewComment("mdn", "content", 45752, {
+      body: "Nice",
+      commitId: HEAD,
+      path: "files/en-us/a.md",
+      line: 12,
+      side: "RIGHT",
+      startLine: 10,
+      startSide: "RIGHT",
+    });
+    expect(request(0).url).toBe(`${PR}/comments`);
+    expect(request(0).init.method).toBe("POST");
+    expect(request(0).headers).toMatchObject({ Authorization: "Bearer t", "Content-Type": "application/json" });
+    expect(sent(request(0).init)).toEqual({
+      body: "Nice",
+      commit_id: HEAD,
+      path: "files/en-us/a.md",
+      line: 12,
+      side: "RIGHT",
+      start_line: 10,
+      start_side: "RIGHT",
+    });
+    expect(comment.id).toBe(reviewComments[0]!.id);
+  });
+
+  it("creates a file-level review comment", async () => {
+    const { client, request } = setup([json(reviewComments[0], 201)]);
+    await client.createReviewComment("mdn", "content", 45752, { body: "b", commitId: HEAD, path: "a.md" });
+    expect(sent(request(0).init)).toEqual({ body: "b", commit_id: HEAD, path: "a.md", subject_type: "file" });
+  });
+
+  it("replies to a review thread", async () => {
+    const { client, request } = setup([json(reviewComments[1], 201)]);
+    await client.replyToReviewComment("mdn", "content", 45752, 4034118605, "Agreed");
+    expect(request(0).url).toBe(`${PR}/comments/4034118605/replies`);
+    expect(sent(request(0).init)).toEqual({ body: "Agreed" });
+  });
+
+  it("submits a review with line comments", async () => {
+    const { client, request } = setup([json(reviews[0])]);
+    const review = await client.createReview("mdn", "content", 45752, {
+      commitId: HEAD,
+      event: "REQUEST_CHANGES",
+      body: "Summary",
+      comments: [{ path: "a.md", body: "x", line: 3, side: "RIGHT" }],
+    });
+    expect(request(0).url).toBe(`${PR}/reviews`);
+    expect(sent(request(0).init)).toEqual({
+      commit_id: HEAD,
+      event: "REQUEST_CHANGES",
+      body: "Summary",
+      comments: [{ path: "a.md", body: "x", line: 3, side: "RIGHT" }],
+    });
+    expect(review.id).toBe(reviews[0]!.id);
+  });
+
+  it("creates a PR conversation comment", async () => {
+    const { client, request } = setup([json(issueComments[0], 201)]);
+    const comment = await client.createIssueComment("mdn", "content", 45752, "Hello");
+    expect(request(0).url).toBe(`${API}/issues/45752/comments`);
+    expect(sent(request(0).init)).toEqual({ body: "Hello" });
+    expect(comment.id).toBe(issueComments[0]!.id);
+  });
+
+  it("never retries a write, so a comment cannot be posted twice", async () => {
+    const { client, fetch } = setup([json({ message: "Server Error" }, 502)]);
+    await expect(client.createIssueComment("mdn", "content", 1, "x")).rejects.toMatchObject({ status: 502 });
+    const network = setup([new TypeError("fetch failed")]);
+    await expect(network.client.createIssueComment("mdn", "content", 1, "x")).rejects.toBeInstanceOf(NetworkError);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(network.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("surfaces a rejected location as a 422 GitHubError", async () => {
+    const { client } = setup([json({ message: "Validation Failed" }, 422)]);
+    await expect(
+      client.createReviewComment("mdn", "content", 1, {
+        body: "b",
+        commitId: HEAD,
+        path: "a.md",
+        line: 999,
+        side: "RIGHT",
+      }),
+    ).rejects.toMatchObject({ status: 422, message: "Validation Failed" });
+  });
+
+  it("resolves and unresolves a review thread over GraphQL", async () => {
+    const { client, request, fetch } = setup([
+      json({ data: { resolveReviewThread: { thread: { id: "PRRT_1", isResolved: true } } } }),
+      json({ data: { unresolveReviewThread: { thread: { id: "PRRT_1", isResolved: false } } } }),
+    ]);
+    expect(await client.resolveReviewThread("PRRT_1")).toEqual({ nodeId: "PRRT_1", isResolved: true });
+    expect(await client.unresolveReviewThread("PRRT_1")).toEqual({ nodeId: "PRRT_1", isResolved: false });
+    expect(request(0).url).toBe("https://api.github.com/graphql");
+    const first = sent(request(0).init);
+    expect(first.query).toMatch(/resolveReviewThread\(input: \{ threadId: \$id \}\)/);
+    expect(first.variables).toEqual({ id: "PRRT_1" });
+    expect(sent(request(1).init).query).toMatch(/unresolveReviewThread/);
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("finds which pull request a review thread belongs to", async () => {
+    const { client, request } = setup([
+      json({ data: { node: { pullRequest: { number: 7, repository: { databaseId: 99 } } } } }),
+      json({ data: { node: {} } }),
+    ]);
+    expect(await client.getReviewThreadPullRequest("PRRT_1")).toEqual({ repositoryId: 99, number: 7 });
+    expect(sent(request(0).init).variables).toEqual({ id: "PRRT_1" });
+    // Some other kind of node.
+    expect(await client.getReviewThreadPullRequest("I_1")).toBeNull();
+  });
+});

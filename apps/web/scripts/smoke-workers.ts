@@ -47,6 +47,14 @@ async function serve(args: string[], checks: (origin: string) => Promise<void>) 
   }
 }
 
+/** A same-origin publish request, as the app sends it, without a session. */
+const publish = (origin: string) =>
+  fetch(`${origin}/api/github/write/github.com/octocat/hello-world/pulls/1/comment`, {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-requested-with": "rendered-review", origin },
+    body: JSON.stringify({ expectedHeadOid: "a".repeat(40), representation: "conversation", body: "smoke" }),
+  });
+
 // 1. Public-only, as preview runs.
 await serve([], async (origin) => {
   const home = await fetch(`${origin}/`);
@@ -69,6 +77,9 @@ await serve([], async (origin) => {
   });
   assert.equal(userRead.status, 404);
   console.log("ok: authenticated GitHub reads are off without sign-in");
+  const write = await publish(origin);
+  assert.equal(write.status, 404);
+  console.log("ok: publishing to GitHub is off without sign-in");
 
   const sw = await fetch(`${origin}/sw.js`);
   assert.equal(sw.status, 200);
@@ -113,6 +124,11 @@ try {
     assert.equal(url.searchParams.get("client_id"), fakeApp.GITHUB_APP_CLIENT_ID);
     assert.equal(url.searchParams.get("redirect_uri"), `${origin}/api/auth/callback/github`);
     console.log("ok: sign-in starts at GitHub with this origin's callback URL");
+
+    const write = await publish(origin);
+    assert.equal(write.status, 401);
+    assert.equal(((await write.json()) as { code: string }).code, "unauthenticated");
+    console.log("ok: publishing to GitHub requires a session");
   });
 } finally {
   rmSync(state, { recursive: true, force: true });

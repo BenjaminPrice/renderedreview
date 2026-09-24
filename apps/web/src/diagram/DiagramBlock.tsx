@@ -65,12 +65,15 @@ type Rendered = { url: string; width?: number } | { error: string } | undefined;
 export function DiagramBlock({
   entry,
   node,
+  codeId,
   source,
   attributes,
 }: {
   entry: DiagramRendererEntry;
   /** The fence's source node; its range covers the whole fence. */
   node: SourceNode;
+  /** The fence's `code` element: the source view carries its id, so selections there map to the fence content. */
+  codeId: number;
   /** The fence content. */
   source: string;
   /** The fence element's attributes (`data-rr-id`, change markers). */
@@ -154,8 +157,8 @@ export function DiagramBlock({
 
   return (
     <figure {...attributes} className="rr-diagram" aria-label={name}>
-      {/* Controls are not document text: selections map DOM text to source. */}
-      <div className="rr-diagram-bar" data-rr-unmapped="">
+      {/* Only the source view is document text; selection and highlights skip `data-rr-ui`. */}
+      <div className="rr-diagram-bar" data-rr-ui="">
         <span className="rr-diagram-title">
           {entry.label} ·{" "}
           {source
@@ -218,19 +221,21 @@ export function DiagramBlock({
         </button>
       </div>
       {failed && (
-        <p className="rr-diagram-error" data-rr-unmapped="">
+        <p className="rr-diagram-error" data-rr-ui="">
           Could not render this diagram: {failed}
         </p>
       )}
       {sourceShown ? (
-        <RawDocument
-          source={source}
-          changes={context.changes}
-          link={context.link}
-          firstLine={first}
-          target={target}
-          label={`${entry.label} source`}
-        />
+        <div data-rr-id={codeId}>
+          <RawDocument
+            source={source}
+            changes={context.changes}
+            link={context.link}
+            firstLine={first}
+            target={target}
+            label={`${entry.label} source`}
+          />
+        </div>
       ) : (
         <div
           className="rr-diagram-body"
@@ -238,7 +243,7 @@ export function DiagramBlock({
           aria-label={`${name}, scrollable`}
           aria-busy={!rendered}
           tabIndex={image ? 0 : undefined}
-          data-rr-unmapped=""
+          data-rr-ui=""
         >
           {image ? (
             <img
@@ -256,6 +261,7 @@ export function DiagramBlock({
       <dialog
         ref={dialog}
         className="rr-table-dialog rr-diagram-dialog"
+        data-rr-ui=""
         aria-label={name}
         onKeyDown={(event) => event.key === "Escape" && event.stopPropagation()}
         onClose={() => {

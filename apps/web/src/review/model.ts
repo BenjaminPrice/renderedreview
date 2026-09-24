@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Pure logic behind the comment rail: thread states, filters, labels, card layout and connector
 // geometry. No DOM access, so it is unit-tested directly.
-import type { NativeAnchor, NativeThread, RepositoryRef } from "@rendered-review/review-domain";
+import { anchorLines, type NativeAnchor, type NativeThread, type RepositoryRef } from "@rendered-review/review-domain";
 
 /** Filter bucket of a thread. `historical` stays empty until annotation re-anchoring exists. */
 export type ThreadState = "current" | "resolved" | "outdated" | "historical";
@@ -22,21 +22,15 @@ export function filterCounts(threads: NativeThread[]): Record<ThreadState, numbe
   return counts;
 }
 
-// ponytail: REST has no edit timestamp; comments submitted with a pending review also get a later
-// updated_at. GraphQL `lastEditedAt` is exact if this threshold misleads.
-const EDIT_THRESHOLD_MS = 60_000;
-
-/** GitHub bumps `updatedAt` a little on creation; only a later change counts as an edit. */
-export function isEdited(c: { createdAt: string; updatedAt: string }): boolean {
-  return Date.parse(c.updatedAt) - Date.parse(c.createdAt) > EDIT_THRESHOLD_MS;
-}
+export { isEdited } from "@rendered-review/review-domain";
 
 const lines = (a: { startLine: number; endLine: number }) =>
   a.startLine === a.endLine ? `L${a.startLine}` : `L${a.startLine}–L${a.endLine}`;
 
-/** Location label. GitHub gives lines only, so it never claims a word-level selection. */
+/** Location label. GitHub line anchors never claim a word-level selection; only annotations do. */
 export function anchorLabel(anchor: NativeAnchor): string {
   if (anchor.type === "file") return "File-level review comment";
+  if (anchor.type === "annotation") return `Selected text · ${lines(anchorLines(anchor)!)}`;
   return `GitHub line comment · ${lines(anchor)}${anchor.side === "LEFT" ? " (base)" : ""}`;
 }
 

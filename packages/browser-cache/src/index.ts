@@ -25,8 +25,9 @@ export const CACHE_STORAGE_PREFIX = "rendered-review-";
  * - `derived`: values computed from immutable objects (parse trees, source maps, re-anchoring); include the blob OID in the key.
  * - `prefs`: UI preferences.
  * - `recent`: recently opened PRs.
+ * - `drafts`: unpublished review comments, one list per pull request.
  */
-export const STORES = ["responses", "objects", "derived", "prefs", "recent"] as const;
+export const STORES = ["responses", "objects", "derived", "prefs", "recent", "drafts"] as const;
 export type StoreName = (typeof STORES)[number];
 
 /** Stable key for immutable Git content. Never build keys from branch names. */
@@ -52,6 +53,8 @@ export interface BrowserCache {
 }
 
 const DB_NAME = "rendered-review";
+/** Bump when adding a store; upgrades create the missing ones. */
+const DB_VERSION = 2;
 
 const done = <T>(request: IDBRequest<T>) =>
   new Promise<T>((resolve, reject) => {
@@ -63,9 +66,10 @@ function openDb(): Promise<IDBDatabase | undefined> {
   if (typeof indexedDB === "undefined") return Promise.resolve(undefined);
   return new Promise((resolve) => {
     try {
-      const request = indexedDB.open(DB_NAME, 1);
+      const request = indexedDB.open(DB_NAME, DB_VERSION);
       request.onupgradeneeded = () => {
-        for (const store of STORES) request.result.createObjectStore(store);
+        const db = request.result;
+        for (const store of STORES) if (!db.objectStoreNames.contains(store)) db.createObjectStore(store);
       };
       request.onsuccess = () => {
         // Let a newer tab upgrade the schema instead of blocking on this connection.

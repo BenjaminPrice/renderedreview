@@ -13,7 +13,7 @@ import { DiagramBlock, DiagramSourceContext, type DiagramSource } from "../diagr
 import { DiagramRegistryContext } from "../diagram/registry";
 import { isMarkdownPath } from "../pr-url";
 import { blobQuery, fileAtCommitQuery, type PrIdentity } from "../github/queries";
-import { type ChangeKind, changedLines, type DocEntry, type LineChange, sourceUrl, splitLines } from "./docs";
+import { type ChangeKind, changedLines, type DocEntry, type LineChange, sourceUrl } from "./docs";
 
 // ponytail: fixed size cap on the main thread; move parsing to a cancellable Web Worker and
 // set the threshold from browser benchmarks when large documents matter.
@@ -158,10 +158,12 @@ export function RenderedDocument({
             const fence = node && rendered.nodes[node.properties.dataRrId as number];
             const entry = fence?.type === "code" ? registry.match(fence.lang) : undefined;
             if (!node || !fence || !entry) return <pre {...attributes}>{children}</pre>;
+            const code = node.children[0] as Element | undefined; // pre > code
             return (
               <DiagramBlock
                 entry={entry}
                 node={fence}
+                codeId={code?.properties.dataRrId as number}
                 source={toString(node).replace(/\n$/, "")}
                 attributes={attributes}
               />
@@ -219,7 +221,8 @@ export function RawDocument({
     for (const c of changes) for (let n = c.start; n <= c.end; n++) byLine.set(n, c.kind);
     return byLine;
   }, [changes]);
-  const lines = useMemo(() => splitLines(source), [source]);
+  // Lines keep their own line endings (a lone CR shows as a break), so the text is the source's.
+  const lines = useMemo(() => (source === "" ? [] : source.split(/(?<=\n|\r(?!\n))/)), [source]);
   return (
     <pre className="rr-raw" aria-label={label}>
       <code>
@@ -234,6 +237,7 @@ export function RawDocument({
             >
               <a
                 className="rr-raw-num"
+                data-rr-ui=""
                 href={sourceUrl(link, link.sha, link.path, n)}
                 target="_blank"
                 rel="noopener noreferrer"
@@ -241,7 +245,7 @@ export function RawDocument({
               >
                 {n}
               </a>
-              {text + "\n"}
+              {/\n$/.test(text) ? text : text.replace(/\r?$/, "\n")}
             </span>
           );
         })}

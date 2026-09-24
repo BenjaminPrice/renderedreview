@@ -76,18 +76,20 @@ it("appears after a keyboard selection; C composes and Escape dismisses", async 
   expect(onCompose).toHaveBeenCalledWith(expect.objectContaining({ exact: "brave" }));
 });
 
-it("offers Suggest as unavailable for now", async () => {
+it("Suggest composes a suggestion, by button or S", async () => {
   const { article, onCompose } = mount("Hello brave new world.\n");
   selectText(article, "brave");
   fireEvent.mouseUp(article);
   const suggest = within(toolbar()!).getByRole("button", { name: /Suggest/ });
-  expect(suggest.getAttribute("aria-disabled")).toBe("true");
   expect(suggest.getAttribute("aria-keyshortcuts")).toBe("S");
-  expect(suggest.getAttribute("title")).toMatch(/not available yet/);
   await userEvent.click(suggest);
+  expect(onCompose).toHaveBeenLastCalledWith(expect.objectContaining({ exact: "brave" }), true);
+  expect(toolbar()).toBeNull();
+
+  fireEvent.mouseUp(article);
   await userEvent.keyboard("s");
-  expect(onCompose).not.toHaveBeenCalled();
-  expect(toolbar()).toBeTruthy();
+  expect(onCompose).toHaveBeenCalledTimes(2);
+  expect(onCompose).toHaveBeenLastCalledWith(expect.objectContaining({ exact: "brave" }), true);
 });
 
 it("previews the whole blocks a cross-block selection widens to", () => {

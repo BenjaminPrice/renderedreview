@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderWithRouter } from "../test-utils";
 import { AppShell } from "../ui/AppShell";
 import { CommentRail, RailHeader } from "./CommentRail";
-import { comment, lineAnchor, OLD, repository, thread } from "./fixtures";
+import { appThread, comment, issueComment, lineAnchor, OLD, repository, thread } from "./fixtures";
 import { DEFAULT_FILTERS, filterCounts } from "./model";
 import { threadDomId } from "./ThreadCard";
 
@@ -100,6 +100,28 @@ describe("threads and filters", () => {
     const group = within(rail()).getByRole("region", { name: "Not placed in document" });
     expect(within(group).getByText("File one")).toBeTruthy();
     expect(within(group).getByText("Old one")).toBeTruthy();
+  });
+
+  it("shows verified application threads without their quote, and says why others are not placed", async () => {
+    const placed = appThread([issueComment("Placed one")]);
+    const pending = appThread([issueComment("Pending one")]);
+    const damaged = appThread([issueComment("Damaged one")]);
+    const range = {
+      kind: "annotation" as const,
+      sourceRange: { startLine: 3, startColumn: 12, endLine: 3, endColumn: 35 },
+      textQuote: { exact: "retries failed requests" },
+    };
+    await renderPage([
+      { thread: placed, blocks: [block(1)], range },
+      { thread: pending, blocks: [], reason: "Document changed since this comment — re-anchoring pending" },
+      { thread: damaged, blocks: [], damaged: "The quoted text does not match" },
+    ]);
+    const aligned = within(rail()).getByText("Placed one").closest("section")!;
+    expect(aligned.querySelector("blockquote")).toBeNull();
+    const group = within(rail()).getByRole("region", { name: "Not placed in document" });
+    expect(within(group).getByText(/re-anchoring pending$/)).toBeTruthy();
+    expect(within(group).getByText("Metadata damaged")).toBeTruthy();
+    expect(within(group).getAllByText("retries failed requests")).toHaveLength(2);
   });
 
   it("filters threads by state without losing the rest", async () => {

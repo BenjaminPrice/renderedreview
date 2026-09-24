@@ -92,7 +92,7 @@ interface RenderedReviewAnnotationV1 {
     repositoryId: number; // GitHub's stable repository ID
     repository: string; // "owner/name", for readability
     pullRequest: number;
-    path: string; // repository-relative, no leading "/"
+    path: string; // repository-relative: "/"-separated, no empty, "." or ".." segments, no backslashes or control characters
     commitOid: string; // 40 or 64 lowercase hex characters
     blobOid: string; // 40 or 64 lowercase hex characters
     selectors: [
@@ -110,8 +110,9 @@ interface RenderedReviewAnnotationV1 {
     structure?: { nodeType?: string; headingPath?: string[] };
   };
   motivation: "commenting" | "replying" | "suggesting" | "resolving";
-  replyTo?: string;
-  threadId?: string;
+  replyTo?: string; // GitHub id of the comment answered, as a decimal string
+  threadId?: string; // GitHub id of the thread's first comment, as a decimal string
+  resolution?: "resolved" | "reopened"; // with motivation "resolving"; absent means "resolved"
   createdBy?: "rendered-review";
 }
 ```
@@ -121,13 +122,38 @@ plus one Markdown source range selector:
 
 - `TextQuoteSelector`: `exact` is the selected rendered text (non-empty); `prefix` and `suffix` are
   up to 64 characters of rendered text immediately before and after it.
-- `TextPositionSelector`: half-open `[start, end)` offsets into the document's rendered text.
-  Non-negative integers, `end >= start`.
+- `TextPositionSelector`: half-open `[start, end)` offsets, in UTF-16 code units from 0, into the
+  **raw blob source** (not the rendered text), so they do not depend on the renderer. They cover
+  exactly the same span as the source range. Non-negative integers, `end >= start`.
 - `MarkdownSourceRangeSelector`: 1-based lines and columns in the raw blob. The end is exclusive,
   so a range ending at column 1 does not include that line. The end must not precede the start.
 
+A reader checks an annotation against the blob it names: the source range lies inside the blob,
+the text position is exactly the source range's span, and `exact` equals the rendered text that
+span claims: every rendered character whose source lies inside the span, from the first to the
+last, without generated labels (alert titles, footnote back-links) and with the whitespace between
+blocks kept, then normalized. Markup such as emphasis markers, link syntax and escapes is not part
+of it. A selection across blocks is widened to whole blocks, so its `exact` is those blocks' text.
+Otherwise the metadata is damaged.
+
 Text is compared after one normalization only: CRLF and lone CR become LF, then Unicode NFC. No
 trimming, whitespace collapsing, case folding or Markdown stripping.
+
+### Threads and resolution
+
+Replies and resolution events of a thread stored as pull request conversation comments are
+conversation comments themselves:
+
+- A reply has motivation `replying`, `threadId` set to the id of the thread's first comment and
+  `replyTo` set to the id of the comment it answers.
+- Resolving or reopening a thread is a visible comment with motivation `resolving`, `threadId` set,
+  and `resolution` `"reopened"` to reopen (absent or `"resolved"` to resolve). The latest event
+  decides the thread's state.
+
+Ids are GitHub's numeric comment ids written as decimal strings. A reader only follows a reference
+to an older comment of the same pull request whose own annotation is valid (that includes naming
+the same pull request). A reply whose parent cannot be found is shown as a thread of its own, and a
+resolution event without a thread as an ordinary comment; nothing is hidden.
 
 ### Forward compatibility
 
@@ -137,11 +163,11 @@ value make the annotation invalid. Incompatible changes use a new marker version
 
 ## Reading states
 
-| State       | Meaning                                                                                                                                                   | What to do                                                                                                                                                              |
-| ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| none        | No marker                                                                                                                                                 | Treat as a plain GitHub comment                                                                                                                                         |
-| ok          | Marker decodes and matches the schema                                                                                                                     | Use the selectors, after checking host, repository ID and pull request against the comment's own location, and the commit, blob, range and quote against the repository |
-| damaged     | Missing `-->`, malformed version, whitespace or non-standard characters in the payload, over the size limit, invalid UTF-8 or JSON, or a schema violation | Show the full comment with a small "metadata damaged" notice and fall back to GitHub's own location                                                                     |
-| unsupported | Well-formed marker with a version other than 1                                                                                                            | Show the full comment with an "unsupported version" notice and fall back                                                                                                |
+| State       | Meaning                                                                                                                                                   | What to do                                                                                                                                                                                                                                                                |
+| ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| none        | No marker                                                                                                                                                 | Treat as a plain GitHub comment                                                                                                                                                                                                                                           |
+| ok          | Marker decodes and matches the schema                                                                                                                     | Use the selectors, after checking host, repository ID and pull request against the comment's own location (the repository name is informative only: it changes when a repository is renamed or transferred), and the commit, blob, range and quote against the repository |
+| damaged     | Missing `-->`, malformed version, whitespace or non-standard characters in the payload, over the size limit, invalid UTF-8 or JSON, or a schema violation | Show the full comment with a small "metadata damaged" notice and fall back to GitHub's own location                                                                                                                                                                       |
+| unsupported | Well-formed marker with a version other than 1                                                                                                            | Show the full comment with an "unsupported version" notice and fall back                                                                                                                                                                                                  |
 
 A reader must never fail on a comment body, whatever it contains.
