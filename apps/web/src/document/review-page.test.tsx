@@ -37,6 +37,8 @@ beforeEach(() => {
     [`${API}/pulls/45377/comments?per_page=100`]: fixture("review-comments.json"),
     [`${API}/pulls/45377/reviews?per_page=100`]: fixture("reviews.json"),
     [`${API}/issues/45377/comments?per_page=100`]: fixture("issue-comments.json"),
+    // The base revision of the modified document, read by path instead of through the base tree.
+    [`${API}/contents/${INDEX}?ref=${BASE}`]: fixture("blob-4e1326aa2512d4d8eec8533471eee0dc684de810.md"),
   };
   for (const oid of [
     "1a05f7e9c35e2bb310563708351758307f34a599",
@@ -123,6 +125,25 @@ it("binds the selected doc to the URL and marks changed sections of a modified d
   // The removed status's entry was edited, so the change shows as a modification.
   expect(article.querySelector('[data-rr-change="modified"]')).toBeTruthy();
   expect(screen.getByRole("note", { name: "Changed-section legend" })).toBeTruthy();
+});
+
+it("opens changed docs without fetching a recursive tree", async () => {
+  renderPage(`?doc=${encodeURIComponent(INDEX)}`);
+  const article = await screen.findByRole("article", { name: "Rendered document" });
+  await vi.waitFor(() => expect(article.querySelector('[data-rr-change="modified"]')).toBeTruthy());
+  await userEvent.click(fileLink(/102\/index\.md/));
+  await screen.findByText(/Deleted in this pull request/);
+  expect(requested.filter((u) => u.includes("/git/trees/"))).toEqual([]);
+});
+
+it("fetches the head tree once for All docs, not per document open", async () => {
+  renderPage("?files=all");
+  await userEvent.click(await screen.findByRole("link", { name: /status\/index\.md, modified/ }));
+  await screen.findByRole("article", { name: "Rendered document" });
+  await userEvent.click(fileLink(/README\.md, unchanged/));
+  await userEvent.click(fileLink(/status\/index\.md, modified/));
+  await screen.findByRole("article", { name: "Rendered document" });
+  expect(requested.filter((u) => u.includes("/git/trees/"))).toEqual([`${API}/git/trees/${HEAD}?recursive=1`]);
 });
 
 it("shows a document's front matter as terms and definitions, not as a heading", async () => {
