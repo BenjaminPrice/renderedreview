@@ -10,7 +10,7 @@ import { placeThreads, projectReview, type ThreadPlacement } from "@rendered-rev
 import { queryOptions, useQuery } from "@tanstack/react-query";
 import { createFileRoute, notFound, stripSearchParams } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
-import { useEffect, useEffectEvent, useMemo, useState } from "react";
+import { useEffect, useEffectEvent, useMemo, useState, useSyncExternalStore } from "react";
 import {
   ExternalIcon,
   MAX_RENDER_CHARS,
@@ -21,7 +21,7 @@ import {
 } from "../document/document";
 import { allDocs, changedDocs, selectedPath, sourceUrl } from "../document/docs";
 import { Sidebar } from "../document/Sidebar";
-import { preferProxy } from "../github/client";
+import { preferProxy, rateLimit } from "../github/client";
 import { allowedHosts, proxyFirstHosts } from "../github/proxy";
 import {
   changedFilesQuery,
@@ -96,8 +96,9 @@ function PullRequestPage() {
   // Placeholder identity while the PR loads; the query stays disabled until the real one exists.
   const files = useQuery({ ...changedFilesQuery(identity ?? ({} as PrIdentity)), enabled: !!identity });
 
+  // Data already loaded stays on screen when a refetch fails (e.g. rate-limited).
   const error = pr.error ?? files.error;
-  if (error) return <ErrorState error={error} />;
+  if ((!pr.data || !files.data) && error) return <ErrorState error={error} />;
   if (!pr.data || !identity || !files.data) return <Message title="Loading…" />;
   return <ReviewPage pr={pr.data} id={identity} files={files.data} />;
 }
@@ -259,6 +260,7 @@ function ReviewPage({ pr, id, files }: { pr: PullRequest; id: PrIdentity; files:
         )
       }
     >
+      <RateLimitBanner />
       {!path ? (
         <DocMessage title="No Markdown changed in this pull request">
           Browse the repository&apos;s documents under All docs, or{" "}
@@ -421,6 +423,18 @@ function DocMessage({ title, children }: { title: string; children?: React.React
   );
 }
 
+/** Non-blocking notice while GitHub's rate limit holds and the page shows cached data. */
+function RateLimitBanner() {
+  const resetAt = useSyncExternalStore(rateLimit.subscribe, rateLimit.resetAt, () => undefined);
+  if (!resetAt || resetAt.getTime() <= Date.now()) return null;
+  return (
+    <p className="rr-doc-note" role="status">
+      GitHub rate limit reached — showing cached data; retry after{" "}
+      {resetAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.
+    </p>
+  );
+}
+
 function ErrorState({ error }: { error: Error }) {
   if (error instanceof RateLimitError) {
     return <Message title="GitHub rate limit reached">Try again after {error.resetAt.toLocaleTimeString()}.</Message>;
@@ -437,11 +451,14 @@ function ErrorState({ error }: { error: Error }) {
   return <Message title="Something went wrong">{error.message}</Message>;
 }
 
+/** Whole-page state (loading, errors, not found), inside the app shell so home stays one click away. */
 function Message({ title, children }: { title: string; children?: React.ReactNode }) {
   return (
-    <main className="rr-message">
-      <h1>{title}</h1>
-      {children && <p>{children}</p>}
-    </main>
+    <AppShell>
+      <div className="rr-message">
+        <h1>{title}</h1>
+        {children && <p>{children}</p>}
+      </div>
+    </AppShell>
   );
 }
