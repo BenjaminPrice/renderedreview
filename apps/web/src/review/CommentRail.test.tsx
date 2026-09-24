@@ -93,9 +93,9 @@ describe("threads and filters", () => {
     expect(within(rail()).getByText("Current one")).toBeTruthy();
   });
 
-  it("lists file-level and outdated threads apart from the aligned ones", async () => {
+  it("lists file-level and outdated threads as not placed, apart from the aligned ones", async () => {
     await renderPage();
-    const group = within(rail()).getByRole("region", { name: "File-level and outdated" });
+    const group = within(rail()).getByRole("region", { name: "Not placed in document" });
     expect(within(group).getByText("File one")).toBeTruthy();
     expect(within(group).getByText("Old one")).toBeTruthy();
   });

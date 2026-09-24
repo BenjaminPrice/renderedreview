@@ -111,11 +111,13 @@ export interface ThreadCardProps {
   thread: NativeThread;
   repository: RepositoryRef;
   active?: boolean;
+  /** A current line comment that maps to no rendered block (e.g. a blank line); its label says so. */
+  unplaced?: boolean;
   onActivate?: () => void;
 }
 
 /** One native review thread. Resolved threads collapse in place; unknown resolution claims nothing. */
-export function ThreadCard({ thread, repository, active, onActivate }: ThreadCardProps) {
+export function ThreadCard({ thread, repository, active, unplaced, onActivate }: ThreadCardProps) {
   const state = threadState(thread);
   const a = thread.anchor;
   const root = thread.comments[0]!;
@@ -149,6 +151,8 @@ export function ThreadCard({ thread, repository, active, onActivate }: ThreadCar
             <>
               From <code>{a.commitOid.slice(0, 7)}</code> · {label.replace("GitHub line comment · ", "")}
             </>
+          ) : unplaced && a.type === "current" ? (
+            `${label} · no rendered block at this line`
           ) : (
             label
           )}

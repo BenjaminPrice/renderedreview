@@ -1,0 +1,18 @@
+[
+  {
+    "author_association": "CONTRIBUTOR",
+    "body": "<!-- build_hash: a71d2cedc9f14994fd0033b575273434 date: 2026-09-07T00:58:09.304Z -->\n\n<b>Preview URLs</b> (1 page)\n\n- [`/en-US/docs/Web/HTTP/Reference/Status`](https://pr45377.review.mdn.allizom.net/en-US/docs/Web/HTTP/Reference/Status)\n\n\n<details><summary><b>External URLs</b> (1)</summary>\n\nURL: [`/en-US/docs/Web/HTTP/Reference/Status`](https://pr45377.review.mdn.allizom.net/en-US/docs/Web/HTTP/Reference/Status)\nTitle: `HTTP response status codes`\n\n  - <https://www.rfc-editor.org/info/rfc4918/> (1 time) (Note! This may be a new URL 👀)\n\n</details>\n\n*(comment last updated: 2026-09-07 00:58:09)*",
+    "created_at": "2026-08-28T15:24:31Z",
+    "html_url": "https://github.com/mdn/content/pull/45377#issuecomment-5454381559",
+    "id": 5454381559,
+    "node_id": "IC_kwDOEaEoos8AAAABRRtB9w",
+    "updated_at": "2026-09-07T00:58:09Z",
+    "user": {
+      "login": "github-actions[bot]",
+      "id": 41898282,
+      "node_id": "MDM6Qm90NDE4OTgyODI=",
+      "type": "Bot",
+      "site_admin": false
+    }
+  }
+]

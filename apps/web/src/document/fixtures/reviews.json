@@ -1,0 +1,104 @@
+[
+  {
+    "author_association": "COLLABORATOR",
+    "body": "",
+    "commit_id": "b368a8bc221bf02b547ed45972da1468dc405367",
+    "html_url": "https://github.com/mdn/content/pull/45377#pullrequestreview-5062266667",
+    "id": 5062266667,
+    "node_id": "PRR_kwDOEaEoos8AAAABLbwPKw",
+    "state": "COMMENTED",
+    "submitted_at": "2026-08-31T00:07:18Z",
+    "user": {
+      "login": "hamishwillee",
+      "id": 5368500,
+      "node_id": "MDQ6VXNlcjUzNjg1MDA=",
+      "type": "User",
+      "site_admin": false
+    }
+  },
+  {
+    "author_association": "CONTRIBUTOR",
+    "body": "",
+    "commit_id": "b368a8bc221bf02b547ed45972da1468dc405367",
+    "html_url": "https://github.com/mdn/content/pull/45377#pullrequestreview-5074171434",
+    "id": 5074171434,
+    "node_id": "PRR_kwDOEaEoos8AAAABLnG2Kg",
+    "state": "COMMENTED",
+    "submitted_at": "2026-09-01T05:02:10Z",
+    "user": {
+      "login": "OnkarRuikar",
+      "id": 87750369,
+      "node_id": "MDQ6VXNlcjg3NzUwMzY5",
+      "type": "User",
+      "site_admin": false
+    }
+  },
+  {
+    "author_association": "COLLABORATOR",
+    "body": "",
+    "commit_id": "b368a8bc221bf02b547ed45972da1468dc405367",
+    "html_url": "https://github.com/mdn/content/pull/45377#pullrequestreview-5108664962",
+    "id": 5108664962,
+    "node_id": "PRR_kwDOEaEoos8AAAABMIAKgg",
+    "state": "COMMENTED",
+    "submitted_at": "2026-09-04T02:40:25Z",
+    "user": {
+      "login": "hamishwillee",
+      "id": 5368500,
+      "node_id": "MDQ6VXNlcjUzNjg1MDA=",
+      "type": "User",
+      "site_admin": false
+    }
+  },
+  {
+    "author_association": "COLLABORATOR",
+    "body": "",
+    "commit_id": "c5ebc9f3071d5e5e143298f508c2aedb7060c884",
+    "html_url": "https://github.com/mdn/content/pull/45377#pullrequestreview-5127229684",
+    "id": 5127229684,
+    "node_id": "PRR_kwDOEaEoos8AAAABMZtQ9A",
+    "state": "COMMENTED",
+    "submitted_at": "2026-09-07T00:54:50Z",
+    "user": {
+      "login": "hamishwillee",
+      "id": 5368500,
+      "node_id": "MDQ6VXNlcjUzNjg1MDA=",
+      "type": "User",
+      "site_admin": false
+    }
+  },
+  {
+    "author_association": "COLLABORATOR",
+    "body": "Looks great - thanks.",
+    "commit_id": "cd176a8b0178a6911d7b36fb83c8ce6d7c10f44f",
+    "html_url": "https://github.com/mdn/content/pull/45377#pullrequestreview-5127232392",
+    "id": 5127232392,
+    "node_id": "PRR_kwDOEaEoos8AAAABMZtbiA",
+    "state": "APPROVED",
+    "submitted_at": "2026-09-07T00:55:49Z",
+    "user": {
+      "login": "hamishwillee",
+      "id": 5368500,
+      "node_id": "MDQ6VXNlcjUzNjg1MDA=",
+      "type": "User",
+      "site_admin": false
+    }
+  },
+  {
+    "author_association": "CONTRIBUTOR",
+    "body": "",
+    "commit_id": "cd176a8b0178a6911d7b36fb83c8ce6d7c10f44f",
+    "html_url": "https://github.com/mdn/content/pull/45377#pullrequestreview-5127232463",
+    "id": 5127232463,
+    "node_id": "PRR_kwDOEaEoos8AAAABMZtbzw",
+    "state": "COMMENTED",
+    "submitted_at": "2026-09-07T00:55:51Z",
+    "user": {
+      "login": "github-actions[bot]",
+      "id": 41898282,
+      "node_id": "MDM6Qm90NDE4OTgyODI=",
+      "type": "Bot",
+      "site_admin": false
+    }
+  }
+]
