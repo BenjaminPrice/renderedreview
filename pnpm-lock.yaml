@@ -35,6 +35,12 @@ importers:
 
   apps/web:
     dependencies:
+      '@rendered-review/browser-cache':
+        specifier: workspace:*
+        version: link:../../packages/browser-cache
+      '@rendered-review/github-integration':
+        specifier: workspace:*
+        version: link:../../packages/github-integration
       '@rendered-review/markdown-domain':
         specifier: workspace:*
         version: link:../../packages/markdown-domain

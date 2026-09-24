@@ -16,6 +16,8 @@
   },
   "dependencies": {
     "@rendered-review/markdown-domain": "workspace:*",
+    "@rendered-review/browser-cache": "workspace:*",
+    "@rendered-review/github-integration": "workspace:*",
     "@rendered-review/runtime": "workspace:*",
     "@rendered-review/runtime-node": "workspace:*",
     "@tanstack/react-query": "^5.103.2",
