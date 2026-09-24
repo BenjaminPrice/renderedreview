@@ -17,12 +17,16 @@
   "dependencies": {
     "@rendered-review/browser-cache": "workspace:*",
     "@rendered-review/github-integration": "workspace:*",
+    "@rendered-review/markdown-domain": "workspace:*",
     "@rendered-review/runtime": "workspace:*",
     "@rendered-review/runtime-node": "workspace:*",
     "@tanstack/react-query": "^5.103.2",
     "@tanstack/react-router": "^1.170.38",
     "@tanstack/react-router-ssr-query": "^1.167.3",
     "@tanstack/react-start": "^1.168.57",
+    "@types/hast": "^3.0.5",
+    "diff": "^8.0.4",
+    "hast-util-to-jsx-runtime": "^2.3.6",
     "nitro": "3.0.260903-beta",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"
