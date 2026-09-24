@@ -2,6 +2,7 @@
 // Component-test helper: AppShell links home, so shell-level components need a router around them.
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from "@tanstack/react-router";
 import { render } from "@testing-library/react";
+import axe from "axe-core";
 import type { ReactNode } from "react";
 import { expect, vi } from "vitest";
 
@@ -31,3 +32,17 @@ export function captureLogs() {
     spies.flatMap((s) => s.mock.calls.map(([line]) => JSON.parse(String(line)) as Record<string, unknown>));
   return { events, raw };
 }
+
+/**
+ * No serious or critical axe violations under `root`. Colour contrast needs layout, which the test
+ * DOM lacks: it is checked from the design tokens instead.
+ */
+export async function expectNoSeriousA11yViolations(root: Element = document.body) {
+  const { violations } = await axe.run(root, {
+    resultTypes: ["violations"],
+    rules: { "color-contrast": { enabled: false } },
+  });
+  const serious = violations.filter((v) => v.impact === "serious" || v.impact === "critical");
+  expect(serious.map((v) => `${v.id}: ${v.help} (${v.nodes.map((n) => n.target.join(" ")).join(", ")})`)).toEqual([]);
+}
+
