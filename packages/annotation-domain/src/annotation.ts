@@ -55,7 +55,9 @@ function int(v: unknown, name: string, min: number): number {
 }
 function str(v: unknown, name: string, pattern?: RegExp, maxLength = Infinity): string {
   if (typeof v !== "string" || v === "" || v.length > maxLength || (pattern && !pattern.test(v)))
-    fail(`${name} must be a${pattern ? " valid" : " non-empty"} string${maxLength < Infinity ? ` of at most ${maxLength} characters` : ""}`);
+    fail(
+      `${name} must be a${pattern ? " valid" : " non-empty"} string${maxLength < Infinity ? ` of at most ${maxLength} characters` : ""}`,
+    );
   return v;
 }
 function optional<T>(v: unknown, check: (v: unknown) => T): T | undefined {
@@ -121,7 +123,8 @@ export function validateAnnotation(value: unknown): ValidationResult {
           fail("target.structure.headingPath must be an array of strings");
       });
     }
-    if (!MOTIVATIONS.has(a.motivation as string)) fail("motivation must be commenting, replying, suggesting or resolving");
+    if (!MOTIVATIONS.has(a.motivation as string))
+      fail("motivation must be commenting, replying, suggesting or resolving");
     optional(a.replyTo, (v) => str(v, "replyTo"));
     optional(a.threadId, (v) => str(v, "threadId"));
     if (a.createdBy !== undefined && a.createdBy !== "rendered-review") fail('createdBy must be "rendered-review"');

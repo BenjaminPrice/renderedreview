@@ -14,7 +14,12 @@ export function sampleAnnotation(overrides: Partial<RenderedReviewAnnotationV1> 
       commitOid: "0123456789abcdef0123456789abcdef01234567",
       blobOid: "89abcdef0123456789abcdef0123456789abcdef",
       selectors: [
-        { type: "TextQuoteSelector", exact: "retries failed requests", prefix: "The system ", suffix: " indefinitely." },
+        {
+          type: "TextQuoteSelector",
+          exact: "retries failed requests",
+          prefix: "The system ",
+          suffix: " indefinitely.",
+        },
         { type: "TextPositionSelector", start: 11, end: 34 },
         { type: "MarkdownSourceRangeSelector", startLine: 42, startColumn: 12, endLine: 42, endColumn: 35 },
       ],

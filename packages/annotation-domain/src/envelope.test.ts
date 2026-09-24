@@ -97,7 +97,7 @@ describe("extractAnnotation", () => {
   describe("fuzzing", () => {
     // Small deterministic PRNG so failures reproduce.
     let seed = 42;
-    const random = () => ((seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31);
+    const random = () => (seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31;
     const alphabet = "<!-- rendered-review:v1: -->AZaz09+/=\n\r\t é🚢\u0000";
     const randomString = (length: number) =>
       Array.from({ length }, () => alphabet[Math.floor(random() * alphabet.length)]).join("");

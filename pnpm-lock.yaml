@@ -124,7 +124,11 @@ importers:
         specifier: ^4.136.3
         version: 4.136.3(@cloudflare/workers-types@5.20260922.1)(@types/node@24.13.6)
 
-  packages/annotation-domain: {}
+  packages/annotation-domain:
+    dependencies:
+      '@rendered-review/markdown-domain':
+        specifier: workspace:*
+        version: link:../markdown-domain
 
   packages/browser-cache:
     dependencies:
