@@ -84,7 +84,11 @@ function draw(triangles: Vec[][], theme: DiagramTheme): string {
 const round = (n: number) => Math.round(n * 100) / 100;
 const sub = (a: Vec, b: Vec): Vec => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 const dot = (a: Vec, b: Vec) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-const cross = (a: Vec, b: Vec): Vec => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+const cross = (a: Vec, b: Vec): Vec => [
+  a[1] * b[2] - a[2] * b[1],
+  a[2] * b[0] - a[0] * b[2],
+  a[0] * b[1] - a[1] * b[0],
+];
 function normalize(v: Vec): Vec {
   const length = Math.hypot(...v);
   return [v[0] / length, v[1] / length, v[2] / length];

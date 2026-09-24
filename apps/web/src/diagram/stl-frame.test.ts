@@ -51,8 +51,16 @@ it("shades for the theme", async () => {
 it.each([
   ["empty solid", "solid x\nendsolid x", /no triangles/],
   ["not ASCII STL", "hello", /Not an ASCII STL model/],
-  ["a broken facet", `solid x\n${facet([0, 0, 0], [1, 0, 0], [0, 1, 0]).replace("vertex 0 1 0", "vertex 0 1")}endsolid`, /vertex/],
-  ["non-numeric vertex", `solid x\n${facet([0, 0, 0], [1, 0, 0], [0, 1, 0]).replace("vertex 0 1 0", "vertex 0 1 NaN")}endsolid`, /vertex/],
+  [
+    "a broken facet",
+    `solid x\n${facet([0, 0, 0], [1, 0, 0], [0, 1, 0]).replace("vertex 0 1 0", "vertex 0 1")}endsolid`,
+    /vertex/,
+  ],
+  [
+    "non-numeric vertex",
+    `solid x\n${facet([0, 0, 0], [1, 0, 0], [0, 1, 0]).replace("vertex 0 1 0", "vertex 0 1 NaN")}endsolid`,
+    /vertex/,
+  ],
 ])("rejects %s", async (_, source, message) => {
   await expect(renderStl({ source, theme: "light" })).rejects.toThrow(message);
 });

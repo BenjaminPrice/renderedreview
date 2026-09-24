@@ -25,7 +25,10 @@ it("uses the dark skin in the dark theme unless the author chose one", async () 
   expect(dark).toContain("fill:#ffffff");
   // WaveDrom paints a white background whatever the skin; the page shows through instead.
   expect(dark).not.toContain("fill:white");
-  const chosen = await renderWaveDrom({ source: "{ signal: [{ wave: 'p.' }], config: { skin: 'narrow' } }", theme: "dark" });
+  const chosen = await renderWaveDrom({
+    source: "{ signal: [{ wave: 'p.' }], config: { skin: 'narrow' } }",
+    theme: "dark",
+  });
   expect(chosen).not.toContain("fill:#ffffff");
 });
 

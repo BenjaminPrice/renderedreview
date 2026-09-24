@@ -7,12 +7,33 @@ import { renderGeo } from "./geo-frame";
 import { sanitizeSvg } from "./sanitize";
 
 // Counter-clockwise exterior ring, as RFC 7946 requires.
-const SQUARE = { type: "Polygon", coordinates: [[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]] };
+const SQUARE = {
+  type: "Polygon",
+  coordinates: [
+    [
+      [0, 0],
+      [10, 0],
+      [10, 10],
+      [0, 10],
+      [0, 0],
+    ],
+  ],
+};
 const COLLECTION = JSON.stringify({
   type: "FeatureCollection",
   features: [
     { type: "Feature", properties: { name: "Park" }, geometry: SQUARE },
-    { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: [[0, 0], [20, 5]] } },
+    {
+      type: "Feature",
+      properties: {},
+      geometry: {
+        type: "LineString",
+        coordinates: [
+          [0, 0],
+          [20, 5],
+        ],
+      },
+    },
     { type: "Feature", properties: {}, geometry: { type: "Point", coordinates: [15, 8] } },
   ],
 });
@@ -45,7 +66,19 @@ it("colours outlines for the theme", async () => {
 it("renders every object of a TopoJSON topology", async () => {
   const topology = {
     type: "Topology",
-    arcs: [[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]], [[0, 0], [20, 5]]],
+    arcs: [
+      [
+        [0, 0],
+        [10, 0],
+        [10, 10],
+        [0, 10],
+        [0, 0],
+      ],
+      [
+        [0, 0],
+        [20, 5],
+      ],
+    ],
     objects: {
       land: { type: "GeometryCollection", geometries: [{ type: "Polygon", arcs: [[0]] }] },
       roads: { type: "LineString", arcs: [1] },
@@ -79,7 +112,5 @@ it("refuses a topology whose arc references expand to too many points, before ex
     arcs: [arc],
     objects: { bomb: { type: "MultiLineString", arcs: Array.from({ length: 20_000 }, () => [0]) } },
   };
-  await expect(renderGeo({ source: JSON.stringify(topology), theme: "light" })).rejects.toThrow(
-    /too many points/,
-  );
+  await expect(renderGeo({ source: JSON.stringify(topology), theme: "light" })).rejects.toThrow(/too many points/);
 });

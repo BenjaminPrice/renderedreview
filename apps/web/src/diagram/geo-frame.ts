@@ -78,13 +78,15 @@ function draw(geo: GeoJSON, theme: DiagramTheme): string {
   if (features.length > MAX_FEATURES) {
     throw new Error(`The map has too many features (${features.length}; the limit is ${MAX_FEATURES})`);
   }
-  const projection = geoIdentity().reflectY(true).fitExtent(
-    [
-      [10, 10],
-      [WIDTH - 10, HEIGHT - 10],
-    ],
-    geo,
-  );
+  const projection = geoIdentity()
+    .reflectY(true)
+    .fitExtent(
+      [
+        [10, 10],
+        [WIDTH - 10, HEIGHT - 10],
+      ],
+      geo,
+    );
   const path = geoPath(projection).digits(1).pointRadius(4);
   const { accent } = PALETTE[theme];
   const shapes = features

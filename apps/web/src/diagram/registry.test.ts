@@ -39,14 +39,11 @@ it.each([
   [["geojson", "topojson"], "Map", "geo"],
   [["stl"], "STL", "stl"],
   [["vega", "vega-lite"], "Vega", "vega"],
-])(
-  "renders %j fences with %s, loading it on first use",
-  async (fences, label, id) => {
-    const entry = diagramRegistry.match(fences[0])!;
-    expect(entry.label).toBe(label);
-    for (const fence of fences) expect(diagramRegistry.match(fence)).toBe(entry);
-    expect(loaded).not.toContain(id);
-    await expect(entry.load()).resolves.toMatchObject({ id });
-    expect(loaded).toContain(id);
-  },
-);
+])("renders %j fences with %s, loading it on first use", async (fences, label, id) => {
+  const entry = diagramRegistry.match(fences[0])!;
+  expect(entry.label).toBe(label);
+  for (const fence of fences) expect(diagramRegistry.match(fence)).toBe(entry);
+  expect(loaded).not.toContain(id);
+  await expect(entry.load()).resolves.toMatchObject({ id });
+  expect(loaded).toContain(id);
+});
