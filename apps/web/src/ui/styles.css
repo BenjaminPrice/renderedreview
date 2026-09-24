@@ -1045,6 +1045,45 @@ samp {
   margin: 0;
   padding: 4px 8px 12px;
 }
+/* All docs: a filter, then a virtualized list that scrolls on its own. */
+.rr-sidebar-filter {
+  padding: 0 12px 4px;
+}
+.rr-sidebar-filter input {
+  width: 100%;
+  padding: 5px 8px;
+  font: inherit;
+  font-size: var(--rr-text-sm);
+  color: var(--rr-text);
+  background: var(--rr-surface);
+  border: 1px solid var(--rr-border);
+  border-radius: var(--rr-radius);
+}
+.rr-filter-count:empty {
+  padding: 0;
+}
+.rr-filescroll {
+  flex: 1 1 0;
+  min-height: 160px;
+  overflow: auto;
+}
+.rr-filelist-virtual {
+  position: relative;
+  box-sizing: content-box;
+}
+.rr-filelist-virtual > li {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  height: 34px; /* ROW_H in Sidebar.tsx */
+}
+.rr-filelist-virtual .rr-file {
+  height: 100%;
+}
+/* Fixed-height rows: the old path stays in the accessible name. */
+.rr-filelist-virtual .rr-file-sub {
+  display: none;
+}
 .rr-file {
   display: flex;
   align-items: center;

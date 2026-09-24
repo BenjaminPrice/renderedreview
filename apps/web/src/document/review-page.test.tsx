@@ -279,12 +279,13 @@ it("keeps a deep-linked document far down the All docs list reachable", async ()
 it("filters All docs by path, case-insensitively, and announces the count", async () => {
   withBigTree();
   renderPage("?files=all");
-  const list = await allList();
+  await allList();
   await userEvent.type(within(sidebar()).getByRole("searchbox", { name: "Filter documents" }), "DOCS/0999");
-  // 00999 and 09990 to 09999.
-  await vi.waitFor(() => expect(rows(list)).toHaveLength(11));
-  expect(within(sidebar()).getByRole("status").textContent).toBe("11 documents");
-  expect(rows(list)[0]!.getAttribute("aria-setsize")).toBe("11");
+  // 09990 to 09999.
+  await vi.waitFor(() => expect(within(sidebar()).getByRole("status").textContent).toBe("10 documents"));
+  const first = rows(await allList())[0]!;
+  expect(first.getAttribute("aria-setsize")).toBe("10");
+  expect(within(first).getByRole("link").getAttribute("title")).toBe(bigPath(9_990));
 });
 
 it("moves between files with the arrow keys", async () => {
