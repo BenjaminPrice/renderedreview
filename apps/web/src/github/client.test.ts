@@ -144,7 +144,7 @@ describe("withGitHub signed in", () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it("reads through the authenticated endpoint only, marked as same-origin script", async () => {
-    const fetch = vi.fn(async (_: RequestInfo | URL, __?: RequestInit) => Response.json(TREE));
+    const fetch = vi.fn<typeof globalThis.fetch>(async () => Response.json(TREE));
     vi.stubGlobal("fetch", fetch);
     await withGitHub("user", "github.com", (c) => c.getTree("a", "b", OID));
     expect(fetch.mock.calls.map((c) => String(c[0]))).toEqual([
@@ -171,7 +171,7 @@ describe("withGitHub signed in", () => {
   });
 
   it("fetches review threads from the fixed-query endpoint", async () => {
-    const fetch = vi.fn(async (_: RequestInfo | URL, __?: RequestInit) => Response.json([{ nodeId: "T" }]));
+    const fetch = vi.fn<typeof globalThis.fetch>(async () => Response.json([{ nodeId: "T" }]));
     vi.stubGlobal("fetch", fetch);
     expect(await userReviewThreads("github.com", "a", "b", 3)).toEqual([{ nodeId: "T" }]);
     expect(String(fetch.mock.calls[0]![0])).toBe("/api/github/user/github.com/repos/a/b/pulls/3/review-threads");

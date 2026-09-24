@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// TanStack Query options for public PR data. Use with `useQuery`, `useSuspenseQuery` or
+// TanStack Query options for PR data, read with the viewer's access (keys include it). Use with `useQuery`, `useSuspenseQuery` or
 // `queryClient.ensureQueryData` in loaders.
 import { objectKey } from "@rendered-review/browser-cache";
 import type { PullRequest } from "@rendered-review/github-integration";
 import { queryOptions } from "@tanstack/react-query";
 import type { PrParams } from "../pr-url";
-import { browserCache, withPublicGitHub } from "./client";
+import { type Access, browserCache, userReviewThreads, withGitHub } from "./client";
 
 /** Mutable PR data: refetched (with ETag revalidation) once this old. */
 const PR_STALE_MS = 30_000;
@@ -24,16 +24,18 @@ export interface PrIdentity {
   number: number;
   headSha: string;
   baseSha: string;
+  /** Whose access reads this PR's data. */
+  access: Access;
 }
 
-export const pullRequestQuery = ({ host, owner, repo, number }: PrParams) =>
+export const pullRequestQuery = ({ host, owner, repo, number }: PrParams, access: Access) =>
   queryOptions({
-    queryKey: ["github", host, "pull", owner.toLowerCase(), repo.toLowerCase(), number],
-    queryFn: () => withPublicGitHub(host, (c) => c.getPullRequest(owner, repo, number)),
+    queryKey: ["github", access, host, "pull", owner.toLowerCase(), repo.toLowerCase(), number],
+    queryFn: () => withGitHub(access, host, (c) => c.getPullRequest(owner, repo, number)),
     staleTime: PR_STALE_MS,
   });
 
-export function prIdentity(host: string, pr: PullRequest): PrIdentity {
+export function prIdentity(host: string, pr: PullRequest, access: Access): PrIdentity {
   const repository = pr.base.repository;
   // The base repository of a PR exists as long as the PR is visible.
   if (!repository) throw new Error("Pull request has no base repository");
@@ -46,36 +48,47 @@ export function prIdentity(host: string, pr: PullRequest): PrIdentity {
     number: pr.number,
     headSha: pr.head.sha,
     baseSha: pr.base.sha,
+    access,
   };
 }
 
-const prKey = (id: PrIdentity, what: string) => ["github", id.host, id.repositoryId, "pull", id.number, what] as const;
+const prKey = (id: PrIdentity, what: string) =>
+  ["github", id.access, id.host, id.repositoryId, "pull", id.number, what] as const;
 
 export const changedFilesQuery = (id: PrIdentity) =>
   queryOptions({
     queryKey: prKey(id, "files"),
-    queryFn: () => withPublicGitHub(id.host, (c) => c.listPullRequestFiles(id.owner, id.repo, id.number)),
+    queryFn: () => withGitHub(id.access, id.host, (c) => c.listPullRequestFiles(id.owner, id.repo, id.number)),
     staleTime: PR_STALE_MS,
   });
 
 export const reviewCommentsQuery = (id: PrIdentity) =>
   queryOptions({
     queryKey: prKey(id, "review-comments"),
-    queryFn: () => withPublicGitHub(id.host, (c) => c.listReviewComments(id.owner, id.repo, id.number)),
+    queryFn: () => withGitHub(id.access, id.host, (c) => c.listReviewComments(id.owner, id.repo, id.number)),
     staleTime: PR_STALE_MS,
   });
 
 export const reviewsQuery = (id: PrIdentity) =>
   queryOptions({
     queryKey: prKey(id, "reviews"),
-    queryFn: () => withPublicGitHub(id.host, (c) => c.listReviews(id.owner, id.repo, id.number)),
+    queryFn: () => withGitHub(id.access, id.host, (c) => c.listReviews(id.owner, id.repo, id.number)),
     staleTime: PR_STALE_MS,
   });
 
 export const issueCommentsQuery = (id: PrIdentity) =>
   queryOptions({
     queryKey: prKey(id, "issue-comments"),
-    queryFn: () => withPublicGitHub(id.host, (c) => c.listIssueComments(id.owner, id.repo, id.number)),
+    queryFn: () => withGitHub(id.access, id.host, (c) => c.listIssueComments(id.owner, id.repo, id.number)),
+    staleTime: PR_STALE_MS,
+  });
+
+/** Review-thread resolution. Needs the user's access: GitHub refuses anonymous GraphQL. */
+export const reviewThreadsQuery = (id: PrIdentity) =>
+  queryOptions({
+    queryKey: prKey(id, "review-threads"),
+    queryFn: () => userReviewThreads(id.host, id.owner, id.repo, id.number),
+    enabled: id.access === "user",
     staleTime: PR_STALE_MS,
   });
 
@@ -85,18 +98,18 @@ async function immutable<T>(id: PrIdentity, key: string, fetchFn: () => Promise<
   const hit = await browserCache.get<T>("objects", cacheKey);
   if (hit !== undefined) return hit;
   const value = await fetchFn();
-  await browserCache.set("objects", cacheKey, value, { private: false });
+  await browserCache.set("objects", cacheKey, value, { private: id.access === "user" });
   return value;
 }
 
 /** Recursive tree at a commit or tree OID (e.g. `id.headSha`). Immutable. */
 export const treeQuery = (id: PrIdentity, oid: string) =>
   queryOptions({
-    queryKey: ["github", id.host, id.repositoryId, "tree", oid],
+    queryKey: ["github", id.access, id.host, id.repositoryId, "tree", oid],
     // Keyed apart from blobs: a commit OID resolves to a tree here, not to the commit object.
     queryFn: () =>
       immutable(id, `tree:${oid}`, () =>
-        withPublicGitHub(id.host, (c) => c.getTree(id.owner, id.repo, oid, { recursive: true })),
+        withGitHub(id.access, id.host, (c) => c.getTree(id.owner, id.repo, oid, { recursive: true })),
       ),
     staleTime: Infinity,
   });
@@ -104,7 +117,22 @@ export const treeQuery = (id: PrIdentity, oid: string) =>
 /** Raw blob text by blob OID. Immutable. */
 export const blobQuery = (id: PrIdentity, oid: string) =>
   queryOptions({
-    queryKey: ["github", id.host, id.repositoryId, "blob", oid],
-    queryFn: () => immutable(id, oid, () => withPublicGitHub(id.host, (c) => c.getBlob(id.owner, id.repo, oid))),
+    queryKey: ["github", id.access, id.host, id.repositoryId, "blob", oid],
+    queryFn: () => immutable(id, oid, () => withGitHub(id.access, id.host, (c) => c.getBlob(id.owner, id.repo, oid))),
     staleTime: Infinity,
   });
+
+/**
+ * Whether this deployment offers sign-in and whether the viewer is signed in. Browser only (the
+ * server never renders who is signed in); fetched once per page load, since sign-in and sign-out
+ * reload the page.
+ */
+export const viewerQuery = queryOptions({
+  queryKey: ["viewer"],
+  queryFn: async () => {
+    const res = await fetch("/api/auth/viewer", { cache: "no-store" }).catch(() => undefined);
+    if (!res?.ok) return { signInEnabled: false, signedIn: false };
+    return { signInEnabled: true, signedIn: !!(await res.json().catch(() => null)) };
+  },
+  staleTime: Infinity,
+});

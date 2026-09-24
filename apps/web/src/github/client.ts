@@ -105,7 +105,7 @@ const userClients = new Map<string, GitHubClient>();
 
 /** Runs `call` with `access`: the user's through the authenticated endpoint, or the public path. */
 export function withGitHub<T>(access: Access, host: string, call: (client: GitHubClient) => Promise<T>): Promise<T> {
-  if (access === "public") return withPublicGitHub(host, call);
+  if (access !== "user") return withPublicGitHub(host, call);
   let client = userClients.get(host);
   if (!client) userClients.set(host, (client = createGitHubClient({ host, cache: userCache, fetch: userFetch(host) })));
   return call(client);
