@@ -7,22 +7,36 @@ import { useRouter } from "@tanstack/react-router";
 import type { Element, Root } from "hast";
 import { toJsxRuntime } from "hast-util-to-jsx-runtime";
 import { toString } from "hast-util-to-string";
-import { useContext, useMemo, type MouseEvent, type Ref } from "react";
+import { useContext, useEffect, useMemo, useState, type MouseEvent, type Ref } from "react";
 import { Fragment, jsx, jsxs } from "react/jsx-runtime";
 import { DiagramBlock, DiagramSourceContext, type DiagramSource } from "../diagram/DiagramBlock";
 import { DiagramRegistryContext } from "../diagram/registry";
 import { blobQuery, fileAtCommitQuery, type PrIdentity } from "../github/queries";
 import { type ChangeKind, changedLines, type DocEntry, type LineChange, sourceUrl } from "./docs";
+import { renderInWorker } from "./render-client";
 import { renderJob } from "./render-job";
 
 export { inAppDocLink } from "./render-job";
 
-// ponytail: fixed size cap on the main thread; move parsing to a cancellable Web Worker and
-// set the threshold from browser benchmarks when large documents matter.
+/** Larger sources show the size-limit state (with the raw source) instead of rendering. */
 export const MAX_RENDER_CHARS = 1_000_000;
+
+/**
+ * Larger sources render in the render Worker. Rendering costs about 1.8 ms per KB of Markdown
+ * (4 ms per KB for tables; see document.bench.ts), so above this a render would block input
+ * beyond a 50 ms long task. Smaller ones render on the main thread at once, with no Worker startup.
+ */
+export const WORKER_THRESHOLD_CHARS = 32_000;
 
 const RENDER_CACHE_SIZE = 32;
 const renderCache = new Map<string, RenderedMarkdown | Error>();
+
+function remember(key: string, rendered: RenderedMarkdown | Error) {
+  if (renderCache.size >= RENDER_CACHE_SIZE) renderCache.delete(renderCache.keys().next().value!);
+  renderCache.set(key, rendered);
+}
+
+const renderKey = (sha: string, entry: DocEntry) => `${entry.oid}:${sha}:${entry.path}`;
 
 /**
  * `renderMarkdown` memoized by blob and location, so UI state changes and revisits never
@@ -30,7 +44,7 @@ const renderCache = new Map<string, RenderedMarkdown | Error>();
  * `.mdx` files parse as MDX; invalid MDX yields its parse error.
  */
 function renderBlob(id: PrIdentity, sha: string, entry: DocEntry, source: string): RenderedMarkdown | Error {
-  const key = `${entry.oid}:${sha}:${entry.path}`;
+  const key = renderKey(sha, entry);
   let rendered = renderCache.get(key);
   if (!rendered) {
     try {
@@ -38,10 +52,52 @@ function renderBlob(id: PrIdentity, sha: string, entry: DocEntry, source: string
     } catch (error) {
       rendered = error instanceof Error ? error : new Error(String(error));
     }
-    if (renderCache.size >= RENDER_CACHE_SIZE) renderCache.delete(renderCache.keys().next().value!);
-    renderCache.set(key, rendered);
+    remember(key, rendered);
   }
   return rendered;
+}
+
+/**
+ * `source` rendered: at once on the main thread up to `WORKER_THRESHOLD_CHARS`, else in the render
+ * Worker, `rendering` meanwhile. A new document or revision cancels the render in flight. Results
+ * are cached per blob either way.
+ */
+export function useRendered(
+  id: PrIdentity,
+  sha: string,
+  entry: DocEntry | undefined,
+  source: string | undefined,
+): { result?: RenderedMarkdown | Error; rendering: boolean } {
+  const key = entry && source !== undefined ? renderKey(sha, entry) : undefined;
+  const offload = (source?.length ?? 0) > WORKER_THRESHOLD_CHARS;
+  const onMain = useMemo(
+    () => (entry && source !== undefined && !offload ? renderBlob(id, sha, entry, source) : undefined),
+    [id, sha, entry, source, offload],
+  );
+  const [, rendered] = useState(0);
+  const { host, owner, repo, number } = id;
+  const path = entry?.path;
+  useEffect(() => {
+    if (!key || !offload || path === undefined || source === undefined || renderCache.has(key)) return;
+    const controller = new AbortController();
+    const pr = { host, owner, repo, number };
+    const done = () => controller.signal.aborted || rendered((n) => n + 1);
+    renderInWorker({ source, pr, sha, path }, controller.signal).then(
+      (result) => {
+        remember(key, result);
+        done();
+      },
+      () => {
+        if (controller.signal.aborted) return;
+        // Worker unavailable: render here rather than not at all.
+        renderBlob(pr as PrIdentity, sha, entry!, source);
+        done();
+      },
+    );
+    return () => controller.abort();
+  }, [key, offload, source, sha, path, host, owner, repo, number]);
+  const result = offload ? key && renderCache.get(key) : onMain;
+  return { result: result || undefined, rendering: offload && !!key && !result };
 }
 
 export interface LoadedDocument {
@@ -51,6 +107,8 @@ export interface LoadedDocument {
   /** Why the source could not be rendered (invalid MDX); show it raw instead. */
   renderError?: Error;
   tooLarge: boolean;
+  /** A large document is rendering in the render Worker. */
+  rendering: boolean;
   /** Head lines changed by the PR; empty for unchanged and deleted documents. */
   changes: LineChange[];
   /** The commit the shown blob belongs to: base for deleted documents, else head. */
@@ -69,10 +127,7 @@ export function useDocument(id: PrIdentity, entry: DocEntry | undefined): Loaded
   const source = head.data;
   const sha = deleted ? id.baseSha : id.headSha;
   const tooLarge = (source?.length ?? 0) > MAX_RENDER_CHARS;
-  const result = useMemo(
-    () => (entry && source !== undefined && !tooLarge ? renderBlob(id, sha, entry, source) : undefined),
-    [id, sha, entry, source, tooLarge],
-  );
+  const { result, rendering } = useRendered(id, sha, entry, tooLarge ? undefined : source);
   const baseSource = entry?.status === "added" ? "" : base.data;
   const changes = useMemo(
     () => (source !== undefined && baseSource !== undefined ? changedLines(baseSource, source) : []),
@@ -83,6 +138,7 @@ export function useDocument(id: PrIdentity, entry: DocEntry | undefined): Loaded
     rendered: result instanceof Error ? undefined : result,
     renderError: result instanceof Error ? result : undefined,
     tooLarge,
+    rendering,
     changes,
     sha,
     // A missing base blob only costs the change markers; don't fail the document for it.

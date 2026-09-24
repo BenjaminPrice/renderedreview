@@ -373,12 +373,17 @@ function ReviewPage({ pr, id, files }: { pr: PullRequest; id: PrIdentity; files:
                 onCompose={(selection, suggest) => reviewMode.compose(entry.path, selection, suggest)}
               />
             </>
+          ) : doc.rendering ? (
+            <DocMessage title="Rendering large document…" />
           ) : (
             <DocMessage title="This document is too large to render">
               It has {doc.source.length.toLocaleString()} characters; the limit is {MAX_RENDER_CHARS.toLocaleString()}.{" "}
               <button type="button" className="rr-btn rr-btn-sm" onClick={() => setView("raw")}>
                 View raw
-              </button>
+              </button>{" "}
+              <ExternalLink className="rr-btn rr-btn-sm rr-btn-ghost" href={sourceUrl(link, link.sha, link.path)}>
+                Open on GitHub
+              </ExternalLink>
             </DocMessage>
           )}
         </>

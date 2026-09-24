@@ -13,7 +13,14 @@ import { routeTree } from "../routeTree.gen";
 import { expectNewTab } from "../test-utils";
 import { allowedHostsQuery } from "../routes/$host.$owner.$repo.pull.$number";
 import { Route as RootRoute } from "../routes/__root";
-import { MAX_RENDER_CHARS } from "./document";
+import { MAX_RENDER_CHARS, WORKER_THRESHOLD_CHARS } from "./document";
+import { renderJob } from "./render-job";
+
+// The render Worker, answered on the next task as a real one would.
+vi.mock("./render-client", () => ({
+  renderInWorker: (job: Parameters<typeof renderJob>[0]) =>
+    new Promise((resolve) => setTimeout(() => resolve(renderJob(job)), 0)),
+}));
 
 const fixture = (name: string) => readFileSync(`${import.meta.dirname}/fixtures/${name}`, "utf8");
 const HEAD = "db23e1ea65fa47a95d8414d2d8be806a26dccf49";
@@ -305,8 +312,21 @@ it("shows a size-limit state for documents too large to render, with raw still a
   responses[`${API}/git/blobs/${huge}`] = "x".repeat(MAX_RENDER_CHARS + 1);
   renderPage(`?doc=${encodeURIComponent(DELETED)}`);
   expect(await screen.findByRole("heading", { name: "This document is too large to render" })).toBeTruthy();
+  const github = screen.getByRole("link", { name: /Open on GitHub/ });
+  expectNewTab(github);
+  expect(github.getAttribute("href")).toBe(`https://github.com/mdn/content/blob/${BASE}/${DELETED}`);
   await userEvent.click(screen.getByRole("button", { name: "View raw" }));
   expect(screen.getByRole("link", { name: "Line 1 on GitHub (opens in new tab)" })).toBeTruthy();
+});
+
+it("renders large documents off the main thread, showing progress meanwhile", async () => {
+  const big = "b".repeat(40);
+  responses[`${API}/pulls/45377/files?per_page=100`] = fixture("files.json").replace(DELETED_BLOB, big);
+  responses[`${API}/git/blobs/${big}`] = `# Large\n\n${"Lorem ipsum dolor. ".repeat(WORKER_THRESHOLD_CHARS / 10)}\n`;
+  renderPage(`?doc=${encodeURIComponent(DELETED)}`);
+  expect(await screen.findByRole("heading", { name: "Rendering large document…" })).toBeTruthy();
+  const article = await screen.findByRole("article", { name: "Rendered document" });
+  expect(within(article).getByRole("heading", { name: "Large" })).toBeTruthy();
 });
 
 const DELETED_MDX = DELETED.replace(/\.md$/, ".mdx");
