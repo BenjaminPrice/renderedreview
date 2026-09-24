@@ -235,6 +235,13 @@ describe("comment", () => {
     expect(sent(0)).toEqual({ body });
   });
 
+  it("publishes a plain top-level conversation comment with no annotation", async () => {
+    const { call, sent } = setup({ routes: { "POST /issues/7/comments": created() } });
+    const res = await call("comment", { expectedHeadOid: HEAD, representation: "conversation", body: "Looks good" });
+    expect(res.status).toBe(201);
+    expect(sent(0)).toEqual({ body: "Looks good" });
+  });
+
   it("answers 409 stale-head with the current head when the PR moved on", async () => {
     const { call, writes } = setup({ head: OTHER });
     const res = await call("comment", comment());
