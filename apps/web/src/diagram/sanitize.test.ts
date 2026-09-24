@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // @vitest-environment jsdom
 // jsdom, not happy-dom: DOMPurify cannot read element names in happy-dom and strips everything.
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { sanitizeSvg } from "./sanitize";
 
 const parse = (svg: string) => new DOMParser().parseFromString(svg, "image/svg+xml");
@@ -47,4 +47,27 @@ it("sizes the SVG from its viewBox so it has intrinsic dimensions as an image", 
 
 it("rejects input without an SVG root", () => {
   expect(() => sanitizeSvg("<div>not svg</div>")).toThrow("Renderer produced no SVG");
+});
+
+it("keeps Mermaid's stylesheet without ever parsing it into a DOM, where the page CSP would flag it", () => {
+  const parse = vi.spyOn(DOMParser.prototype, "parseFromString");
+  // HTML serialization, as Mermaid produces it: `>` in style text is an entity.
+  const out = sanitizeSvg(
+    '<svg viewBox="0 0 10 10"><style>#m .a &gt; .b { fill: red } @import url(https://evil.example/x.css);</style><style>.c{stroke:url(https://evil.example/p)}</style><g class="a"/></svg>',
+  );
+  for (const [input] of parse.mock.calls) expect(input).not.toMatch(/<style/i);
+  parse.mockRestore();
+  const styles = new DOMParser().parseFromString(out, "image/svg+xml").querySelectorAll("style");
+  expect(styles).toHaveLength(1);
+  expect(styles[0]!.textContent).toBe("#m .a > .b { fill: red } \n.c{stroke:none}");
+});
+
+it("cannot be broken out of through the stylesheet", () => {
+  const out = sanitizeSvg(
+    '<svg viewBox="0 0 1 1"><style>a{}&lt;/style&gt;&lt;script&gt;alert(1)&lt;/script&gt;</style></svg>',
+  );
+  const doc = new DOMParser().parseFromString(out, "image/svg+xml");
+  expect(doc.querySelector("parsererror")).toBeNull();
+  expect(doc.querySelector("script")).toBeNull();
+  expect(doc.querySelector("style")!.textContent).toBe("a{}</style><script>alert(1)</script>");
 });
