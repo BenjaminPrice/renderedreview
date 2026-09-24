@@ -257,7 +257,7 @@ describe("reviews and counts", () => {
 
   it("projectReview wires it together and excludes the link comment everywhere", () => {
     const p = projectReview({
-      repository: repo,
+      repository: { ...repo, repositoryId: 42, pullRequest: 7 },
       reviewComments: [rc()],
       reviews: [review("APPROVED", "ok")],
       issueComments: [ic(MARKER, user("github-actions[bot]", "Bot")), ic("hello")],
@@ -292,7 +292,9 @@ describe("reviews and counts", () => {
       "later",
     ]);
     const first = items[1]!;
-    expect(first.kind === "review" && first.threads.map((t) => t.comments[0]!.reviewId)).toEqual([changes.id]);
+    expect(first.kind === "review" && first.threads.map((t) => (t.comments[0] as ReviewComment).reviewId)).toEqual([
+      changes.id,
+    ]);
   });
 
   it("lists each reviewer's latest verdict, excluding the author", () => {

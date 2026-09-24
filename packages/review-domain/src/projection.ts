@@ -2,11 +2,14 @@
 // Projects GitHub-native review content (review comments, threads, review summaries and PR
 // conversation comments) into what the review UI shows. Pure: no I/O, no rendering.
 //
-// App-created comments (bodies carrying annotation metadata) are treated as ordinary native
-// comments here; annotation parsing hooks in on `NativeThread.comments` / `ConversationEntry`.
+// Application comments stored as PR conversation comments are rebuilt into threads (./threads.ts)
+// and classified by their annotation metadata (./classify.ts).
+import { type RenderedReviewAnnotationV1, verifyContent } from "@rendered-review/annotation-domain";
 import { ACTIONS_BOT, MARKER } from "@rendered-review/github-action";
 import type { Actor, IssueComment, Review, ReviewComment, ReviewThread } from "@rendered-review/github-integration";
 import { blocksForLines, type RenderedMarkdown, type SourceNode } from "@rendered-review/markdown-domain";
+import { type Classification, classifyComment, type CommentContext } from "./classify.js";
+import { reconstructThreads } from "./threads.js";
 
 /** `unknown` when no GraphQL thread data is available (e.g. anonymous public access). */
 export type Resolution = "resolved" | "unresolved" | "unknown";
@@ -28,16 +31,44 @@ export type NativeAnchor =
       endLine: number;
       /** Commit the lines refer to; the original commit when `outdated`. */
       commitOid: string;
+    }
+  | {
+      /**
+       * Exact words from a validated annotation, on the blob it names. Placed only after the
+       * blob's content matches (`placeThreads`); otherwise `fallback` (a review comment's own
+       * GitHub location) is used, if any.
+       */
+      type: "annotation";
+      annotation: RenderedReviewAnnotationV1;
+      fallback?: NativeAnchor;
     };
 
+/** A PR comment in a thread: native review comments, or conversation comments in application threads. */
+export type ThreadComment = ReviewComment | IssueComment;
+
+/** Resolve or reopen of an application thread: a visible PR conversation comment with `resolving` metadata. */
+export interface ResolutionEvent {
+  resolution: "resolved" | "reopened";
+  at: string;
+  comment: IssueComment;
+}
+
+/** A native review thread, or an application thread rebuilt from PR conversation comments. */
 export interface NativeThread {
-  /** GraphQL thread node id, or `rest:<root comment id>` when grouped from REST reply chains. */
+  /**
+   * GraphQL thread node id, `rest:<root comment id>` when grouped from REST reply chains, or
+   * `app:<root comment id>` for application threads.
+   */
   id: string;
   path: string;
   /** Oldest first; `comments[0]` is the thread root. */
-  comments: ReviewComment[];
+  comments: ThreadComment[];
   resolution: Resolution;
   anchor: NativeAnchor;
+  /** Annotation classification of comments that carry metadata, by comment id. */
+  metadata?: Record<number, Classification>;
+  /** Application threads: resolve/reopen events, oldest first. They are not comments. */
+  events?: ResolutionEvent[];
 }
 
 /** A location taken from a canonical immutable permalink in a conversation comment. Always labeled "inferred". */
@@ -52,6 +83,8 @@ export interface InferredLocation {
 export interface ConversationEntry {
   comment: IssueComment;
   inferred: InferredLocation[];
+  /** Annotation classification when the comment carries metadata that is not used for a thread. */
+  metadata?: Classification;
 }
 
 export interface RepositoryRef {
@@ -62,7 +95,8 @@ export interface RepositoryRef {
 }
 
 export interface ProjectionInput {
-  repository: RepositoryRef;
+  /** The pull request the comments were loaded from; annotations must name exactly this. */
+  repository: CommentContext;
   reviewComments: ReviewComment[];
   /** GraphQL review threads; omit when unavailable, which makes resolution `unknown`. */
   reviewThreads?: ReviewThread[];
@@ -76,7 +110,7 @@ export interface ReviewProjection {
   threads: NativeThread[];
   /** Submitted reviews with a non-empty body, for the PR review-summary area. */
   summaries: Review[];
-  /** PR conversation comments minus Rendered Review link comments. */
+  /** PR conversation comments minus Rendered Review link comments and application threads. */
   conversation: ConversationEntry[];
   /** Threads not known to be resolved, per path. Unknown resolution counts as open. */
   unresolvedByPath: Record<string, number>;
@@ -95,8 +129,16 @@ export interface ReviewerState {
 }
 
 export function projectReview(input: ProjectionInput): ReviewProjection {
-  const threads = groupThreads(input.reviewComments, input.reviewThreads);
-  const entries = conversation(input.issueComments, input.repository, input.integrationBots);
+  const context = input.repository;
+  const native = groupThreads(input.reviewComments, input.reviewThreads).map((t) => annotateThread(t, context));
+  const visible = input.issueComments.filter((c) => !isIntegrationNotice(c, input.integrationBots));
+  const app = reconstructThreads(visible, context);
+  const threads = [...native, ...app.threads].sort((a, b) => byTime(a.comments[0]!, b.comments[0]!));
+  const entries = app.rest.map(({ comment, classification }): ConversationEntry => ({
+    comment,
+    inferred: inferLocations(comment.body, context),
+    ...(classification.state !== "native" && { metadata: classification }),
+  }));
   return {
     threads,
     summaries: reviewSummaries(input.reviews),
@@ -106,7 +148,8 @@ export function projectReview(input: ProjectionInput): ReviewProjection {
   };
 }
 
-const byTime = (a: ReviewComment, b: ReviewComment) => a.createdAt.localeCompare(b.createdAt) || a.id - b.id;
+const byTime = (a: { createdAt: string; id: number }, b: { createdAt: string; id: number }) =>
+  a.createdAt.localeCompare(b.createdAt) || a.id - b.id;
 
 /** Group review comments into threads: GraphQL thread membership when given, else REST reply chains. */
 export function groupThreads(comments: ReviewComment[], threads?: ReviewThread[]): NativeThread[] {
@@ -171,11 +214,65 @@ function anchor(c: ReviewComment): NativeAnchor {
   return { type: "file" };
 }
 
+/** First and last line (inclusive) an anchor covers; `undefined` at file scope. */
+export function anchorLines(a: NativeAnchor): { startLine: number; endLine: number } | undefined {
+  if (a.type === "file") return undefined;
+  if (a.type !== "annotation") return { startLine: a.startLine, endLine: a.endLine };
+  const r = sourceRange(a.annotation);
+  // The range is half-open: ending at column 1 means the previous line was the last one selected.
+  return { startLine: r.startLine, endLine: r.endColumn === 1 && r.endLine > r.startLine ? r.endLine - 1 : r.endLine };
+}
+
+const selector = <T extends RenderedReviewAnnotationV1["target"]["selectors"][number]["type"]>(
+  a: RenderedReviewAnnotationV1,
+  type: T,
+) => a.target.selectors.find((s) => s.type === type) as Extract<(typeof a.target.selectors)[number], { type: T }>;
+const sourceRange = (a: RenderedReviewAnnotationV1) => selector(a, "MarkdownSourceRangeSelector");
+
+/**
+ * Classify a review thread's comments by their metadata. The root's annotation replaces GitHub's
+ * line anchor when it is valid and overlaps those lines (GitHub's anchor stays as the fallback);
+ * otherwise GitHub's location is kept.
+ */
+function annotateThread(thread: NativeThread, context: CommentContext): NativeThread {
+  const metadata: Record<number, Classification> = {};
+  for (const c of thread.comments as ReviewComment[]) {
+    const classification = classifyComment(c, context);
+    if (classification.state !== "native") metadata[c.id] = classification;
+  }
+  if (!Object.keys(metadata).length) return thread;
+  const annotation = metadata[thread.comments[0]!.id]?.annotation;
+  const native = thread.anchor;
+  const lines = annotation && anchorLines({ type: "annotation", annotation });
+  const agrees =
+    lines &&
+    native.type === "current" &&
+    native.side === "RIGHT" &&
+    lines.startLine <= native.endLine &&
+    lines.endLine >= native.startLine;
+  return { ...thread, metadata, ...(agrees && { anchor: { type: "annotation", annotation, fallback: native } }) };
+}
+
+/** Words an annotation selects, for word-precise highlighting of its source range. */
+export interface AnnotationRange {
+  kind: "annotation";
+  sourceRange: { startLine: number; startColumn: number; endLine: number; endColumn: number };
+  textQuote: { exact: string; prefix?: string; suffix?: string };
+}
+
 export interface ThreadPlacement {
   thread: NativeThread;
   /** Blocks to highlight; empty for file-scope and outdated threads, or when the side's document is missing. */
   blocks: SourceNode[];
+  /** Annotation verified against the displayed blob: the exact words within `blocks`. */
+  range?: AnnotationRange;
+  /** Why the thread is not placed, when that needs saying. */
+  reason?: string;
+  /** The annotation does not match the blob it names: show "Metadata damaged" with this reason. */
+  damaged?: string;
 }
+
+export const REANCHOR_PENDING = "Document changed since this comment — re-anchoring pending";
 
 /**
  * Place a file's threads on its rendered documents: RIGHT-side lines on the head blob, LEFT-side
@@ -185,14 +282,42 @@ export interface ThreadPlacement {
 export function placeThreads(
   threads: NativeThread[],
   path: string,
-  docs: { head?: RenderedMarkdown; base?: RenderedMarkdown },
+  docs: {
+    head?: RenderedMarkdown;
+    base?: RenderedMarkdown;
+    /** The head blob `head` was rendered from; annotations are placed only on the blob they name. */
+    blob?: { oid: string; source: string };
+  },
 ): ThreadPlacement[] {
+  const lineBlocks = (a: NativeAnchor | undefined) => {
+    const doc = a?.type === "current" ? (a.side === "LEFT" ? docs.base : docs.head) : undefined;
+    return doc && a?.type === "current" ? blocksForLines(doc, a.startLine, a.endLine) : [];
+  };
   return threads
     .filter((t) => t.path === path)
-    .map((thread) => {
+    .map((thread): ThreadPlacement => {
       const a = thread.anchor;
-      const doc = a.type === "current" ? (a.side === "LEFT" ? docs.base : docs.head) : undefined;
-      return { thread, blocks: doc && a.type === "current" ? blocksForLines(doc, a.startLine, a.endLine) : [] };
+      if (a.type !== "annotation") return { thread, blocks: lineBlocks(a) };
+      const { head, blob } = docs;
+      if (!head || !blob) return { thread, blocks: lineBlocks(a.fallback) };
+      if (blob.oid !== a.annotation.target.blobOid)
+        return a.fallback
+          ? { thread, blocks: lineBlocks(a.fallback) }
+          : { thread, blocks: [], reason: REANCHOR_PENDING };
+      const check = verifyContent(a.annotation, blob.source, head);
+      if (!check.ok) return { thread, blocks: lineBlocks(a.fallback), damaged: check.reason };
+      const { startLine, startColumn, endLine, endColumn } = sourceRange(a.annotation);
+      const { exact, prefix, suffix } = selector(a.annotation, "TextQuoteSelector");
+      const lines = anchorLines(a)!;
+      return {
+        thread,
+        blocks: blocksForLines(head, lines.startLine, lines.endLine),
+        range: {
+          kind: "annotation",
+          sourceRange: { startLine, startColumn, endLine, endColumn },
+          textQuote: { exact, ...(prefix !== undefined && { prefix }), ...(suffix !== undefined && { suffix }) },
+        },
+      };
     });
 }
 
@@ -253,7 +378,10 @@ export function timeline(entries: ConversationEntry[], reviews: Review[], thread
   const items: TimelineItem[] = entries.map((entry) => ({ kind: "comment", at: entry.comment.createdAt, entry }));
   for (const review of reviews) {
     if (!review.submittedAt || (review.state === "COMMENTED" && !review.body.trim())) continue;
-    const own = threads.filter((t) => t.comments[0]!.reviewId === review.id);
+    const own = threads.filter((t) => {
+      const root = t.comments[0]!;
+      return "reviewId" in root && root.reviewId === review.id;
+    });
     items.push({ kind: "review", at: review.submittedAt, review, threads: own });
   }
   const rank = (i: TimelineItem) => (i.kind === "comment" ? 0 : 1);
