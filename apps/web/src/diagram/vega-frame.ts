@@ -3,11 +3,37 @@
 // every URL and file, so nothing is fetched (the frame's policy would block it anyway). Expressions
 // run in Vega's interpreter rather than as generated code, and the view renders headless to SVG.
 import type { DiagramTheme } from "@rendered-review/diagram-domain";
-import { logger, parse, View, type Config, type Loader, type Spec } from "vega";
+import { logger, parse, transforms, View, type Config, type Loader, type Spec } from "vega";
 import { expressionInterpreter } from "vega-interpreter";
 import { compile, type TopLevelSpec } from "vega-lite";
 import { serveRenderer, type FrameRender } from "./frame-entry";
 import { PALETTE } from "./palette";
+
+// A `sequence` generates rows from three numbers, so a one-line spec could exhaust memory.
+// ponytail: only `sequence` is capped; other generators (density steps, contour sizes) rely on
+// the render timeout and the frame being discarded.
+const MAX_SEQUENCE = 100_000;
+type TransformClass = {
+  new (params: unknown): object;
+  Definition: unknown;
+  prototype: { transform: (this: object, ...args: unknown[]) => unknown };
+};
+const Sequence = transforms.sequence as unknown as TransformClass;
+function LimitedSequence(this: object, params: unknown) {
+  Sequence.call(this, params);
+}
+LimitedSequence.Definition = Sequence.Definition;
+LimitedSequence.prototype = Object.create(Sequence.prototype, {
+  constructor: { value: LimitedSequence },
+  transform: {
+    value(this: object, _: { start: number; stop: number; step?: number }, pulse: unknown) {
+      const rows = (_.stop - _.start) / (_.step || 1);
+      if (!(rows <= MAX_SEQUENCE)) throw new Error(`A sequence may have at most ${MAX_SEQUENCE} rows`);
+      return Sequence.prototype.transform.call(this, _, pulse);
+    },
+  },
+});
+(transforms as Record<string, unknown>).sequence = LimitedSequence;
 
 // Vega-Lite's composition keys; a spec with none of them (and no $schema) is Vega.
 const LITE_KEYS = ["mark", "layer", "facet", "repeat", "concat", "hconcat", "vconcat", "spec"];

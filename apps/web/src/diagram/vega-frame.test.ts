@@ -9,7 +9,12 @@ import { renderVega } from "./vega-frame";
 
 const BARS = JSON.stringify({
   $schema: "https://vega.github.io/schema/vega-lite/v6.json",
-  data: { values: [{ a: "A", b: 28 }, { a: "B", b: 55 }] },
+  data: {
+    values: [
+      { a: "A", b: 28 },
+      { a: "B", b: 55 },
+    ],
+  },
   mark: "bar",
   encoding: { x: { field: "a", type: "nominal" }, y: { field: "b", type: "quantitative" } },
   transform: [{ calculate: "datum.b * 2 + 1", as: "c" }],
@@ -24,7 +29,14 @@ const VEGA = JSON.stringify({
     {
       type: "rect",
       from: { data: "t" },
-      encode: { enter: { x: { scale: "x", field: "x" }, width: { value: 5 }, y: { value: 0 }, height: { signal: "height / 2" } } },
+      encode: {
+        enter: {
+          x: { scale: "x", field: "x" },
+          width: { value: 5 },
+          y: { value: 0 },
+          height: { signal: "height / 2" },
+        },
+      },
     },
   ],
 });
@@ -56,9 +68,7 @@ it.each([
   ["a data URL", { data: { url: "https://evil.example/data.csv" }, mark: "point" }],
   ["a local file", { data: { url: "data/secret.json" }, mark: "point" }],
 ])("refuses to load %s", async (_, spec) => {
-  await expect(renderVega({ source: JSON.stringify(spec), theme: "light" })).rejects.toThrow(
-    /inline data only/,
-  );
+  await expect(renderVega({ source: JSON.stringify(spec), theme: "light" })).rejects.toThrow(/inline data only/);
 });
 
 it("refuses image marks' URLs", async () => {
@@ -72,4 +82,31 @@ it("refuses image marks' URLs", async () => {
 
 it("rejects invalid JSON", async () => {
   await expect(renderVega({ source: "{", theme: "light" })).rejects.toThrow(/JSON/);
+});
+
+it.each([
+  ["a Vega-Lite sequence", { data: { sequence: { start: 0, stop: 3e8 } }, mark: "point" }],
+  [
+    "a Vega sequence",
+    { data: [{ name: "s", transform: [{ type: "sequence", start: 0, stop: 1e9, step: 1 }] }], marks: [] },
+  ],
+  [
+    "a sequence sized by a signal",
+    {
+      signals: [{ name: "n", value: 1e9 }],
+      data: [{ name: "s", transform: [{ type: "sequence", start: 0, stop: { signal: "n" } }] }],
+      marks: [],
+    },
+  ],
+])("refuses %s too long to generate", async (_, spec) => {
+  await expect(renderVega({ source: JSON.stringify(spec), theme: "light" })).rejects.toThrow(/sequence/i);
+});
+
+it("generates short sequences", async () => {
+  const spec = {
+    data: { sequence: { start: 0, stop: 10, as: "x" } },
+    mark: "point",
+    encoding: { x: { field: "x", type: "quantitative" } },
+  };
+  await expect(renderVega({ source: JSON.stringify(spec), theme: "light" })).resolves.toMatch(/^<svg/);
 });
