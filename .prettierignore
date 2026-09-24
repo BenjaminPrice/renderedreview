@@ -2,3 +2,4 @@ pnpm-lock.yaml
 devbox.lock
 LICENSE
 **/routeTree.gen.ts
+packages/github-action/dist/

@@ -23,3 +23,5 @@ jobs:
       - run: devbox run -- pnpm typecheck
       - run: devbox run -- pnpm test
       - run: devbox run -- pnpm build
+      - name: Check committed action bundle matches build
+        run: git diff --exit-code -- packages/github-action/dist

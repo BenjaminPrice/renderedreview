@@ -15,3 +15,4 @@ coverage/
 .ai
 .claude/
 .serena/
+!packages/github-action/dist/

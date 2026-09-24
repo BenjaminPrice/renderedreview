@@ -1,0 +1,33 @@
+name: Rendered Review PR link
+description: Maintains one pull request comment linking to the rendered Markdown review in Rendered Review.
+author: Rendered Review
+branding:
+  icon: book-open
+  color: blue
+inputs:
+  base-url:
+    description: Rendered Review application URL (public service, dedicated installation, or self-hosted).
+    default: https://renderedreview.dev
+  include:
+    description: Glob patterns (newline- or comma-separated) selecting Markdown files.
+    default: |
+      **/*.md
+      **/*.markdown
+  exclude:
+    description: Glob patterns (newline- or comma-separated) to ignore, applied after include.
+    default: ""
+  comment-on-drafts:
+    description: Comment on draft pull requests.
+    default: "false"
+  remove-when-empty:
+    description: Delete the action's own comment when no matching Markdown remains.
+    default: "true"
+  github-token:
+    description: Token used to read PR files and manage the comment.
+    default: ${{ github.token }}
+  fail-on-error:
+    description: Fail the step on errors instead of emitting a warning.
+    default: "false"
+runs:
+  using: node24
+  main: dist/index.js
