@@ -58,6 +58,11 @@ function mount(props: { drafts?: Draft[]; publisher?: Publisher } = {}) {
 }
 
 describe("submit review dialog", () => {
+  it("opens with focus in the summary, ready to type", () => {
+    const { dialog } = mount();
+    expect(document.activeElement).toBe(within(dialog).getByRole("textbox", { name: "Summary (optional)" }));
+  });
+
   it("lists drafts grouped by where they will post", () => {
     const { dialog } = mount();
     const group = (name: RegExp) => within(dialog).getByRole("group", { name });
