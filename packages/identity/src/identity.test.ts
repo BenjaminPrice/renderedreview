@@ -114,12 +114,13 @@ async function signIn(identity: Identity, callbackURL: string, base = BASE) {
 /** Everything written to the console while `run` runs: parsed log events and the raw text. */
 async function consoleDuring(run: () => Promise<unknown>) {
   const spies = (["log", "info", "warn", "error"] as const).map((l) => vi.spyOn(console, l).mockImplementation(() => {}));
+  let lines: string[];
   try {
     await run();
   } finally {
+    lines = spies.flatMap((s) => s.mock.calls.map((args) => args.map(String).join(" ")));
     spies.forEach((s) => s.mockRestore());
   }
-  const lines = spies.flatMap((s) => s.mock.calls.map((args) => args.map(String).join(" ")));
   const events = lines.flatMap((l) => {
     try {
       return [JSON.parse(l) as Record<string, unknown>];
