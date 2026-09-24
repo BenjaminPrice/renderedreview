@@ -446,3 +446,89 @@ describe("review", () => {
     expect(writes()).toHaveLength(0);
   });
 });
+
+describe("reply", () => {
+  it("replies in a native review thread", async () => {
+    const { call, sent, writes } = setup({ routes: { "POST /pulls/7/comments/4034118605/replies": created() } });
+    const res = await call("reply", { expectedHeadOid: HEAD, inReplyTo: 4034118605, body: "Done" });
+    expect(res.status).toBe(201);
+    expect(await json(res)).toMatchObject({ comment: { id: 900 } });
+    expect(String(writes()[0]![0])).toMatch(/\/pulls\/7\/comments\/4034118605\/replies$/);
+    expect(sent(0)).toEqual({ body: "Done" });
+  });
+
+  it.each([
+    ["no comment id", { expectedHeadOid: HEAD, body: "Done" }, "invalid-request"],
+    [
+      "a comment id that is not a number",
+      { expectedHeadOid: HEAD, inReplyTo: "1/../../x", body: "Done" },
+      "invalid-request",
+    ],
+    [
+      "an annotation for another PR",
+      { expectedHeadOid: HEAD, inReplyTo: 1, body: withMarker("x", annotation({ pullRequest: 9 })) },
+      "annotation-mismatch",
+    ],
+  ])("refuses a reply with %s", async (_, body, code) => {
+    const { call, writes } = setup();
+    const res = await call("reply", body);
+    expect(res.status).toBe(400);
+    expect(await json(res)).toMatchObject({ code });
+    expect(writes()).toHaveLength(0);
+  });
+});
+
+describe("resolve", () => {
+  const graphql = (threadPr: { repositoryId: number; number: number } | null) => {
+    const queries: { query: string; variables: unknown }[] = [];
+    const route: Route = (init) => {
+      const { query, variables } = JSON.parse(init.body as string) as { query: string; variables: unknown };
+      queries.push({ query, variables });
+      if (query.startsWith("query"))
+        return Response.json({
+          data: {
+            node: threadPr && {
+              pullRequest: { number: threadPr.number, repository: { databaseId: threadPr.repositoryId } },
+            },
+          },
+        });
+      const mutation = /(\w+)\(input/.exec(query)![1]!;
+      return Response.json({
+        data: { [mutation]: { thread: { id: "PRRT_1", isResolved: mutation === "resolveReviewThread" } } },
+      });
+    };
+    return { queries, routes: { "POST /graphql": route } };
+  };
+
+  it.each([
+    [true, "resolveReviewThread"],
+    [false, "unresolveReviewThread"],
+  ])("sets a native thread's resolution (resolved: %s)", async (resolved, mutation) => {
+    const { queries, routes } = graphql({ repositoryId: REPO_ID, number: 7 });
+    const { call } = setup({ routes });
+    const res = await call("resolve", { threadNodeId: "PRRT_1", resolved });
+    expect(res.status).toBe(200);
+    expect(await json(res)).toEqual({ thread: { nodeId: "PRRT_1", isResolved: resolved } });
+    expect(queries.map((q) => q.variables)).toEqual([{ id: "PRRT_1" }, { id: "PRRT_1" }]);
+    expect(queries[1]!.query).toMatch(new RegExp(`^mutation\\(\\$id: ID!\\) \\{ ${mutation}\\(`));
+  });
+
+  it("refuses a thread from another pull request", async () => {
+    const { queries, routes } = graphql({ repositoryId: 999, number: 7 });
+    const { call } = setup({ routes });
+    const res = await call("resolve", { threadNodeId: "PRRT_1", resolved: true });
+    expect(res.status).toBe(400);
+    expect(await json(res)).toMatchObject({ code: "thread-mismatch" });
+    expect(queries).toHaveLength(1);
+  });
+
+  it.each([
+    ["a malformed thread id", { threadNodeId: "x y", resolved: true }],
+    ["no resolution", { threadNodeId: "PRRT_1" }],
+  ])("refuses %s before calling GitHub", async (_, body) => {
+    const { call, fetch } = setup();
+    const res = await call("resolve", body);
+    expect(res.status).toBe(400);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+});

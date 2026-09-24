@@ -43,11 +43,14 @@ export type PublishErrorCode =
   | "body-too-large"
   | "invalid-annotation"
   | "annotation-mismatch"
+  | "thread-mismatch"
   | "rate-limited"
   | "github-rejected"
   | "github-error";
 
-const PATH = new RegExp(String.raw`^(${REPO_SEGMENT})/(${REPO_SEGMENT})/pulls/(\d{1,10})/(comment|review)$`);
+const PATH = new RegExp(
+  String.raw`^(${REPO_SEGMENT})/(${REPO_SEGMENT})/pulls/(\d{1,10})/(comment|review|reply|resolve)$`,
+);
 const OID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 const PRIVATE = { "cache-control": "private, no-store", vary: "Cookie" };
 
@@ -227,6 +230,7 @@ type Result = { status: number; body: unknown };
 type ReviewEvent = "COMMENT" | "APPROVE" | "REQUEST_CHANGES";
 const EVENTS = new Set<unknown>(["COMMENT", "APPROVE", "REQUEST_CHANGES"]);
 const MAX_DRAFTS = 50;
+const NODE_ID = /^[\w=-]{1,200}$/;
 const SUBMISSION_ID = /^[\w-]{1,100}$/;
 
 /** Runs `check` for one draft of a submission, naming the draft in any refusal. */
@@ -370,6 +374,38 @@ async function handle(request: Request, deps: Deps): Promise<Result> {
         throw fromGitHub(e, d.representation);
       });
       return { status: 201, body: { comment } };
+    }
+    case "reply": {
+      const { body, annotation } = commentBody(input.body);
+      const inReplyTo = line(input.inReplyTo, "inReplyTo");
+      const expected = oid(input.expectedHeadOid, "expectedHeadOid");
+      const { client, pr } = await connect(t, "comment", deps);
+      checkHead(pr, expected);
+      checkTarget(annotation, t.host, pr);
+      const comment = await client
+        .replyToReviewComment(t.owner, t.repo, t.number, inReplyTo, body)
+        .catch((e: unknown) => {
+          throw fromGitHub(e);
+        });
+      return { status: 201, body: { comment } };
+    }
+    case "resolve": {
+      // Resolution does not depend on the head, so no head check.
+      const { threadNodeId, resolved } = input;
+      if (typeof threadNodeId !== "string" || !NODE_ID.test(threadNodeId)) invalid("threadNodeId must be a node id");
+      if (typeof resolved !== "boolean") invalid("resolved must be true or false");
+      const id = threadNodeId as string;
+      const { client, pr } = await connect(t, "resolve", deps);
+      const thread = await (async () => {
+        // Access was checked for this repository only: the thread must belong to this PR.
+        const owner = await client.getReviewThreadPullRequest(id);
+        if (owner?.repositoryId !== pr.base.repository?.id || owner?.number !== pr.number)
+          refuse(400, "thread-mismatch", "The thread belongs to a different pull request");
+        return resolved ? client.resolveReviewThread(id) : client.unresolveReviewThread(id);
+      })().catch((e: unknown) => {
+        throw e instanceof Refusal ? e : fromGitHub(e);
+      });
+      return { status: 200, body: { thread } };
     }
     case "review": {
       const expected = oid(input.expectedHeadOid, "expectedHeadOid");
