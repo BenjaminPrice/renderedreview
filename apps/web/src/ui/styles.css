@@ -2017,3 +2017,41 @@ samp {
     background: var(--rr-accent-subtle);
   }
 }
+
+/* Selection popover: floats above the selection, outside the article so its text never counts as document text. */
+.rr-sel-pop {
+  position: fixed;
+  z-index: 20;
+  transform: translate(-50%, calc(-100% - 8px));
+  max-width: min(420px, 90vw);
+  padding: 3px;
+  background: var(--rr-surface-raised);
+  border: 1px solid var(--rr-border);
+  border-radius: var(--rr-radius-lg);
+  box-shadow: var(--rr-shadow);
+  font: var(--rr-text-sm) / 1.4 var(--rr-font-ui);
+  color: var(--rr-text);
+}
+.rr-sel-pop > p {
+  margin: 4px 6px 6px;
+  color: var(--rr-text-muted);
+}
+.rr-sel-pop [role="toolbar"] {
+  display: flex;
+  gap: 2px;
+}
+.rr-sel-pop kbd {
+  font-size: 10.5px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  border: 1px solid var(--rr-border);
+  color: var(--rr-text-muted);
+}
+.rr-sel-pop .rr-btn-primary kbd {
+  color: var(--rr-accent-fg);
+  border-color: currentColor;
+}
+.rr-sel-pop [aria-disabled="true"] {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
