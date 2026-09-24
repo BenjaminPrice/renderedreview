@@ -35,6 +35,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@rendered-review/annotation-domain':
+        specifier: workspace:*
+        version: link:../../packages/annotation-domain
       '@rendered-review/browser-cache':
         specifier: workspace:*
         version: link:../../packages/browser-cache

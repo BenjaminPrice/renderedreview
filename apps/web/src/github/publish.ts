@@ -1,0 +1,286 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// The write boundary: publishes comments to GitHub for the signed-in user. The browser composes
+// bodies and locations; this checks them (CSRF, session, repository access, PR head, sizes,
+// annotation target, representation) and publishes with the least-privileged credential. It does
+// not rerun rendering: GitHub is the final authority on native locations. Server only; bodies and
+// tokens are never logged. Web Request/Response/fetch only.
+import { extractAnnotation, type RenderedReviewAnnotationV1 } from "@rendered-review/annotation-domain";
+import {
+  createGitHubClient,
+  type GitHubClient,
+  GitHubError,
+  type LineRange,
+  type PullRequest,
+  RateLimitError,
+} from "@rendered-review/github-integration";
+import type { Identity } from "@rendered-review/identity";
+import { forRepository, type WriteOperation } from "./broker";
+import type { InstallationCheck } from "./installation";
+import { parseProxyPath, REPO_SEGMENT } from "./proxy";
+import { REQUESTED_WITH } from "./user-proxy";
+
+export const WRITE_PREFIX = "/api/github/write/";
+
+/** GitHub's limit on a comment body, in characters. */
+export const MAX_BODY_LENGTH = 65_536;
+const MAX_REQUEST_LENGTH = 1024 * 1024;
+
+export type Representation = "review-line" | "review-file" | "conversation";
+
+/** Error codes the client acts on; the JSON body is `{ code, message, ...extra }`. */
+export type PublishErrorCode =
+  | "csrf"
+  | "unsupported-media-type"
+  | "not-found"
+  | "unauthenticated"
+  | "reauth"
+  | "needs-public-authorization"
+  | "private-repo-unsupported"
+  | "unavailable"
+  | "stale-head"
+  | "invalid-request"
+  | "request-too-large"
+  | "body-too-large"
+  | "invalid-annotation"
+  | "annotation-mismatch"
+  | "rate-limited"
+  | "github-rejected"
+  | "github-error";
+
+const PATH = new RegExp(String.raw`^(${REPO_SEGMENT})/(${REPO_SEGMENT})/pulls/(\d{1,10})/(comment)$`);
+const OID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
+const PRIVATE = { "cache-control": "private, no-store", vary: "Cookie" };
+
+class Refusal {
+  constructor(
+    readonly status: number,
+    readonly code: PublishErrorCode,
+    readonly message: string,
+    readonly extra: Record<string, unknown> = {},
+  ) {}
+  get body() {
+    return { code: this.code, message: this.message, ...this.extra };
+  }
+}
+
+const refuse = (...args: ConstructorParameters<typeof Refusal>): never => {
+  throw new Refusal(...args);
+};
+const invalid = (message: string) => refuse(400, "invalid-request", message);
+
+/** A GitHub failure as a typed refusal. `retryAs`: offered when GitHub rejects a native line location. */
+function fromGitHub(error: unknown, representation?: Representation): Refusal {
+  if (!(error instanceof GitHubError)) throw error;
+  if (error instanceof RateLimitError)
+    return new Refusal(429, "rate-limited", "GitHub's rate limit was reached", {
+      resetAt: error.resetAt.toISOString(),
+    });
+  if (error.status === 401) return new Refusal(401, "reauth", "Sign in with GitHub again");
+  if (error.status >= 400 && error.status < 500) {
+    const retry = error.status === 422 && representation === "review-line" && { retryAs: "review-file" };
+    return new Refusal(error.status, "github-rejected", error.message, retry || {});
+  }
+  return new Refusal(502, "github-error", "GitHub request failed");
+}
+
+// ponytail: per-process fixed window per user; hosted abuse controls (shared store, per-repository
+// limits) replace it when there is more than one instance.
+const WINDOW_MS = 60_000;
+const WRITES_PER_WINDOW = 30;
+const windows = new Map<string, { count: number; until: number }>();
+function limitRate(userId: string) {
+  const now = Date.now();
+  let window = windows.get(userId);
+  if (!window || window.until <= now) {
+    if (windows.size >= 10_000) windows.clear();
+    windows.set(userId, (window = { count: 0, until: now + WINDOW_MS }));
+  }
+  if (++window.count > WRITES_PER_WINDOW)
+    refuse(429, "rate-limited", "Too many comments at once; try again in a minute", {
+      resetAt: new Date(window.until).toISOString(),
+    });
+}
+
+// Input checks. Everything from the browser is untrusted.
+type Obj = Record<string, unknown>;
+const isObject = (v: unknown): v is Obj => typeof v === "object" && v !== null && !Array.isArray(v);
+const line = (v: unknown, name: string) =>
+  Number.isSafeInteger(v) && (v as number) > 0 ? (v as number) : invalid(`${name} must be a positive integer`);
+const side = (v: unknown, name: string) =>
+  v === "LEFT" || v === "RIGHT" ? v : invalid(`${name} must be LEFT or RIGHT`);
+const oid = (v: unknown, name: string) =>
+  typeof v === "string" && OID.test(v) ? v : invalid(`${name} must be a commit OID`);
+
+/** A body to publish, with its annotation if it carries one; malformed or oversized ones are refused. */
+function commentBody(v: unknown): { body: string; annotation?: RenderedReviewAnnotationV1 } {
+  if (typeof v !== "string" || !v.trim()) invalid("body must be a non-empty string");
+  const body = v as string;
+  if (body.length > MAX_BODY_LENGTH)
+    refuse(413, "body-too-large", `Comments are limited to ${MAX_BODY_LENGTH} characters`);
+  const found = extractAnnotation(body);
+  if (found.status === "damaged" || found.status === "unsupported")
+    refuse(400, "invalid-annotation", found.status === "damaged" ? found.reason : "Unsupported annotation version");
+  return { body, ...(found.status === "ok" && { annotation: found.annotation }) };
+}
+
+export interface Draft {
+  representation: Representation;
+  body: string;
+  annotation?: RenderedReviewAnnotationV1;
+  /** review-line and review-file only. */
+  path?: string;
+  /** review-line only. */
+  range?: LineRange;
+}
+
+/** A comment's body, location and representation; the representation must fit the location. */
+function draft(v: Obj): Draft {
+  const { representation } = v;
+  if (representation !== "review-line" && representation !== "review-file" && representation !== "conversation")
+    invalid("representation must be review-line, review-file or conversation");
+  const out: Draft = { representation: representation as Representation, ...commentBody(v.body) };
+  const hasLine =
+    v.line !== undefined || v.side !== undefined || v.startLine !== undefined || v.startSide !== undefined;
+  if (representation === "conversation") {
+    if (v.path !== undefined || hasLine) invalid("A conversation comment has no path or line");
+    return out;
+  }
+  if (typeof v.path !== "string" || !v.path || v.path.startsWith("/") || v.path.length > 4096)
+    invalid("path must be a repository-relative file path");
+  out.path = v.path as string;
+  if (representation === "review-file") {
+    if (hasLine) invalid("A file comment has no line");
+    return out;
+  }
+  const range: LineRange = { line: line(v.line, "line"), side: side(v.side, "side") };
+  if (v.startLine !== undefined) {
+    range.startLine = line(v.startLine, "startLine");
+    range.startSide = v.startSide === undefined ? range.side : side(v.startSide, "startSide");
+    if (range.startLine >= range.line) invalid("startLine must precede line");
+  } else if (v.startSide !== undefined) invalid("startSide needs startLine");
+  out.range = range;
+  return out;
+}
+
+/** An annotation may only describe this pull request, never another one it could be replayed into. */
+function checkTarget(annotation: RenderedReviewAnnotationV1 | undefined, host: string, pr: PullRequest) {
+  if (!annotation) return;
+  const t = annotation.target;
+  if (t.githubHost !== host || t.repositoryId !== pr.base.repository?.id || t.pullRequest !== pr.number)
+    refuse(400, "annotation-mismatch", "The annotation belongs to a different pull request");
+}
+
+interface Deps {
+  allowedHosts: string[];
+  /** Undefined when this deployment has no sign-in. */
+  identity: Pick<Identity, "getSessionUser" | "getUserGitHubToken" | "getUserPublicWriteToken"> | undefined;
+  installed?: InstallationCheck;
+  fetch?: typeof fetch;
+}
+
+interface Target {
+  host: string;
+  owner: string;
+  repo: string;
+  number: number;
+  userId: string;
+}
+
+/** Rechecks access (the least-privileged write credential) and reads the PR with it. */
+async function connect(t: Target, operation: WriteOperation["operation"], deps: Deps) {
+  const credential = await forRepository(
+    { userId: t.userId, host: t.host, owner: t.owner, repo: t.repo, operation },
+    { identity: deps.identity, installed: deps.installed, fetch: deps.fetch },
+  );
+  switch (credential.kind) {
+    case "reauth":
+      return refuse(401, "reauth", "Sign in with GitHub again");
+    case "needs-public-authorization":
+      return refuse(403, "needs-public-authorization", "Allow Rendered Review to comment on public repositories");
+    case "private-repo-unsupported":
+      return refuse(403, "private-repo-unsupported", "Private repositories aren't supported yet");
+    case "unavailable":
+      return refuse(credential.status === 404 ? 404 : 403, "unavailable", "Repository not available");
+  }
+  const client = createGitHubClient({
+    host: t.host,
+    fetch: deps.fetch,
+    auth: () => `Bearer ${credential.token}`,
+    maxRetries: 0,
+  });
+  const pr = await client.getPullRequest(t.owner, t.repo, t.number).catch((e: unknown) => {
+    throw fromGitHub(e);
+  });
+  return { client, pr };
+}
+
+function checkHead(pr: PullRequest, expected: string) {
+  if (pr.head.sha !== expected) refuse(409, "stale-head", "The pull request has new commits", { headOid: pr.head.sha });
+}
+
+function publishDraft(client: GitHubClient, t: Target, d: Draft, commitId: string) {
+  if (d.representation === "conversation") return client.createIssueComment(t.owner, t.repo, t.number, d.body);
+  return client.createReviewComment(t.owner, t.repo, t.number, { body: d.body, commitId, path: d.path!, ...d.range });
+}
+
+export async function publishToGitHub(request: Request, deps: Deps): Promise<Response> {
+  try {
+    const { status, body } = await handle(request, deps);
+    console.info("github write: published");
+    return Response.json(body, { status, headers: PRIVATE });
+  } catch (error) {
+    if (!(error instanceof Refusal)) throw error;
+    console.info(`github write: ${error.code}`);
+    return Response.json(error.body, { status: error.status, headers: PRIVATE });
+  }
+}
+
+async function handle(request: Request, deps: Deps): Promise<{ status: number; body: unknown }> {
+  const { identity } = deps;
+  if (!identity) throw new Refusal(404, "not-found", "Not found");
+  if (request.method !== "POST") throw new Refusal(405, "invalid-request", "Method not allowed");
+  const url = new URL(request.url);
+  // Cross-site pages can send neither the custom header (it forces a CORS preflight, never
+  // answered) nor a same-origin Origin.
+  if (request.headers.get("x-requested-with") !== REQUESTED_WITH || request.headers.get("origin") !== url.origin)
+    refuse(403, "csrf", "Cross-site request refused");
+  if (!/^application\/json\s*(;|$)/i.test(request.headers.get("content-type") ?? ""))
+    refuse(415, "unsupported-media-type", "Send JSON");
+  const path = parseProxyPath(url, WRITE_PREFIX, deps.allowedHosts);
+  if (path instanceof Response) {
+    const { message } = (await path.json()) as { message: string };
+    return refuse(path.status, "not-found", message);
+  }
+  const match = PATH.exec(path.path) ?? refuse(404, "not-found", "Not found");
+  const [, owner, repo, number, operation] = match;
+
+  const user = await identity.getSessionUser(request.headers);
+  if (!user) return refuse(401, "unauthenticated", "Sign in with GitHub");
+  limitRate(user.id);
+
+  const text = await request.text();
+  if (text.length > MAX_REQUEST_LENGTH) refuse(413, "request-too-large", "Request too large");
+  let input: unknown;
+  try {
+    input = JSON.parse(text);
+  } catch {
+    return invalid("Body must be JSON");
+  }
+  if (!isObject(input)) return invalid("Body must be a JSON object");
+  const t: Target = { host: path.host, owner: owner!, repo: repo!, number: Number(number), userId: user.id };
+
+  switch (operation) {
+    case "comment": {
+      const d = draft(input);
+      const expected = oid(input.expectedHeadOid, "expectedHeadOid");
+      const { client, pr } = await connect(t, "comment", deps);
+      checkHead(pr, expected);
+      checkTarget(d.annotation, t.host, pr);
+      const comment = await publishDraft(client, t, d, pr.head.sha).catch((e: unknown) => {
+        throw fromGitHub(e, d.representation);
+      });
+      return { status: 201, body: { comment } };
+    }
+  }
+  return refuse(404, "not-found", "Not found");
+}

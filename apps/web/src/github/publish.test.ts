@@ -1,0 +1,316 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// The write boundary against a mocked GitHub: nothing here reaches the network.
+import { encodeAnnotation, type RenderedReviewAnnotationV1 } from "@rendered-review/annotation-domain";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { publishToGitHub, WRITE_PREFIX } from "./publish";
+
+const origin = "https://app.example";
+const HEAD = "0123456789abcdef0123456789abcdef01234567";
+const OTHER = "fedcba9876543210fedcba9876543210fedcba98";
+const REPO_ID = 123456;
+const user = { id: "u1", login: "octocat", avatarUrl: null };
+
+const annotation = (target: Partial<RenderedReviewAnnotationV1["target"]> = {}): RenderedReviewAnnotationV1 => ({
+  version: 1,
+  target: {
+    githubHost: "github.com",
+    repositoryId: REPO_ID,
+    repository: "acme/widgets",
+    pullRequest: 7,
+    path: "docs/a.md",
+    commitOid: HEAD,
+    blobOid: OTHER,
+    selectors: [
+      { type: "TextQuoteSelector", exact: "retries" },
+      { type: "TextPositionSelector", start: 0, end: 7 },
+      { type: "MarkdownSourceRangeSelector", startLine: 3, startColumn: 1, endLine: 3, endColumn: 8 },
+    ],
+    ...target,
+  },
+  motivation: "commenting",
+});
+const withMarker = (text: string, a = annotation()) => `${text}\n\n${encodeAnnotation(a)}`;
+
+type Route = (init: RequestInit) => Response | Promise<Response>;
+const rawPull = (head = HEAD) => ({
+  id: 1,
+  number: 7,
+  head: { ref: "topic", sha: head, repo: null },
+  base: { ref: "main", sha: OTHER, repo: { id: REPO_ID, name: "widgets", owner: { login: "acme", id: 2 } } },
+});
+
+let repoCounter = 0;
+/** Each test gets its own repository name: the broker caches visibility per repository. */
+function setup({
+  session = user as typeof user | null,
+  appToken = "app-token" as string | null,
+  publicToken = null as string | null,
+  installed = true,
+  visibility = "public" as "public" | "private",
+  head = HEAD,
+  routes = {} as Record<string, Route>,
+} = {}) {
+  const repo = `widgets-${++repoCounter}`;
+  // Its own user too: the per-user publish limit is process-wide.
+  const viewer = session && { ...session, id: `user-${repoCounter}` };
+  const base = `https://api.github.com/repos/acme/${repo}`;
+  const fetch = vi.fn<typeof globalThis.fetch>(async (input, init = {}) => {
+    const url = String(input);
+    const key = `${init.method ?? "GET"} ${url.replace(base, "").replace("https://api.github.com", "")}`;
+    if (key === "GET ") return Response.json({ private: visibility === "private", visibility });
+    if (key === "GET /pulls/7") return Response.json(rawPull(head));
+    const route = routes[key];
+    if (!route) throw new Error(`unexpected GitHub request: ${key}`);
+    return route(init);
+  });
+  const identity = {
+    getSessionUser: vi.fn(async () => viewer),
+    getUserGitHubToken: vi.fn(async () => appToken),
+    getUserPublicWriteToken: vi.fn(async () => publicToken),
+  };
+  const call = (operation: string, body: unknown, headers: Record<string, string> = {}, method = "POST") =>
+    publishToGitHub(
+      new Request(`${origin}${WRITE_PREFIX}github.com/acme/${repo}/pulls/7/${operation}`, {
+        method,
+        headers: {
+          "x-requested-with": "rendered-review",
+          "content-type": "application/json",
+          origin,
+          ...headers,
+        },
+        ...(method === "POST" && { body: typeof body === "string" ? body : JSON.stringify(body) }),
+      }),
+      { allowedHosts: ["github.com"], identity, installed: async () => installed, fetch },
+    );
+  const writes = () => fetch.mock.calls.filter(([, init]) => init?.method === "POST");
+  const sent = (i: number) => JSON.parse(writes()[i]![1]!.body as string) as Record<string, unknown>;
+  const auth = (i: number) => (writes()[i]![1]!.headers as Record<string, string>).Authorization;
+  return { call, fetch, identity, writes, sent, auth };
+}
+
+const created =
+  (body: object = {}) =>
+  () =>
+    Response.json({ id: 900, html_url: "https://github.com/x", ...body }, { status: 201 });
+const json = async (res: Response) => (await res.json()) as Record<string, unknown>;
+const comment = (extra: object = {}) => ({
+  expectedHeadOid: HEAD,
+  representation: "review-line",
+  body: "Please clarify",
+  path: "docs/a.md",
+  line: 3,
+  side: "RIGHT",
+  ...extra,
+});
+
+afterEach(() => vi.restoreAllMocks());
+
+describe("request guards", () => {
+  it("404s when this deployment has no sign-in", async () => {
+    const res = await publishToGitHub(
+      new Request(`${origin}${WRITE_PREFIX}github.com/a/b/pulls/1/comment`, { method: "POST" }),
+      {
+        allowedHosts: ["github.com"],
+        identity: undefined,
+      },
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it("accepts POST only", async () => {
+    const { call } = setup();
+    expect((await call("comment", undefined, {}, "GET")).status).toBe(405);
+  });
+
+  it.each([
+    ["X-Requested-With is missing", { "x-requested-with": "" }, 403, "csrf"],
+    ["the request comes from another origin", { origin: "https://evil.example" }, 403, "csrf"],
+    ["the body is not JSON", { "content-type": "text/plain" }, 415, "unsupported-media-type"],
+  ])("refuses the request when %s", async (_, headers, status, code) => {
+    const { call, fetch, identity } = setup();
+    const res = await call("comment", comment(), headers);
+    expect(res.status).toBe(status);
+    expect(await json(res)).toMatchObject({ code });
+    expect(identity.getSessionUser).not.toHaveBeenCalled();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("requires a session: 401 JSON, never cached", async () => {
+    const { call, fetch } = setup({ session: null });
+    const res = await call("comment", comment());
+    expect(res.status).toBe(401);
+    expect(await json(res)).toMatchObject({ code: "unauthenticated" });
+    expect(res.headers.get("cache-control")).toBe("private, no-store");
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("404s an unknown operation and 403s a host outside the allowlist", async () => {
+    const { call } = setup();
+    expect((await call("delete", comment())).status).toBe(404);
+    const res = await publishToGitHub(
+      new Request(`${origin}${WRITE_PREFIX}evil.example/a/b/pulls/1/comment`, {
+        method: "POST",
+        headers: { "x-requested-with": "rendered-review", "content-type": "application/json", origin },
+        body: "{}",
+      }),
+      { allowedHosts: ["github.com"], identity: setup().identity },
+    );
+    expect(res.status).toBe(403);
+  });
+
+  it("rejects malformed JSON", async () => {
+    const { call } = setup();
+    const res = await call("comment", "{not json");
+    expect(res.status).toBe(400);
+    expect(await json(res)).toMatchObject({ code: "invalid-request" });
+  });
+});
+
+describe("credential selection", () => {
+  it.each([
+    ["the user must link the OAuth App", { installed: false, publicToken: null }, 403, "needs-public-authorization"],
+    ["the repository is private", { visibility: "private" as const }, 403, "private-repo-unsupported"],
+    ["the GitHub token is gone", { appToken: null }, 401, "reauth"],
+  ])("answers a typed error when %s", async (_, options, status, code) => {
+    const { call, writes } = setup(options);
+    const res = await call("comment", comment());
+    expect(res.status).toBe(status);
+    expect(await json(res)).toMatchObject({ code });
+    expect(writes()).toHaveLength(0);
+  });
+
+  it("publishes with the OAuth App token on a public repository without the app", async () => {
+    const { call, auth } = setup({
+      installed: false,
+      publicToken: "oauth-token",
+      routes: { "POST /pulls/7/comments": created() },
+    });
+    expect((await call("comment", comment())).status).toBe(201);
+    expect(auth(0)).toBe("Bearer oauth-token");
+  });
+});
+
+describe("comment", () => {
+  it("publishes a native line comment on the verified head", async () => {
+    const { call, sent, auth } = setup({ routes: { "POST /pulls/7/comments": created({ path: "docs/a.md" }) } });
+    const res = await call("comment", comment({ startLine: 1, startSide: "RIGHT" }));
+    expect(res.status).toBe(201);
+    expect(res.headers.get("cache-control")).toBe("private, no-store");
+    expect(await json(res)).toMatchObject({ comment: { id: 900, path: "docs/a.md" } });
+    expect(auth(0)).toBe("Bearer app-token");
+    expect(sent(0)).toEqual({
+      body: "Please clarify",
+      commit_id: HEAD,
+      path: "docs/a.md",
+      line: 3,
+      side: "RIGHT",
+      start_line: 1,
+      start_side: "RIGHT",
+    });
+  });
+
+  it("publishes a file-level comment", async () => {
+    const { call, sent } = setup({ routes: { "POST /pulls/7/comments": created() } });
+    const res = await call("comment", {
+      expectedHeadOid: HEAD,
+      representation: "review-file",
+      body: "b",
+      path: "docs/a.md",
+    });
+    expect(res.status).toBe(201);
+    expect(sent(0)).toMatchObject({ path: "docs/a.md", subject_type: "file" });
+  });
+
+  it("publishes a conversation comment, including an application-thread reply with a same-PR annotation", async () => {
+    const body = withMarker("Agreed", {
+      ...annotation(),
+      motivation: "replying",
+      replyTo: "issuecomment-1",
+      threadId: "t1",
+    });
+    const { call, sent } = setup({ routes: { "POST /issues/7/comments": created() } });
+    const res = await call("comment", { expectedHeadOid: HEAD, representation: "conversation", body });
+    expect(res.status).toBe(201);
+    expect(sent(0)).toEqual({ body });
+  });
+
+  it("answers 409 stale-head with the current head when the PR moved on", async () => {
+    const { call, writes } = setup({ head: OTHER });
+    const res = await call("comment", comment());
+    expect(res.status).toBe(409);
+    expect(await json(res)).toMatchObject({ code: "stale-head", headOid: OTHER });
+    expect(writes()).toHaveLength(0);
+  });
+
+  it.each([
+    ["a line comment without a line", comment({ line: undefined }), "invalid-request"],
+    ["a line comment without a path", comment({ path: undefined }), "invalid-request"],
+    ["a range that ends before it starts", comment({ startLine: 9 }), "invalid-request"],
+    ["a conversation comment with a line", comment({ representation: "conversation" }), "invalid-request"],
+    ["an unknown representation", comment({ representation: "inline" }), "invalid-request"],
+    ["an empty body", comment({ body: "  " }), "invalid-request"],
+    ["a malformed head OID", comment({ expectedHeadOid: "main" }), "invalid-request"],
+    ["a body over GitHub's limit", comment({ body: "x".repeat(65_537) }), "body-too-large"],
+    ["a damaged annotation", comment({ body: "hi <!-- rendered-review:v1:!!! -->" }), "invalid-annotation"],
+  ])("rejects %s before calling GitHub", async (_, body, code) => {
+    const { call, fetch } = setup();
+    const res = await call("comment", body);
+    expect(res.status).toBeGreaterThanOrEqual(400);
+    expect(await json(res)).toMatchObject({ code });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["another repository", { repositoryId: 99 }],
+    ["another pull request", { pullRequest: 8 }],
+    ["another GitHub host", { githubHost: "ghe.example.com" }],
+  ])("rejects an annotation that targets %s", async (_, target) => {
+    const { call, writes } = setup();
+    const res = await call("comment", comment({ body: withMarker("hi", annotation(target)) }));
+    expect(res.status).toBe(400);
+    expect(await json(res)).toMatchObject({ code: "annotation-mismatch" });
+    expect(writes()).toHaveLength(0);
+  });
+
+  it("offers a file comment when GitHub rejects the line", async () => {
+    const { call } = setup({
+      routes: { "POST /pulls/7/comments": () => Response.json({ message: "Validation Failed" }, { status: 422 }) },
+    });
+    const res = await call("comment", comment());
+    expect(res.status).toBe(422);
+    expect(await json(res)).toMatchObject({ code: "github-rejected", retryAs: "review-file" });
+  });
+
+  it("reports GitHub's rate limit with its reset time", async () => {
+    const { call } = setup({
+      routes: {
+        "POST /issues/7/comments": () =>
+          Response.json(
+            { message: "You have exceeded a secondary rate limit" },
+            { status: 403, headers: { "retry-after": "60" } },
+          ),
+      },
+    });
+    const res = await call("comment", { expectedHeadOid: HEAD, representation: "conversation", body: "b" });
+    expect(res.status).toBe(429);
+    expect(await json(res)).toMatchObject({ code: "rate-limited", resetAt: expect.any(String) });
+  });
+
+  it("limits how fast one user can publish", async () => {
+    const { call } = setup({ routes: { "POST /issues/7/comments": created() } });
+    const body = { expectedHeadOid: HEAD, representation: "conversation", body: "b" };
+    const statuses: number[] = [];
+    for (let i = 0; i < 31; i++) statuses.push((await call("comment", body)).status);
+    expect(statuses.slice(0, 30).every((s) => s === 201)).toBe(true);
+    expect(statuses[30]).toBe(429);
+  });
+
+  it("logs categories only, never bodies or tokens", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    const { call } = setup({ head: OTHER });
+    await call("comment", comment({ body: "secret words" }));
+    const logged = JSON.stringify(info.mock.calls);
+    expect(logged).toMatch(/stale-head/);
+    expect(logged).not.toMatch(/secret words|app-token/);
+  });
+});
