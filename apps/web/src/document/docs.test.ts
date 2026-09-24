@@ -43,6 +43,10 @@ describe("changedDocs", () => {
   });
 });
 
+it("treats MDX files as documents", () => {
+  expect(changedDocs([file("docs/intro.mdx", "added")]).docs.map((d) => d.path)).toEqual(["docs/intro.mdx"]);
+});
+
 describe("allDocs", () => {
   it("lists head Markdown blobs by path, marking changed ones", () => {
     const tree: Tree = {

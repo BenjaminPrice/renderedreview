@@ -78,12 +78,8 @@ describe("validatePrSearch", () => {
     expect(validatePrSearch({ files: "bogus", doc: 5, thread: "", view: "raw" })).toEqual({ files: "changed" }));
 });
 
-it("detects Markdown paths", () => {
-  expect(["a.md", "docs/B.MARKDOWN", "a.mdx", "md", "a.md.txt"].map(isMarkdownPath)).toEqual([
-    true,
-    true,
-    false,
-    false,
-    false,
-  ]);
+it("detects Markdown and MDX paths", () => {
+  expect(["a.md", "docs/B.MARKDOWN", "a.mdx", "docs/B.MDX", "md", "a.md.txt", "a.mdx.bak"].map(isMarkdownPath)).toEqual(
+    [true, true, true, true, false, false, false],
+  );
 });

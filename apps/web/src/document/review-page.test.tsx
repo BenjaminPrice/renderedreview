@@ -208,6 +208,39 @@ it("shows a size-limit state for documents too large to render, with raw still a
   expect(screen.getByRole("link", { name: "Line 1 on GitHub (opens in new tab)" })).toBeTruthy();
 });
 
+/** Turn the deleted doc (opened first) into an `.mdx` file with `source` as its content. */
+function deletedMdx(source: string) {
+  const blob = "e".repeat(40);
+  responses[`${API}/pulls/45377/files?per_page=100`] = fixture("files.json")
+    .replaceAll(DELETED, DELETED.replace(/\.md$/, ".mdx"))
+    .replace(DELETED_BLOB, blob);
+  responses[`${API}/git/blobs/${blob}`] = source;
+  // A fresh OID per source: blobs are cached by OID for the whole test file.
+  return blob;
+}
+
+it("renders an MDX document's Markdown, with its components as labelled, inert source", async () => {
+  deletedMdx("# Intro\n\nimport Tabs from '@theme/Tabs';\n\n<Tabs groupId=\"pm\">\n\nHello *world*.\n\n</Tabs>\n");
+  renderPage();
+  const article = await screen.findByRole("article", { name: "Rendered document" });
+  expect(fileLink(/102\/index\.mdx, deleted/).getAttribute("aria-current")).toBe("page");
+  expect(within(article).getByRole("heading", { name: "Intro" })).toBeTruthy();
+  expect(within(article).getByText("world").tagName).toBe("EM");
+  expect(within(article).getByText("MDX component <Tabs>")).toBeTruthy();
+  expect(within(article).getByText("MDX import/export")).toBeTruthy();
+  expect(within(article).getByText('<Tabs groupId="pm">')).toBeTruthy();
+  expect(article.querySelector("tabs")).toBeNull();
+});
+
+it("falls back to raw source with a concise error for invalid MDX", async () => {
+  deletedMdx("# Intro\n\n<Tabs>\n\nNever closed.\n");
+  renderPage();
+  expect(await screen.findByText(/Invalid MDX: Expected a closing tag for `<Tabs>`/)).toBeTruthy();
+  expect(screen.queryByRole("article", { name: "Rendered document" })).toBeNull();
+  expect(screen.getByLabelText("Markdown source").textContent).toContain("Never closed.");
+  expect(screen.getByRole("link", { name: "Line 3 on GitHub (opens in new tab)" })).toBeTruthy();
+});
+
 it("shows the old path of a renamed doc", async () => {
   const files = JSON.parse(fixture("files.json")) as { filename: string; status: string; previous_filename?: string }[];
   const index = files.find((f) => f.filename === INDEX)!;
