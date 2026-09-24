@@ -33,6 +33,22 @@ try {
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { status: "ok" });
   console.log(`ok: /health answered on PORT=${port}`);
+
+  // Every page carries the CSP, and every script Start renders carries its nonce.
+  const page = await fetch(`http://127.0.0.1:${port}/`);
+  const csp = page.headers.get("content-security-policy") ?? "";
+  const nonce = /'nonce-([^']+)'/.exec(csp)?.[1];
+  assert.ok(nonce, `no script nonce in CSP: ${csp}`);
+  for (const directive of ["object-src 'none'", "base-uri 'none'", "frame-ancestors 'none'"]) {
+    assert.ok(csp.includes(directive), `CSP lacks ${directive}: ${csp}`);
+  }
+  assert.doesNotMatch(csp, /unsafe-inline/);
+  const scripts = (await page.text()).match(/<script\b[^>]*>/g) ?? [];
+  assert.ok(scripts.length > 0, "page rendered no scripts");
+  for (const tag of scripts) assert.ok(tag.includes(`nonce="${nonce}"`), `script without nonce: ${tag}`);
+  const again = await fetch(`http://127.0.0.1:${port}/`);
+  assert.notEqual(/'nonce-([^']+)'/.exec(again.headers.get("content-security-policy") ?? "")?.[1], nonce);
+  console.log(`ok: / sends the CSP and nonces all ${scripts.length} scripts`);
 } finally {
   server.child.kill();
 }

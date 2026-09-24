@@ -11,12 +11,13 @@ import { unified } from "unified";
 import type { Position } from "unist";
 import { visit } from "unist-util-visit";
 import { normalizeText } from "./normalize.js";
+import { resolveResources, type ResourceOptions } from "./resources.js";
 
 /*
  * Source-map representation
  * -------------------------
  * Pipeline: remark-parse + remark-gfm -> remark-rehype -> rehype-raw -> rehype-sanitize (GitHub
- * allowlist) -> stamping. Stamping runs after sanitization, so authored HTML can never supply or
+ * allowlist) -> resource resolution (./resources.ts) -> stamping. Stamping runs after sanitization, so authored HTML can never supply or
  * forge the markers, and the sanitizer (which keeps `position`) cannot strip them.
  *
  * - Each element with a source position gets `data-rr-id="<n>"`; `nodes[n]` holds its range,
@@ -98,14 +99,16 @@ const key = (p: Position) => `${p.start.offset}:${p.end.offset}`;
 /**
  * Parse GitHub Flavored Markdown into a sanitized, source-mapped HAST tree.
  *
- * Pure and deterministic: the same `source` always yields the same output, so callers may cache
- * it by blob identity. `source` must be the raw blob text; positions refer to it unchanged.
+ * Pure and deterministic: the same `source` and `options` always yield the same output, so callers
+ * may cache it by blob identity and location. `options` resolves repository-relative links and
+ * images and applies the external-image policy (see `resolveResources`). `source` must be the raw
+ * blob text; positions refer to it unchanged.
  *
  * Every element with a source position gets `data-rr-id` (an index into `nodes`). Elements the
  * pipeline generates without a position (footnote section heading, back-references, task-list
  * checkboxes, ...) get `data-rr-unmapped` and must not be offered as selectable.
  */
-export function renderMarkdown(source: string): RenderedMarkdown {
+export function renderMarkdown(source: string, options: ResourceOptions = {}): RenderedMarkdown {
   const mdast = markdownParser.runSync(markdownParser.parse(source)) as MdastRoot;
 
   const mdastTypes = new Map<string, { type: string; lang?: string }>();
@@ -117,6 +120,7 @@ export function renderMarkdown(source: string): RenderedMarkdown {
   });
 
   const tree = toSafeHast.runSync(structuredClone(mdast)) as HastRoot;
+  resolveResources(tree, options);
   const nodes: SourceNode[] = [];
   const headings: { depth: number; text: string }[] = [];
 
