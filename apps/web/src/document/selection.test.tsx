@@ -3,7 +3,7 @@
 // DOM selection <-> source claims on the real rendered article, and the round trip back to a highlight.
 import { readFileSync } from "node:fs";
 import { createDiagramRegistry } from "@rendered-review/diagram-domain";
-import { renderMarkdown, type RenderOptions } from "@rendered-review/markdown-domain";
+import { blocksForLines, renderMarkdown, type RenderOptions } from "@rendered-review/markdown-domain";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { toJsxRuntime } from "hast-util-to-jsx-runtime";
@@ -11,7 +11,7 @@ import { Fragment, jsx, jsxs } from "react/jsx-runtime";
 import { afterEach, describe, expect, test } from "vitest";
 import { DiagramRegistryContext } from "../diagram/registry";
 import { renderWithRouter } from "../test-utils";
-import { RenderedDocument } from "./document";
+import { nodeElement, RenderedDocument } from "./document";
 import { convertRange, highlightRanges } from "./selection";
 
 afterEach(cleanup);
@@ -195,12 +195,28 @@ describe("diagram fences", () => {
     const s = convert(m, rangeOf(m.article, "A --> B"));
     expect(m.source.slice(s.textPosition.start, s.textPosition.end)).toBe("A --> B");
     expect(s.sourceRange).toMatchObject({ startLine: 6, endLine: 6 });
+    // The claim's block is the diagram, which stays on screen when the source view closes.
+    expect(s.blockIds).toEqual([Number(figure().getAttribute("data-rr-id"))]);
   });
 
   test("line numbers inside a source view selection are not claimed", async () => {
     const m = await mountDiagram();
     await showSource();
     expect(claimed(m, rangeOf(m.article, "flow\n6  A"))).toBe("flow\n  A");
+  });
+
+  test("comments on the fence's lines anchor to the diagram, with the source view open or closed", async () => {
+    const m = await mountDiagram();
+    const anchor = () => nodeElement(m.article, blocksForLines(m.rendered, 6, 6)[0]!.id);
+    expect(anchor()).toBe(figure());
+    await showSource();
+    expect(anchor()).toBe(figure());
+  });
+
+  test("CRLF line endings in the source view keep the mapping exact", async () => {
+    const m = await mountDiagram(DOC.replaceAll("\n", "\r\n"));
+    await showSource();
+    expect(claimed(m, rangeOf(m.article, "A --> B"))).toBe("A --> B");
   });
 
   test("a claim inside the fence highlights its text in the open source view", async () => {
