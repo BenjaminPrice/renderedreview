@@ -2,7 +2,8 @@
 // @vitest-environment happy-dom
 // Replying to and resolving threads through the write boundary: what is sent for native and
 // application threads, and what the reviewer is told.
-import { extractAnnotation } from "@rendered-review/annotation-domain";
+import { composeCommentBody, extractAnnotation } from "@rendered-review/annotation-domain";
+import { projectReview } from "@rendered-review/review-domain";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderHook } from "@testing-library/react";
 import type { ReactNode } from "react";
@@ -133,5 +134,64 @@ describe("resolution", () => {
     });
     expect(reopen!.body.body).toContain("Reopened [this thread]");
     expect(decode(reopen!.body.body)).toMatchObject({ motivation: "resolving", resolution: "reopened" });
+  });
+});
+
+describe("round trip", () => {
+  it("reads posted replies and resolutions back into the same application thread", async () => {
+    const { actions, sent } = setup();
+    const context = { host: "github.com", owner: "acme", name: "docs", repositoryId: 42, pullRequest: 7 };
+    const comments = [
+      issueComment("", {
+        id: 1001,
+        createdAt: "2026-01-01T00:00:00Z",
+        updatedAt: "2026-01-01T00:00:00Z",
+        body: composeCommentBody({ annotation: annotation(), comment: "Why jitter?", location: "conversation" }),
+      }),
+    ];
+    const current = () => {
+      const threads = projectReview({
+        repository: context,
+        reviewComments: [],
+        reviews: [],
+        issueComments: comments,
+      }).threads;
+      expect(threads).toHaveLength(1);
+      return threads[0]!;
+    };
+    // What GitHub stores for the last posted body, a minute after the previous comment.
+    const stored = () => {
+      const n = comments.length;
+      const at = `2026-01-01T00:0${n}:00Z`;
+      comments.push(
+        issueComment("", { id: 1001 + n, createdAt: at, updatedAt: at, body: sent().at(-1)!.body.body as string }),
+      );
+    };
+
+    await actions().reply(current(), "Still unclear.");
+    stored();
+    expect(current()).toMatchObject({ id: "app:1001", resolution: "unresolved" });
+    expect(current().comments.map((c) => c.id)).toEqual([1001, 1002]);
+    expect(current().metadata?.[1002]?.state).toBe("valid");
+
+    await actions().setResolved(current(), true);
+    stored();
+    expect(current().resolution).toBe("resolved");
+    expect(current().comments.map((c) => c.id)).toEqual([1001, 1002]);
+
+    await actions().setResolved(current(), false);
+    stored();
+    expect(current().resolution).toBe("unresolved");
+    expect(current().events?.map((e) => [e.comment.id, e.resolution])).toEqual([
+      [1003, "resolved"],
+      [1004, "reopened"],
+    ]);
+
+    await actions().reply(current(), "Thanks, clear now.");
+    stored();
+    expect(current().comments.map((c) => c.id)).toEqual([1001, 1002, 1005]);
+    expect(
+      projectReview({ repository: context, reviewComments: [], reviews: [], issueComments: comments }).conversation,
+    ).toEqual([]);
   });
 });
