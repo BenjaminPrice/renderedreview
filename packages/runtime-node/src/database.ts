@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SqlDatabase over SQLite (Node's built-in node:sqlite) or PostgreSQL (postgres.js),
 // chosen by the DATABASE_URL scheme.
-import { existsSync, mkdirSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 import type { SqlDatabase, SqlValue } from "@rendered-review/runtime";
@@ -35,7 +35,11 @@ export function resolveLocalPath(path: string, cwd = process.cwd()): string {
 function openSqlite(path: string): NodeDatabase {
   if (path !== ":memory:") {
     path = resolveLocalPath(path);
-    mkdirSync(dirname(path), { recursive: true });
+    // The file holds encrypted tokens and sessions: whatever we create is owner-only (mode is ignored
+    // on Windows). Existing directories and files keep their permissions. The default rollback journal
+    // (`-journal`) inherits the database file's mode; no WAL sidecars since WAL is not enabled.
+    mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+    if (!existsSync(path)) closeSync(openSync(path, "wx", 0o600));
   }
   const db = new DatabaseSync(path);
   // SQLite leaves foreign keys off by default; D1 and PostgreSQL enforce them.

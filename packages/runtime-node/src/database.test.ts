@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { sqlDatabaseContract } from "@rendered-review/control-plane/contract";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -59,6 +59,31 @@ describe("openDatabase", () => {
       expect(await db.all("SELECT 1 AS one")).toEqual([{ one: 1 }]);
       await db.close();
     }
+  });
+});
+
+describe.skipIf(process.platform === "win32")("SQLite file permissions", () => {
+  const mode = (path: string) => statSync(path).mode & 0o777;
+
+  it("creates the database owner-only: directory 0700, file 0600", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "rr-perm-"));
+    const db = openDatabase(`sqlite:${dir}/data/app.db`);
+    await db.run("CREATE TABLE t (x)");
+    await db.close();
+    expect(mode(join(dir, "data"))).toBe(0o700);
+    expect(mode(join(dir, "data/app.db"))).toBe(0o600);
+  });
+
+  it("leaves existing directories and database files as they are", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "rr-perm-"));
+    chmodSync(dir, 0o755);
+    const file = join(dir, "app.db");
+    writeFileSync(file, "");
+    chmodSync(file, 0o644);
+    const db = openDatabase(`sqlite:${file}`);
+    await db.close();
+    expect(mode(dir)).toBe(0o755);
+    expect(mode(file)).toBe(0o644);
   });
 });
 
