@@ -31,6 +31,8 @@ type ErrorBody = {
   retryAs?: "review-file";
   headOid?: string;
   resetAt?: string;
+  org?: string;
+  approvalUrl?: string;
 };
 
 export interface ReviewResult {
@@ -51,6 +53,9 @@ export class PublishError extends Error {
   readonly headOid?: string;
   /** `rate-limited`: when to try again (ISO time). */
   readonly resetAt?: string;
+  /** `oauth-org-restricted`: the organization, and where users ask it to approve the OAuth App. */
+  readonly org?: string;
+  readonly approvalUrl?: string;
   /** The review draft that was refused. */
   readonly draftId?: string;
 

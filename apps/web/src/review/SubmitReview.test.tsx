@@ -8,6 +8,7 @@ import type { Draft } from "./drafts";
 import type { Publisher } from "./publish";
 import { DraftCard } from "./DraftCard";
 import { SubmitReview } from "./SubmitReview";
+import { expectNewTab } from "../test-utils";
 
 afterEach(() => {
   cleanup();
@@ -120,6 +121,33 @@ describe("submit review dialog", () => {
       /3 published.*1 not published.*README\.md.*GitHub refused it/s,
     );
     expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("explains an organization's OAuth App restriction, linking to where approval is requested, and keeps the drafts", async () => {
+    const cause = {
+      code: "oauth-org-restricted",
+      message: "The Call-for-Code organization restricts third-party apps",
+      org: "Call-for-Code",
+      approvalUrl: "https://github.com/settings/connections/applications/Ov23abc",
+    };
+    const submitReview = vi.fn(async (intents: { id: string }[]) =>
+      intents.map(({ id }) => ({ draftId: id, ok: false as const, message: cause.message, cause })),
+    );
+    const { dialog, onPublished } = mount({
+      drafts: [drafts[0]!],
+      publisher: { publishComment: vi.fn(), submitReview },
+    });
+    await userEvent.click(within(dialog).getByRole("button", { name: "Submit review" }));
+
+    const alert = await within(dialog).findByRole("alert");
+    expect(within(alert).getByText("The Call-for-Code organization restricts third-party apps.").tagName).toBe(
+      "STRONG",
+    );
+    const link = within(alert).getByRole("link", { name: /Request approval/ });
+    expect(link.getAttribute("href")).toBe(cause.approvalUrl);
+    expectNewTab(link);
+    expect(onPublished).not.toHaveBeenCalled();
+    expect(within(dialog).getByText("Comment d1")).toBeTruthy();
   });
 
   it("requires confirmation before publishing drafts written against an older head", async () => {

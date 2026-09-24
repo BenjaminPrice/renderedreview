@@ -8,6 +8,7 @@ import { useId, useState, type KeyboardEvent } from "react";
 import { linesLabel } from "../document/SelectionPopover";
 import { selectedLines } from "./compose";
 import { ChangeDiff, diffLines, Markdown } from "./Markdown";
+import { PublishFailure } from "./PublishFailure";
 
 const QUOTE_CHARS = 280;
 
@@ -90,7 +91,7 @@ export function Composer(props: ComposerProps) {
   const [text, setText] = useState(props.initial ?? "");
   const [preview, setPreview] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [failure, setFailure] = useState<string>();
+  const [failure, setFailure] = useState<Error>();
   const ids = { text: useId(), hint: useId(), replacement: useId(), lines: useId() };
   const blank = !text.trim();
   const unchanged = suggesting && replacement === original;
@@ -109,7 +110,7 @@ export function Composer(props: ComposerProps) {
     try {
       await props.onCommentNow(...args());
     } catch (e) {
-      setFailure((e as Error).message);
+      setFailure(e as Error);
     } finally {
       setBusy(false);
     }
@@ -222,7 +223,7 @@ export function Composer(props: ComposerProps) {
           )}
           {(error ?? failure) && (
             <p className="rr-composer-error" role="alert">
-              {error ?? failure}
+              {error ?? (failure && <PublishFailure error={failure} />)}
             </p>
           )}
           <RepresentationHint

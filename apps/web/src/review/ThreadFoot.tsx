@@ -5,6 +5,7 @@ import type { NativeThread } from "@rendered-review/review-domain";
 import { type KeyboardEvent, type ReactNode, type RefObject, useEffect, useId, useRef, useState } from "react";
 import { RepresentationHint } from "./Composer";
 import { Markdown } from "./Markdown";
+import { PublishFailure } from "./PublishFailure";
 import { isAppThread, type ThreadActions } from "./thread-actions";
 
 const NATIVE_HINT = {
@@ -32,8 +33,8 @@ export function ThreadFoot({ thread, actions, context, resolving, children }: Th
   const [preview, setPreview] = useState(false);
   const [sending, setSending] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [failure, setFailure] = useState<string>();
-  const [resolveFailure, setResolveFailure] = useState<string>();
+  const [failure, setFailure] = useState<Error>();
+  const [resolveFailure, setResolveFailure] = useState<Error>();
   // Synchronous guards: a second click or shortcut can arrive before the disabled state renders.
   const inFlight = useRef({ reply: false, resolve: false });
   const replyButton = useRef<HTMLButtonElement>(null);
@@ -63,7 +64,7 @@ export function ThreadFoot({ thread, actions, context, resolving, children }: Th
       await actions.reply(thread, text);
       close();
     } catch (e) {
-      setFailure((e as Error).message);
+      setFailure(e as Error);
     } finally {
       inFlight.current.reply = false;
       setSending(false);
@@ -92,7 +93,7 @@ export function ThreadFoot({ thread, actions, context, resolving, children }: Th
       await actions.setResolved(thread, !resolved);
     } catch (e) {
       resolving.current = false;
-      setResolveFailure((e as Error).message);
+      setResolveFailure(e as Error);
     } finally {
       inFlight.current.resolve = false;
       setBusy(false);
@@ -163,7 +164,7 @@ export function ThreadFoot({ thread, actions, context, resolving, children }: Th
           )}
           {failure && (
             <p className="rr-composer-error" role="alert">
-              {failure}
+              <PublishFailure error={failure} />
             </p>
           )}
           <RepresentationHint representation={isAppThread(thread) ? APP_HINT : NATIVE_HINT} />
@@ -197,7 +198,7 @@ export function ThreadFoot({ thread, actions, context, resolving, children }: Th
       </div>
       {resolveFailure && (
         <p className="rr-composer-error rr-t-error" role="alert">
-          {resolveFailure}
+          <PublishFailure error={resolveFailure} />
         </p>
       )}
     </>

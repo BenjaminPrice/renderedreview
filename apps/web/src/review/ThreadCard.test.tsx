@@ -428,3 +428,40 @@ describe("metadata notices", () => {
     expect(screen.getByText("Metadata damaged")).toBeTruthy();
   });
 });
+
+describe("an organization restricting the OAuth App", () => {
+  it("explains a refused reply with a link to request approval, keeping the text", async () => {
+    const cause = {
+      code: "oauth-org-restricted",
+      org: "Call-for-Code",
+      approvalUrl: "https://github.com/settings/connections/applications/Ov23abc",
+    };
+    const reply = vi.fn(async () => {
+      throw new Error("The Call-for-Code organization restricts third-party apps", { cause });
+    });
+    withActions(thread("t1", lineAnchor(3), "unresolved"), { reply });
+    await userEvent.click(screen.getByRole("button", { name: REPLY }));
+    await userEvent.type(screen.getByRole("textbox"), "Agreed");
+    await userEvent.click(screen.getByRole("button", { name: "Reply" }));
+    const alert = await screen.findByRole("alert");
+    expect(within(alert).getByText("The Call-for-Code organization restricts third-party apps.")).toBeTruthy();
+    expectNewTab(within(alert).getByRole("link", { name: /Request approval/ }));
+    expect(screen.getByRole("textbox")).toHaveProperty("value", "Agreed");
+  });
+
+  it("explains a refused resolve the same way", async () => {
+    const setResolved = vi.fn(async () => {
+      throw new Error("The Call-for-Code organization restricts third-party apps", {
+        cause: { code: "oauth-org-restricted", org: "Call-for-Code", approvalUrl: "https://docs.github.com/x" },
+      });
+    });
+    withActions(thread("t1", lineAnchor(3), "unresolved"), { setResolved });
+    await userEvent.click(screen.getByRole("button", { name: /^Resolve/ }));
+    const alert = await screen.findByRole("alert");
+    expect(
+      within(alert)
+        .getByRole("link", { name: /Request approval/ })
+        .getAttribute("href"),
+    ).toBe("https://docs.github.com/x");
+  });
+});

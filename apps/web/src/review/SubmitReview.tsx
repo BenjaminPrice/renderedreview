@@ -5,6 +5,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { linesLabel } from "../document/SelectionPopover";
 import { commentIntent } from "./compose";
 import type { Draft } from "./drafts";
+import { PublishFailure } from "./PublishFailure";
 import { type DraftOutcome, type Publisher, publishErrorMessage, type Verdict } from "./publish";
 import { Badge } from "./ThreadCard";
 
@@ -42,7 +43,10 @@ export function SubmitReview({ drafts, headOid, publisher, onPublished, onClose 
   const [verdict, setVerdict] = useState<Verdict>("COMMENT");
   const [staleConfirmed, setStaleConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [report, setReport] = useState<{ published: number; failed: { draft?: Draft; message: string }[] }>();
+  const [report, setReport] = useState<{
+    published: number;
+    failed: { draft?: Draft; message: string; cause?: unknown }[];
+  }>();
 
   useEffect(() => {
     const d = dialog.current;
@@ -63,13 +67,13 @@ export function SubmitReview({ drafts, headOid, publisher, onPublished, onClose 
       const outcomes: DraftOutcome[] = await publisher.submitReview(intents, summary.trim(), verdict);
       const published = outcomes.filter((o) => o.ok).map((o) => o.draftId);
       const failed = outcomes.flatMap((o) =>
-        o.ok ? [] : [{ draft: drafts.find((d) => d.id === o.draftId), message: o.message }],
+        o.ok ? [] : [{ draft: drafts.find((d) => d.id === o.draftId), message: o.message, cause: o.cause }],
       );
       if (published.length) onPublished(published);
       if (failed.length) setReport({ published: published.length, failed });
       else dialog.current?.close();
     } catch (error) {
-      setReport({ published: 0, failed: [{ message: publishErrorMessage(error as Error) }] });
+      setReport({ published: 0, failed: [{ message: publishErrorMessage(error as Error), cause: error }] });
     } finally {
       setBusy(false);
     }
@@ -175,7 +179,7 @@ export function SubmitReview({ drafts, headOid, publisher, onPublished, onClose 
                       <code>{f.draft.path}</code> · {linesLabel(f.draft.selection)}:{" "}
                     </>
                   )}
-                  {f.message}
+                  <PublishFailure error={f} />
                 </li>
               ))}
             </ul>
