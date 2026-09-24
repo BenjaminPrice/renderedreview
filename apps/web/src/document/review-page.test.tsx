@@ -289,9 +289,11 @@ it("never asks GraphQL for thread resolution anonymously", async () => {
   expect(requested.filter((u) => u.includes("graphql"))).toEqual([]);
 });
 
-it("counts open threads per doc in the sidebar and the doc's threads on the Comments button", async () => {
+it("counts threads per doc in the sidebar and the doc's threads on the Comments button", async () => {
   renderPage(`?doc=${encodeURIComponent(INDEX)}`);
-  expect(await screen.findByRole("link", { name: /status\/index\.md, modified, 2 unresolved comments/ })).toBeTruthy();
+  // Resolution is unknown anonymously, so the count does not claim the threads are unresolved.
+  const link = await screen.findByRole("link", { name: /status\/index\.md, modified, 2 comments$/ });
+  expect(link.getAttribute("aria-label")).not.toContain("unresolved");
   expect(screen.getByRole("button", { name: /Comments 2/ })).toBeTruthy();
 });
 
