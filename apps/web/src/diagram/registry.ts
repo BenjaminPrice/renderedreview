@@ -30,6 +30,11 @@ export const diagramRegistry = createDiagramRegistry([
     fenceNames: ["geojson", "topojson"],
     load: () => (import.meta.env.SSR ? SERVER() : import("./geo").then((m) => m.loadGeo())),
   },
+  {
+    label: "STL model",
+    fenceNames: ["stl"],
+    load: () => (import.meta.env.SSR ? SERVER() : import("./stl").then((m) => m.loadStl())),
+  },
 ]);
 
 /** Tests substitute fake renderers here. */

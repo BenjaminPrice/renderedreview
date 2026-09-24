@@ -21,12 +21,18 @@ vi.mock("./geo", () => {
   return { loadGeo: async () => fake("geo") };
 });
 
+vi.mock("./stl", () => {
+  loaded.push("stl");
+  return { loadStl: async () => fake("stl") };
+});
+
 const { diagramRegistry } = await import("./registry");
 
 it.each([
   [["dot", "graphviz", "DOT"], "Graphviz", "graphviz"],
   [["wavedrom"], "WaveDrom", "wavedrom"],
   [["geojson", "topojson"], "Map", "geo"],
+  [["stl"], "STL model", "stl"],
 ])(
   "renders %j fences with %s, loading it on first use",
   async (fences, label, id) => {
