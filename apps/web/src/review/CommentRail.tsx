@@ -14,7 +14,10 @@ const MARKER_HEIGHT = 24;
 const MARKER_GAP = 4;
 
 export interface CommentRailProps {
-  /** Threads of the displayed document, from `placeThreads`. Threads without blocks are listed unanchored. */
+  /**
+   * Threads of the displayed document, from `placeThreads`. Threads without blocks are listed
+   * unanchored. Annotation ranges are highlighted by their blocks until word-level highlighting exists.
+   */
   placements: ThreadPlacement[];
   repository: RepositoryRef;
   filters: ReadonlySet<ThreadState>;
@@ -219,6 +222,9 @@ export function CommentRail(props: CommentRailProps) {
       repository={repository}
       active={p.thread.id === active}
       unplaced={!p.blocks.length}
+      reason={p.reason}
+      verified={!!p.range}
+      damaged={p.damaged}
       onActivate={() => p.thread.id !== active && activate(p.thread.id)}
     />
   );
