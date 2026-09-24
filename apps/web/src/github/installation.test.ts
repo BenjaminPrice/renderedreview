@@ -23,9 +23,9 @@ describe("appJwt", () => {
     expect(decode(header!)).toEqual({ alg: "RS256", typ: "JWT" });
     // Issued a minute early for clock drift; GitHub rejects expiry more than ten minutes out.
     expect(decode(payload!)).toEqual({ iss: "12345", iat: now / 1000 - 60, exp: now / 1000 + 540 });
-    expect(verify("RSA-SHA256", Buffer.from(`${header}.${payload}`), publicKey, Buffer.from(signature!, "base64url"))).toBe(
-      true,
-    );
+    expect(
+      verify("RSA-SHA256", Buffer.from(`${header}.${payload}`), publicKey, Buffer.from(signature!, "base64url")),
+    ).toBe(true);
   });
 });
 
@@ -70,4 +70,3 @@ describe("createInstallationCheck", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 });
-
