@@ -1336,3 +1336,9 @@ samp {
   outline: 2px solid var(--rr-focus);
   outline-offset: 4px;
 }
+
+/* Shell without a sidebar or comment rail (home page): the document column takes the width. */
+.rr-body:not(:has(> .rr-sidebar)),
+.rr-canvas:not(:has(> .rr-rail)) {
+  grid-template-columns: minmax(0, 1fr);
+}

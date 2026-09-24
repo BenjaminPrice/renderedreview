@@ -55,6 +55,7 @@ export type AppShellProps = {
   /** Top bar, right side before the theme toggle: "Open in GitHub", "Review". */
   actions?: ReactNode;
   avatar?: ReactNode;
+  /** Document sidebar. Omitted: no sidebar (e.g. the home page). */
   sidebar?: ReactNode;
   /** Toolbar content before the Comments button; `toolbarEnd` goes after it. */
   toolbar?: ReactNode;
@@ -62,6 +63,7 @@ export type AppShellProps = {
   commentCount?: number;
   /** Rail header content under the title (connector switch, filters). */
   railHeader?: ReactNode;
+  /** Comment rail. Omitted: no rail and no Comments button. */
   rail?: ReactNode;
   /** The document column. Its right padding is the margin-marker gutter. */
   children: ReactNode;
@@ -150,55 +152,61 @@ export function AppShell(props: AppShellProps) {
         </header>
 
         <div className="rr-body">
-          <nav className="rr-sidebar" aria-label="Documents">
-            {props.sidebar}
-          </nav>
+          {props.sidebar !== undefined && (
+            <nav className="rr-sidebar" aria-label="Documents">
+              {props.sidebar}
+            </nav>
+          )}
 
           <main className="rr-main">
             <div className="rr-toolbar">
               {props.toolbar}
               <span className="rr-spacer" />
-              <button
-                ref={commentsButton}
-                type="button"
-                className="rr-btn rr-btn-sm"
-                aria-controls={RAIL_ID}
-                aria-pressed={mode === "pinned"}
-                title="Pin or unpin the comment rail"
-                onClick={togglePinned}
-              >
-                <Icon name="comment" />
-                Comments
-                {props.commentCount !== undefined && <span className="rr-count">{props.commentCount}</span>}
-              </button>
+              {props.rail !== undefined && (
+                <button
+                  ref={commentsButton}
+                  type="button"
+                  className="rr-btn rr-btn-sm"
+                  aria-controls={RAIL_ID}
+                  aria-pressed={mode === "pinned"}
+                  title="Pin or unpin the comment rail"
+                  onClick={togglePinned}
+                >
+                  <Icon name="comment" />
+                  Comments
+                  {props.commentCount !== undefined && <span className="rr-count">{props.commentCount}</span>}
+                </button>
+              )}
               {props.toolbarEnd}
             </div>
 
             <div className="rr-scroll">
               <div className="rr-canvas">
                 <div className="rr-doc">{props.children}</div>
-                <aside ref={railRef} className="rr-rail" id={RAIL_ID} aria-labelledby={`${RAIL_ID}-title`}>
-                  <div className="rr-rail-head">
-                    <h2 ref={railTitle} className="rr-rail-title" id={`${RAIL_ID}-title`} tabIndex={-1}>
-                      Comments
-                      {props.commentCount !== undefined && <span className="rr-count">{props.commentCount}</span>}
-                      <span className="rr-spacer" />
-                      {mode === "slide" && (
-                        <button
-                          type="button"
-                          className="rr-btn rr-btn-sm rr-btn-icon rr-btn-ghost"
-                          aria-label="Close comments"
-                          title="Close (Esc)"
-                          onClick={closeSlideOver}
-                        >
-                          <Icon name="x" />
-                        </button>
-                      )}
-                    </h2>
-                    {props.railHeader}
-                  </div>
-                  {props.rail}
-                </aside>
+                {props.rail !== undefined && (
+                  <aside ref={railRef} className="rr-rail" id={RAIL_ID} aria-labelledby={`${RAIL_ID}-title`}>
+                    <div className="rr-rail-head">
+                      <h2 ref={railTitle} className="rr-rail-title" id={`${RAIL_ID}-title`} tabIndex={-1}>
+                        Comments
+                        {props.commentCount !== undefined && <span className="rr-count">{props.commentCount}</span>}
+                        <span className="rr-spacer" />
+                        {mode === "slide" && (
+                          <button
+                            type="button"
+                            className="rr-btn rr-btn-sm rr-btn-icon rr-btn-ghost"
+                            aria-label="Close comments"
+                            title="Close (Esc)"
+                            onClick={closeSlideOver}
+                          >
+                            <Icon name="x" />
+                          </button>
+                        )}
+                      </h2>
+                      {props.railHeader}
+                    </div>
+                    {props.rail}
+                  </aside>
+                )}
               </div>
             </div>
           </main>
