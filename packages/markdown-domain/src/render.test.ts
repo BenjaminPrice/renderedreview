@@ -39,11 +39,24 @@ function expectValidRange(source: string, range: SourceRange) {
   expect(offsetOf(source, range.end)).toBe(range.end.offset);
 }
 
+/**
+ * Whether `text` appears in the source slice of `range`. Text inside a blockquote drops each
+ * line's `>` markers (and the indentation before them), so for `quoted` text both sides are
+ * compared without them; everything else must match verbatim.
+ */
+function sourceContains(source: string, range: SourceRange, text: string, quoted: boolean): boolean {
+  const flat = (t: string) => (quoted ? normalizeText(t).replace(/^[ \t]*(?:>[ \t]?)+/gm, "") : normalizeText(t));
+  return flat(source.slice(range.start.offset, range.end.offset)).includes(flat(text));
+}
+
 /** Text the pipeline generates without source (footnote chrome and reference numbers). */
 const GENERATED_TEXT = new Set(["Footnotes", "↩", "1", "Note", "Tip", "Important", "Warning", "Caution"]);
 
 describe("source containment check", () => {
-  const whole = (src: string) => ({ start: { line: 1, column: 1, offset: 0 }, end: { line: 1, column: 1, offset: src.length } });
+  const whole = (src: string) => ({
+    start: { line: 1, column: 1, offset: 0 },
+    end: { line: 1, column: 1, offset: src.length },
+  });
 
   test("plain text must appear verbatim in its range", () => {
     expect(sourceContains("Hello\nworld", whole("Hello\nworld"), "Hello\nworld", false)).toBe(true);
@@ -84,27 +97,27 @@ describe.each(Object.entries(fixtures))("%s fixture", (name, source) => {
   // A text node belongs to its own position or, failing that, to its nearest stamped ancestor:
   // a `data-rr-id` ancestor gives the range, a `data-rr-unmapped` one makes it non-selectable.
   test("every rendered text node maps to a source range containing it", () => {
-    const visit = (node: Nodes, owner: SourceRange | null) => {
+    const visit = (node: Nodes, owner: SourceRange | null, quoted: boolean) => {
       if (node.type === "text" && node.value.trim()) {
         const range = node.position ? { start: node.position.start, end: node.position.end } : owner;
         if (!range) {
           expect(GENERATED_TEXT, `unmapped text ${JSON.stringify(node.value)}`).toContain(node.value);
         } else {
           expectValidRange(source, range as SourceRange);
-          // Compared without line indentation and blockquote markers, which paragraph text drops.
-          const flat = (t: string) => normalizeText(t).replace(/^[ \t]*(>[ \t]?)*/gm, "");
-          const slice = flat(source.slice(range.start.offset, range.end.offset));
           // trim(): remark-rehype appends a space to the text before a footnote back-reference.
-          if (!GENERATED_TEXT.has(node.value)) expect(slice).toContain(flat(node.value.trim()));
+          const text = node.value.trim();
+          if (!GENERATED_TEXT.has(node.value))
+            expect(sourceContains(source, range as SourceRange, text, quoted), JSON.stringify(text)).toBe(true);
         }
       }
       if (node.type === "element") {
         const id = node.properties.dataRrId;
         owner = id === undefined ? null : doc.nodes[id as number]!.range;
+        quoted ||= node.tagName === "blockquote" || String(node.properties.className).includes("markdown-alert");
       }
-      if ("children" in node) for (const c of node.children) visit(c, owner);
+      if ("children" in node) for (const c of node.children) visit(c, owner, quoted);
     };
-    visit(doc.tree, null);
+    visit(doc.tree, null, false);
   });
 
   test("is deterministic", () => {
