@@ -145,7 +145,14 @@ export function CommentRail(props: CommentRailProps) {
       setDrawn(true);
       // Two frames: the rail must be laid out and the paths rendered before they animate.
       requestAnimationFrame(() => requestAnimationFrame(() => drawIn(svgRef.current)));
-    } else void drawOut(svgRef.current).then(() => setDrawn(false));
+      return;
+    }
+    // A retraction overtaken by a redraw (switched back on, re-pinned) must not remove the new lines.
+    let current = true;
+    void drawOut(svgRef.current).then(() => current && setDrawn(false));
+    return () => {
+      current = false;
+    };
   }, [showWires]);
   useEffect(() => {
     shell.setBeforeCollapse(showWires ? () => drawOut(svgRef.current) : null);
