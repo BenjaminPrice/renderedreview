@@ -145,7 +145,17 @@ importers:
         specifier: ^9.0.5
         version: 9.0.5
 
-  packages/review-domain: {}
+  packages/review-domain:
+    dependencies:
+      '@rendered-review/github-action':
+        specifier: workspace:*
+        version: link:../github-action
+      '@rendered-review/github-integration':
+        specifier: workspace:*
+        version: link:../github-integration
+      '@rendered-review/markdown-domain':
+        specifier: workspace:*
+        version: link:../markdown-domain
 
   packages/runtime: {}
 
