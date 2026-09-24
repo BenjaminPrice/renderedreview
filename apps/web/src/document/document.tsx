@@ -22,11 +22,12 @@ export { inAppDocLink } from "./render-job";
 export const MAX_RENDER_CHARS = 1_000_000;
 
 /**
- * Larger sources render in the render Worker. Rendering costs about 1.8 ms per KB of Markdown
- * (4 ms per KB for tables; see document.bench.ts), so above this a render would block input
- * beyond a 50 ms long task. Smaller ones render on the main thread at once, with no Worker startup.
+ * Larger sources render in the render Worker. In Chromium, rendering takes about 2.5 ms per KB of
+ * Markdown (17 KB: 45 ms, 100 KB: 210 ms, 300 KB: 600 ms; tables cost about twice that; see
+ * document.bench.ts for the Node corpus), so above this a render would block input beyond a 50 ms
+ * long task. Smaller ones render on the main thread at once, with no Worker startup (about 100 ms).
  */
-export const WORKER_THRESHOLD_CHARS = 32_000;
+export const WORKER_THRESHOLD_CHARS = 20_000;
 
 const RENDER_CACHE_SIZE = 32;
 const renderCache = new Map<string, RenderedMarkdown | Error>();
