@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Read-only GitHub REST/GraphQL client built on `fetch` alone, so the same code runs in browsers,
+// GitHub REST/GraphQL client built on `fetch` alone, so the same code runs in browsers,
 // Node and Workers.
 import {
   type ChangedFile,
@@ -179,6 +179,8 @@ export function createGitHubClient(options: GitHubClientOptions = {}) {
     url: string,
     accept = JSON_MEDIA,
     body?: string,
+    // Writes pass 0: a retried POST could publish the same comment twice.
+    retries = maxRetries,
   ): Promise<{ body: unknown; next?: string }> {
     const authorization = await options.auth?.();
     const key = options.cache && method === "GET" ? `${await authScope(authorization)} ${accept} ${url}` : undefined;
@@ -208,7 +210,7 @@ export function createGitHubClient(options: GitHubClientOptions = {}) {
       try {
         res = await fetchFn(url, { method, headers, body });
       } catch (cause) {
-        const again = attempt < maxRetries;
+        const again = attempt < retries;
         emit(0, again ? "retry" : "error");
         if (again) {
           await retry();
@@ -231,7 +233,7 @@ export function createGitHubClient(options: GitHubClientOptions = {}) {
         emit(res.status, "ok", rl);
         return { body: data, ...(next && { next }) };
       }
-      if (RETRYABLE.has(res.status) && attempt < maxRetries) {
+      if (RETRYABLE.has(res.status) && attempt < retries) {
         emit(res.status, "retry", rl);
         await retry();
         continue;
@@ -261,10 +263,14 @@ export function createGitHubClient(options: GitHubClientOptions = {}) {
     return items;
   }
 
-  async function graphql(query: string, variables: Record<string, unknown>): Promise<Raw> {
-    const { body } = (await send("POST", graphqlUrl, "application/json", JSON.stringify({ query, variables }))) as {
-      body: Raw;
-    };
+  async function graphql(query: string, variables: Record<string, unknown>, retries = maxRetries): Promise<Raw> {
+    const { body } = (await send(
+      "POST",
+      graphqlUrl,
+      "application/json",
+      JSON.stringify({ query, variables }),
+      retries,
+    )) as { body: Raw };
     const error = body.errors?.[0];
     if (error) {
       const message: string = error.message;
@@ -285,6 +291,19 @@ export function createGitHubClient(options: GitHubClientOptions = {}) {
   }
 
   const repo = (owner: string, name: string) => `/repos/${seg(owner)}/${seg(name)}`;
+  const post = async (path: string, payload: object) =>
+    (await send("POST", restBase + path, JSON_MEDIA, JSON.stringify(payload), 0)).body as Raw;
+  const pull = (owner: string, name: string, number: number) => `${repo(owner, name)}/pulls/${number}`;
+  const setResolved = async (mutation: string, id: string) => {
+    const { thread } = (
+      await graphql(
+        `mutation($id: ID!) { ${mutation}(input: { threadId: $id }) { thread { id isResolved } } }`,
+        { id },
+        0,
+      )
+    )[mutation];
+    return { nodeId: thread.id as string, isResolved: thread.isResolved as boolean };
+  };
 
   return {
     /** Rate-limit headers from the most recent response. */
@@ -331,8 +350,92 @@ export function createGitHubClient(options: GitHubClientOptions = {}) {
       } while (after);
       return threads;
     },
+
+    // Writes: never retried, never cached. They notify people, so GitHub may apply secondary rate limits.
+
+    /** A review comment on diff lines, or on the whole file when `line` is omitted. */
+    createReviewComment: async (
+      owner: string,
+      name: string,
+      number: number,
+      c: { body: string; commitId: string; path: string } & Partial<LineRange>,
+    ): Promise<ReviewComment> =>
+      toReviewComment(
+        await post(`${pull(owner, name, number)}/comments`, {
+          body: c.body,
+          commit_id: c.commitId,
+          path: c.path,
+          ...(c.line === undefined ? { subject_type: "file" } : lineFields(c as LineRange)),
+        }),
+      ),
+
+    /** Replies to the thread started by top-level review comment `commentId`. */
+    replyToReviewComment: async (
+      owner: string,
+      name: string,
+      number: number,
+      commentId: number,
+      body: string,
+    ): Promise<ReviewComment> =>
+      toReviewComment(await post(`${pull(owner, name, number)}/comments/${commentId}/replies`, { body })),
+
+    /**
+     * Submits a review. `comments` are line comments only: the batch endpoint takes no `subject_type`,
+     * so file-level comments go through `createReviewComment`.
+     */
+    createReview: async (
+      owner: string,
+      name: string,
+      number: number,
+      r: {
+        commitId: string;
+        event: "COMMENT" | "APPROVE" | "REQUEST_CHANGES";
+        body?: string;
+        comments: ({ path: string; body: string } & LineRange)[];
+      },
+    ): Promise<Review> =>
+      toReview(
+        await post(`${pull(owner, name, number)}/reviews`, {
+          commit_id: r.commitId,
+          event: r.event,
+          ...(r.body && { body: r.body }),
+          comments: r.comments.map((c) => ({ path: c.path, body: c.body, ...lineFields(c) })),
+        }),
+      ),
+
+    /** A PR conversation comment. */
+    createIssueComment: async (owner: string, name: string, number: number, body: string): Promise<IssueComment> =>
+      toIssueComment(await post(`${repo(owner, name)}/issues/${number}/comments`, { body })),
+
+    resolveReviewThread: (threadNodeId: string) => setResolved("resolveReviewThread", threadNodeId),
+    unresolveReviewThread: (threadNodeId: string) => setResolved("unresolveReviewThread", threadNodeId),
+
+    /** The pull request a review thread belongs to; `null` when the node is not a review thread. */
+    async getReviewThreadPullRequest(threadNodeId: string): Promise<{ repositoryId: number; number: number } | null> {
+      const { node } = await graphql(THREAD_PULL_REQUEST, { id: threadNodeId });
+      const pr = node?.pullRequest;
+      return pr ? { repositoryId: pr.repository.databaseId, number: pr.number } : null;
+    },
   };
 }
+
+/** GitHub's `line`/`side` (the range's last line) and, for multi-line ranges, `start_line`/`start_side`. */
+export interface LineRange {
+  line: number;
+  side: "LEFT" | "RIGHT";
+  startLine?: number;
+  startSide?: "LEFT" | "RIGHT";
+}
+
+const lineFields = (r: LineRange) => ({
+  line: r.line,
+  side: r.side,
+  ...(r.startLine !== undefined && { start_line: r.startLine, start_side: r.startSide ?? r.side }),
+});
+
+const THREAD_PULL_REQUEST = `query($id: ID!) {
+  node(id: $id) { ... on PullRequestReviewThread { pullRequest { number repository { databaseId } } } }
+}`;
 
 export type GitHubClient = ReturnType<typeof createGitHubClient>;
 

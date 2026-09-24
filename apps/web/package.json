@@ -21,6 +21,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@rendered-review/annotation-domain": "workspace:*",
     "@rendered-review/browser-cache": "workspace:*",
     "@rendered-review/diagram-domain": "workspace:*",
     "@rendered-review/github-integration": "workspace:*",
