@@ -101,7 +101,7 @@ export async function run({ env, event, fetch }: { env: Env; event: PullRequestE
   if (!token) throw new Error("github-token input is empty.");
   const baseUrl = input(env, "base-url") || "https://renderedreview.dev";
   if (!/^https?:\/\//.test(baseUrl)) throw new Error(`base-url must be an http(s) URL, got "${baseUrl}".`);
-  const include = patterns(input(env, "include") || "**/*.md\n**/*.markdown");
+  const include = patterns(input(env, "include") || "**/*.md\n**/*.markdown\n**/*.mdx");
   const exclude = patterns(input(env, "exclude"));
   const removeWhenEmpty = input(env, "remove-when-empty") !== "false";
   const repository = env.GITHUB_REPOSITORY;
