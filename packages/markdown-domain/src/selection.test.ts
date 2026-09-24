@@ -6,6 +6,7 @@ import { renderMarkdown, type RenderOptions } from "./render.js";
 import {
   documentText,
   type RenderedPoint,
+  renderedText,
   selectionToSource,
   type SelectionResult,
   sourceToRendered,
@@ -320,5 +321,32 @@ describe("documentText finds rendered text and claims it like a selection", () =
     const src = "Café au lait.\n";
     const { result } = find(src, "Café au");
     expect(ok(result)).toMatchObject({ exact: "Café au", textPosition: { start: 0, end: 8 } });
+
+describe("the rendered text of a source range", () => {
+  test.each<[string, string, string, string, RenderOptions?]>([
+    ["a word", "Hello brave new world.\n", "brave", "brave"],
+    ["across inline markup", "Use **bold** text\n", "bold", "text"],
+    ["two paragraphs", "# H\n\nFirst para.\n\nSecond para.\n", "para.", "Second"],
+    ["list items", "- one\n- two\n- three\n", "ne", "tw"],
+    ["table rows", "| a | b |\n|---|---|\n| c | d |\n| e | f |\n", "d", "e"],
+    ["an alert body, without its generated title", "> [!NOTE]\n> Body one\n>\n> Body two\n", "one", "Body two"],
+    [
+      "a task item whose text does not align, widened to what it claims",
+      "- [ ] Do we support ~~PlantUML~~ server\n",
+      "we support",
+      "Plant",
+    ],
+    ["up to a footnote's generated whitespace", "Text[^n].\n\n[^n]: The note.\n", "The", "note."],
+    ["inside a JSX element", "<Note>\n\nInside text\n\n</Note>\n\nAfter\n", "text", "After", { format: "mdx" }],
+  ])("is the quote selectionToSource claims for it: %s", (_name, md, from, to, options = {}) => {
+    const doc = renderMarkdown(md, options);
+    const s = ok(selectionToSource(doc, md, at(doc.tree, from, "start"), at(doc.tree, to, "end")));
+    expect(renderedText(doc, md, s.textPosition)).toBe(s.exact);
+  });
+
+  test("is undefined for markup only", () => {
+    expect(renderedText(renderMarkdown("Use **bold** text\n"), "Use **bold** text\n", { start: 4, end: 6 })).toBe(
+      undefined,
+    );
   });
 });
