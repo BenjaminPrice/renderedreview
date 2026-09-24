@@ -116,6 +116,17 @@ describe("placeThreads with annotations", () => {
     expect(p.blocks.map((b) => b.text)).toEqual(["The system retries failed requests indefinitely."]);
   });
 
+  it("places a reworded annotation on its block only, without a word range", () => {
+    const structure = { nodeType: "paragraph", headingPath: ["Reliability"] };
+    const p = place(
+      "# Reliability\n\nThe system retries failing requests indefinitely.\n",
+      appThread(target({ blobOid: OLD_BLOB, structure })),
+    );
+    expect(p.reanchor).toMatchObject({ state: "moved", approximate: true });
+    expect(p.blocks.map((b) => b.text)).toEqual(["The system retries failing requests indefinitely."]);
+    expect(p.range).toBeUndefined();
+  });
+
   it("leaves an annotation whose words are gone unplaced, saying why", () => {
     const p = place("# Reliability\n\nThe system gives up after three attempts.\n");
     expect(p).toMatchObject({ blocks: [], reason: "The quoted text changed since this comment" });

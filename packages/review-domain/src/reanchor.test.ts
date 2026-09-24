@@ -116,13 +116,21 @@ describe("moved: a unique match elsewhere", () => {
     expect(placed).toBe("retries failed");
   });
 
-  test("a slightly reworded quote in the same block is a structural match with lower confidence", () => {
+  test("a slightly reworded quote is placed only approximately: its whole block, never its words", () => {
     const before = "# Guide\n\nThe service retries every failed request up to five times.\n\n## Other\n\nUnrelated.\n";
     const after = "# Guide\n\nThe service retries each failed request up to five times.\n\n## Other\n\nUnrelated.\n";
-    const { result, placed } = run(before, after, "retries every failed request up to five");
-    expect(result).toMatchObject({ state: "moved", evidence: "structure" });
+    const { result } = run(before, after, "retries every failed request up to five");
+    expect(result).toMatchObject({ state: "moved", evidence: "structure", approximate: true });
     expect(result.confidence).toBeLessThan(0.8);
-    expect(placed).toBe("retries each failed request up to five");
+    expect(result.textPosition).toBeUndefined();
+    // The block's range: the whole paragraph.
+    expect(result.sourceRange).toEqual({ startLine: 3, startColumn: 1, endLine: 3, endColumn: 60 });
+  });
+
+  test("exact-quote placements are word-precise, not approximate", () => {
+    const { result } = run(DOC, "Intro.\n\n" + DOC, "ten requests");
+    expect(result.approximate).toBeUndefined();
+    expect(result.textPosition).toBeDefined();
   });
 
   test("a CRLF version of the same document maps to raw CRLF offsets", () => {

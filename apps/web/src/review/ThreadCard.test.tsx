@@ -176,6 +176,16 @@ describe("application threads", () => {
     expect(el.querySelector("blockquote")?.textContent?.trim()).toBe("retries failed requests");
   });
 
+  it("says an approximately re-anchored thread's text changed, keeping the original quote", () => {
+    const moved = { startLine: 5, endLine: 5, approximate: true };
+    const el = render(<ThreadCard thread={appThread()} repository={repository} moved={moved} />).container;
+    const card = screen.getByRole("region", { name: "Selected text · L5, by alice, moved" });
+    expect(
+      within(card).getByText("Selected text · L5 · Text changed since this comment · approximate location"),
+    ).toBeTruthy();
+    expect(el.querySelector("blockquote")?.textContent?.trim()).toBe("retries failed requests");
+  });
+
   it("shows resolve and reopen as small events, not as comments", () => {
     const [root, resolve, reopen] = [
       issueComment("Needs a retry limit."),

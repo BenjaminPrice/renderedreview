@@ -141,6 +141,23 @@ describe("threads and filters", () => {
     expect(within(card).getByText("retries failed requests")).toBeTruthy();
   });
 
+  it("marks an approximately re-anchored thread's location as approximate", async () => {
+    const moved = appThread([issueComment("Approximate one")]);
+    const sourceRange = { startLine: 5, startColumn: 1, endLine: 5, endColumn: 40 };
+    const reanchor = {
+      state: "moved" as const,
+      evidence: "structure" as const,
+      confidence: 0.7,
+      approximate: true,
+      sourceRange,
+      candidates: [],
+    };
+    await renderPage([{ thread: moved, blocks: [block(1)], reanchor }]);
+    const card = within(rail()).getByRole("region", { name: "Selected text · L5, by alice, moved" });
+    expect(within(card).getByText(/approximate location$/)).toBeTruthy();
+    expect(within(card).getByText("retries failed requests")).toBeTruthy();
+  });
+
   it("filters threads by state without losing the rest", async () => {
     await renderPage();
     await userEvent.click(chip(/^Resolved/));
