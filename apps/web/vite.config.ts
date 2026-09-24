@@ -7,6 +7,10 @@ import viteReact from "@vitejs/plugin-react";
 import { nitro } from "nitro/vite";
 import { build, defineConfig, type Plugin } from "vite";
 
+// Not precached: Mermaid's browser build (megabytes) runs only in the diagram renderer frame,
+// which the worker does not control, and is fetched only when a document has a diagram.
+const ON_DEMAND = /(^|\/)mermaid\.min-[^/]+\.js$/;
+
 // Builds src/sw/sw.ts into /sw.js with the client build's file list inlined. Start allows
 // only one client entry, so the worker is a separate nested build. Its version is a hash
 // of the (content-hashed) file names: a deploy that changes any asset changes sw.js,
@@ -19,7 +23,7 @@ function serviceWorker(): Plugin {
     async generateBundle(_, bundle) {
       const base = this.environment.config.base;
       const urls = Object.keys(bundle)
-        .filter((file) => !file.endsWith(".map"))
+        .filter((file) => !file.endsWith(".map") && !ON_DEMAND.test(file))
         .sort()
         .map((file) => base + file);
       const version = createHash("sha256").update(urls.join("\n")).digest("hex").slice(0, 16);

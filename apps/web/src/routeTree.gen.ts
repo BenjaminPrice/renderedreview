@@ -11,9 +11,11 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as HealthRouteImport } from './routes/health'
+import { Route as FramesMermaidRouteImport } from './routes/frames.mermaid'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiGithubPublicSplatRouteImport } from './routes/api/github/public/$'
 import { Route as ApiGithubUserSplatRouteImport } from './routes/api/github/user/$'
+import { Route as ApiGithubWriteSplatRouteImport } from './routes/api/github/write/$'
 import { Route as HostOwnerRepoPullNumberRouteImport } from './routes/$host.$owner.$repo.pull.$number'
 
 const IndexRoute = IndexRouteImport.update({
@@ -24,6 +26,11 @@ const IndexRoute = IndexRouteImport.update({
 const HealthRoute = HealthRouteImport.update({
   id: '/health',
   path: '/health',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FramesMermaidRoute = FramesMermaidRouteImport.update({
+  id: '/frames/mermaid',
+  path: '/frames/mermaid',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
@@ -41,6 +48,11 @@ const ApiGithubUserSplatRoute = ApiGithubUserSplatRouteImport.update({
   path: '/api/github/user/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiGithubWriteSplatRoute = ApiGithubWriteSplatRouteImport.update({
+  id: '/api/github/write/$',
+  path: '/api/github/write/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const HostOwnerRepoPullNumberRoute = HostOwnerRepoPullNumberRouteImport.update({
   id: '/$host/$owner/$repo/pull/$number',
   path: '/$host/$owner/$repo/pull/$number',
@@ -50,26 +62,32 @@ const HostOwnerRepoPullNumberRoute = HostOwnerRepoPullNumberRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/health': typeof HealthRoute
+  '/frames/mermaid': typeof FramesMermaidRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/github/public/$': typeof ApiGithubPublicSplatRoute
   '/api/github/user/$': typeof ApiGithubUserSplatRoute
+  '/api/github/write/$': typeof ApiGithubWriteSplatRoute
   '/$host/$owner/$repo/pull/$number': typeof HostOwnerRepoPullNumberRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/health': typeof HealthRoute
+  '/frames/mermaid': typeof FramesMermaidRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/github/public/$': typeof ApiGithubPublicSplatRoute
   '/api/github/user/$': typeof ApiGithubUserSplatRoute
+  '/api/github/write/$': typeof ApiGithubWriteSplatRoute
   '/$host/$owner/$repo/pull/$number': typeof HostOwnerRepoPullNumberRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/health': typeof HealthRoute
+  '/frames/mermaid': typeof FramesMermaidRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/github/public/$': typeof ApiGithubPublicSplatRoute
   '/api/github/user/$': typeof ApiGithubUserSplatRoute
+  '/api/github/write/$': typeof ApiGithubWriteSplatRoute
   '/$host/$owner/$repo/pull/$number': typeof HostOwnerRepoPullNumberRoute
 }
 export interface FileRouteTypes {
@@ -77,34 +95,42 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/health'
+    | '/frames/mermaid'
     | '/api/auth/$'
     | '/api/github/public/$'
     | '/api/github/user/$'
+    | '/api/github/write/$'
     | '/$host/$owner/$repo/pull/$number'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/health'
+    | '/frames/mermaid'
     | '/api/auth/$'
     | '/api/github/public/$'
     | '/api/github/user/$'
+    | '/api/github/write/$'
     | '/$host/$owner/$repo/pull/$number'
   id:
     | '__root__'
     | '/'
     | '/health'
+    | '/frames/mermaid'
     | '/api/auth/$'
     | '/api/github/public/$'
     | '/api/github/user/$'
+    | '/api/github/write/$'
     | '/$host/$owner/$repo/pull/$number'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   HealthRoute: typeof HealthRoute
+  FramesMermaidRoute: typeof FramesMermaidRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiGithubPublicSplatRoute: typeof ApiGithubPublicSplatRoute
   ApiGithubUserSplatRoute: typeof ApiGithubUserSplatRoute
+  ApiGithubWriteSplatRoute: typeof ApiGithubWriteSplatRoute
   HostOwnerRepoPullNumberRoute: typeof HostOwnerRepoPullNumberRoute
 }
 
@@ -122,6 +148,13 @@ declare module '@tanstack/react-router' {
       path: '/health'
       fullPath: '/health'
       preLoaderRoute: typeof HealthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/frames/mermaid': {
+      id: '/frames/mermaid'
+      path: '/frames/mermaid'
+      fullPath: '/frames/mermaid'
+      preLoaderRoute: typeof FramesMermaidRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/auth/$': {
@@ -145,6 +178,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiGithubUserSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/github/write/$': {
+      id: '/api/github/write/$'
+      path: '/api/github/write/$'
+      fullPath: '/api/github/write/$'
+      preLoaderRoute: typeof ApiGithubWriteSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/$host/$owner/$repo/pull/$number': {
       id: '/$host/$owner/$repo/pull/$number'
       path: '/$host/$owner/$repo/pull/$number'
@@ -158,9 +198,11 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   HealthRoute: HealthRoute,
+  FramesMermaidRoute: FramesMermaidRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiGithubPublicSplatRoute: ApiGithubPublicSplatRoute,
   ApiGithubUserSplatRoute: ApiGithubUserSplatRoute,
+  ApiGithubWriteSplatRoute: ApiGithubWriteSplatRoute,
   HostOwnerRepoPullNumberRoute: HostOwnerRepoPullNumberRoute,
 }
 export const routeTree = rootRouteImport

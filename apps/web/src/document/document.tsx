@@ -6,8 +6,11 @@ import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "@tanstack/react-router";
 import type { Element, Root } from "hast";
 import { toJsxRuntime } from "hast-util-to-jsx-runtime";
-import { useMemo, type MouseEvent, type Ref } from "react";
+import { toString } from "hast-util-to-string";
+import { useContext, useMemo, type MouseEvent, type Ref } from "react";
 import { Fragment, jsx, jsxs } from "react/jsx-runtime";
+import { DiagramBlock, DiagramSourceContext, type DiagramSource } from "../diagram/DiagramBlock";
+import { DiagramRegistryContext } from "../diagram/registry";
 import { isMarkdownPath } from "../pr-url";
 import { blobQuery, fileAtCommitQuery, type PrIdentity } from "../github/queries";
 import { type ChangeKind, changedLines, type DocEntry, type LineChange, sourceUrl, splitLines } from "./docs";
@@ -130,20 +133,53 @@ function withMarks(tree: Root, marks: Map<number, ChangeKind>): Root {
 export function RenderedDocument({
   rendered,
   changes,
+  link,
+  blobOid,
   containerRef,
 }: {
   rendered: RenderedMarkdown;
   changes: LineChange[];
+  /** Where the document lives, for diagram source-line links. */
+  link: DiagramSource["link"];
+  blobOid: string;
   containerRef?: Ref<HTMLElement>;
 }) {
+  const registry = useContext(DiagramRegistryContext);
   const content = useMemo(
-    () => toJsxRuntime(withMarks(rendered.tree, changeMarks(rendered, changes)), { Fragment, jsx, jsxs }),
-    [rendered, changes],
+    () =>
+      toJsxRuntime(withMarks(rendered.tree, changeMarks(rendered, changes)), {
+        Fragment,
+        jsx,
+        jsxs,
+        passNode: true,
+        components: {
+          // Fences in a registered diagram format render as diagrams; the rest stay code.
+          pre: ({ node, children, ...attributes }) => {
+            const fence = node && rendered.nodes[node.properties.dataRrId as number];
+            const entry = fence?.type === "code" ? registry.match(fence.lang) : undefined;
+            if (!node || !fence || !entry) return <pre {...attributes}>{children}</pre>;
+            return (
+              <DiagramBlock
+                entry={entry}
+                node={fence}
+                source={toString(node).replace(/\n$/, "")}
+                attributes={attributes}
+              />
+            );
+          },
+        },
+      }),
+    [rendered, changes, registry],
   );
   const onClick = useInAppLinks();
+  const { host, owner, repo, sha, path } = link;
+  const source = useMemo(
+    () => ({ blobOid, changes, link: { host, owner, repo, sha, path } }),
+    [blobOid, changes, host, owner, repo, sha, path],
+  );
   return (
     <article ref={containerRef} className="rr-markdown" aria-label="Rendered document" onClick={onClick}>
-      {content}
+      <DiagramSourceContext value={source}>{content}</DiagramSourceContext>
     </article>
   );
 }
@@ -165,10 +201,18 @@ export function RawDocument({
   source,
   changes,
   link,
+  firstLine = 1,
+  target,
+  label = "Markdown source",
 }: {
   source: string;
   changes: LineChange[];
   link: { host: string; owner: string; repo: string; sha: string; path: string };
+  /** Line number of the first line of `source` (an excerpt such as a diagram fence). */
+  firstLine?: number;
+  /** Lines a line link points at, marked with `data-rr-target`. */
+  target?: { start: number; end: number };
+  label?: string;
 }) {
   const kinds = useMemo(() => {
     const byLine = new Map<number, ChangeKind>();
@@ -177,22 +221,30 @@ export function RawDocument({
   }, [changes]);
   const lines = useMemo(() => splitLines(source), [source]);
   return (
-    <pre className="rr-raw" aria-label="Markdown source">
+    <pre className="rr-raw" aria-label={label}>
       <code>
-        {lines.map((text, i) => (
-          <span key={i} className="rr-raw-line" data-rr-change={kinds.get(i + 1)}>
-            <a
-              className="rr-raw-num"
-              href={sourceUrl(link, link.sha, link.path, i + 1)}
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label={`Line ${i + 1} on GitHub (opens in new tab)`}
+        {lines.map((text, i) => {
+          const n = firstLine + i;
+          return (
+            <span
+              key={i}
+              className="rr-raw-line"
+              data-rr-change={kinds.get(n)}
+              data-rr-target={target && n >= target.start && n <= target.end ? "" : undefined}
             >
-              {i + 1}
-            </a>
-            {text + "\n"}
-          </span>
-        ))}
+              <a
+                className="rr-raw-num"
+                href={sourceUrl(link, link.sha, link.path, n)}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={`Line ${n} on GitHub (opens in new tab)`}
+              >
+                {n}
+              </a>
+              {text + "\n"}
+            </span>
+          );
+        })}
       </code>
     </pre>
   );
