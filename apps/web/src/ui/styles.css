@@ -2228,6 +2228,13 @@ samp {
 .rr-draft {
   border-style: dashed;
 }
+.rr-rail-status .rr-composer-note {
+  margin: 0 12px 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--rr-border);
+  border-radius: var(--rr-radius);
+  background: var(--rr-surface);
+}
 
 /* The selection a comment is being written on. Text-exact where supported, whole blocks otherwise. */
 ::highlight(rr-pending) {

@@ -240,6 +240,11 @@ it("retries a line comment GitHub refuses as a file comment", async () => {
   expect(retry).toMatchObject({ representation: "review-file", path: INDEX });
   expect(retry).not.toHaveProperty("line");
   expect(String(retry.body)).toContain("Document: ");
+  // Not silent: the rail says where it went, until dismissed or the next comment.
+  const status = screen.getByRole("status", { name: "Publishing status" });
+  expect(status.textContent).toMatch(/^Posted as a file comment · GitHub refused line 26 as a diff location/);
+  await userEvent.click(within(status).getByRole("button", { name: "Dismiss" }));
+  expect(status.textContent).toBe("");
 });
 
 it("marks drafts from an older head stale and asks before publishing them", async () => {

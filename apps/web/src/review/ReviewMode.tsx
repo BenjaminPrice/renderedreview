@@ -9,6 +9,7 @@ import type { DocEntry } from "../document/docs";
 import type { LoadedDocument } from "../document/document";
 import { PublishError } from "../github/mutations";
 import type { PrIdentity } from "../github/queries";
+import { linesLabel } from "../document/SelectionPopover";
 import { signIn } from "../ui/Viewer";
 import { commentIntent, composeDraftBody, prepareAnnotation, representationFor } from "./compose";
 import { Composer } from "./Composer";
@@ -44,6 +45,8 @@ export function useReviewMode({ pr, id, files, entry, doc, viewer }: ReviewModeI
   const [pending, setPending] = useState<{ path: string; selection: SourceSelection } | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // Outcome worth telling after the composer closes; kept until dismissed or the next comment.
+  const [notice, setNotice] = useState<string | null>(null);
   const signedIn = !!viewer?.signedIn;
 
   /** Publishes `comment` on `annotation`, as a file comment if GitHub refuses the diff lines. */
@@ -52,6 +55,7 @@ export function useReviewMode({ pr, id, files, entry, doc, viewer }: ReviewModeI
     representation: Representation,
     annotation: Draft["annotation"],
     comment: string,
+    selection: SourceSelection,
   ) {
     const send = (r: Representation) =>
       github.publishComment(
@@ -59,8 +63,12 @@ export function useReviewMode({ pr, id, files, entry, doc, viewer }: ReviewModeI
       );
     try {
       await send(representation).catch((error: unknown) => {
-        if (error instanceof PublishError && error.retryAs === "review-file") return send(AS_FILE);
-        throw error;
+        if (!(error instanceof PublishError && error.retryAs === "review-file")) throw error;
+        return send(AS_FILE).then(() =>
+          setNotice(
+            `Posted as a file comment · GitHub refused ${linesLabel(selection)} as a diff location, so it is on the file instead.`,
+          ),
+        );
       });
     } catch (error) {
       throw new Error(publishErrorMessage(error as Error), { cause: error });
@@ -130,7 +138,7 @@ export function useReviewMode({ pr, id, files, entry, doc, viewer }: ReviewModeI
           }}
           onCommentNow={async (comment) => {
             if (!prepared.ok) return;
-            await publishNow(target.path, representation, prepared.annotation, comment);
+            await publishNow(target.path, representation, prepared.annotation, comment, composing);
             setPending(null);
           }}
         />
@@ -177,11 +185,25 @@ export function useReviewMode({ pr, id, files, entry, doc, viewer }: ReviewModeI
   return {
     compose: (path: string, selection: SourceSelection) => {
       setEditing(null);
+      setNotice(null);
       setPending({ path, selection });
     },
     /** The selection to highlight in the document: the one being commented on or edited. */
     highlighted: composing ?? editedDraft?.selection,
     extras,
+    /** Always rendered, so screen readers announce what appears in it. */
+    status: (
+      <div className="rr-rail-status" role="status" aria-label="Publishing status">
+        {notice && (
+          <p className="rr-composer-note">
+            {notice}{" "}
+            <button type="button" className="rr-btn rr-btn-sm rr-btn-ghost" onClick={() => setNotice(null)}>
+              Dismiss
+            </button>
+          </p>
+        )}
+      </div>
+    ),
     unplacedDrafts: unplaced.length > 0 && (
       <section className="rr-rail-group" aria-labelledby="rr-rail-unplaced-drafts">
         <h3 id="rr-rail-unplaced-drafts" className="rr-rail-group-title">

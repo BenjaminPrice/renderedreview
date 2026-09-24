@@ -300,6 +300,7 @@ function ReviewPage({ pr, id, files }: { pr: PullRequest; id: PrIdentity; files:
         ) : (
           entry && (
             <>
+              {reviewMode.status}
               <CommentRail
                 placements={placements}
                 repository={repository}
