@@ -44,6 +44,9 @@ importers:
       '@rendered-review/markdown-domain':
         specifier: workspace:*
         version: link:../../packages/markdown-domain
+      '@rendered-review/review-domain':
+        specifier: workspace:*
+        version: link:../../packages/review-domain
       '@rendered-review/runtime':
         specifier: workspace:*
         version: link:../../packages/runtime
@@ -74,6 +77,9 @@ importers:
       hast-util-to-jsx-runtime:
         specifier: ^2.3.6
         version: 2.3.6(supports-color@10.2.2)
+      hast-util-to-string:
+        specifier: ^3.0.1
+        version: 3.0.1
       nitro:
         specifier: 3.0.260903-beta
         version: 3.0.260903-beta
