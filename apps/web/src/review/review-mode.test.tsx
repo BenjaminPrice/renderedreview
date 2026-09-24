@@ -296,3 +296,47 @@ it("edits and deletes a draft", async () => {
   expect(screen.queryByRole("region", { name: "Draft comment on line 10" })).toBeNull();
   expect((await reviewButton()).textContent).toMatch(/Review\s*0/);
 });
+
+it("turns review drafts GitHub refuses on their diff lines into file comments, keeping them", async () => {
+  renderPage();
+  const { composer } = await commentOn("This interim response indicates", "interim response");
+  await userEvent.type(within(composer).getByRole("textbox", { name: "Comment" }), "Which client?");
+  await userEvent.click(within(composer).getByRole("button", { name: "Add to review" }));
+  const card = await screen.findByRole("region", { name: "Draft comment on line 26" });
+  expect(within(card).getByText("Will post as native review comment")).toBeTruthy();
+
+  const inner = globalThis.fetch;
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    if (!String(input).endsWith("/review")) return inner(input, init);
+    await inner(input, init);
+    const { drafts } = JSON.parse(String(init!.body)) as { drafts: { id: string }[] };
+    const error = { code: "github-rejected", message: "Line could not be resolved", retryAs: "review-file" };
+    return Response.json({ ok: false, results: drafts.map((d) => ({ draftId: d.id, ok: false, error })) });
+  });
+  await userEvent.click(await reviewButton());
+  const dialog = screen.getByRole("dialog", { name: "Submit review" });
+  await userEvent.click(within(dialog).getByRole("button", { name: "Submit review" }));
+
+  expect((await within(dialog).findByRole("alert")).textContent).toMatch(
+    /0 published\. 1 not published:.*line 26: Line could not be resolved\. It is now a file comment; submit again to post it\./,
+  );
+  expect(within(dialog).getByRole("group", { name: /^File comments/ }).textContent).toContain("Which client?");
+  const kept = screen.getByRole("region", { name: "Draft comment on line 26" });
+  expect(within(kept).getByText("Will post as file comment")).toBeTruthy();
+  const [saved] = (await browserCache.get<Draft[]>("drafts", `github.com/${REPO_ID}/45377`))!;
+  expect(saved!.body).toContain("Document: ");
+});
+
+it("asks GitHub for public-repository comment permission when publishing needs it", async () => {
+  renderPage();
+  const { composer } = await commentOn("This interim response indicates", "interim response");
+  await userEvent.type(within(composer).getByRole("textbox", { name: "Comment" }), "Which client?");
+  responses[`${WRITE}/comment`] = new Response(
+    JSON.stringify({ code: "needs-public-authorization", message: "Authorize public comments" }),
+    { status: 403 },
+  );
+  await userEvent.click(within(composer).getByRole("button", { name: "Comment now" }));
+  expect((await within(composer).findByRole("alert")).textContent).toMatch(/permission to comment on public/);
+  await vi.waitFor(() => expect(posted.map((p) => p.url)).toContain("/api/auth/link-social"));
+  expect(posted.find((p) => p.url === "/api/auth/link-social")!.body).toMatchObject({ provider: "github-public" });
+});
