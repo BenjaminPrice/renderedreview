@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Comment bodies as sanitized GitHub Flavored Markdown, rendered to React elements (never HTML strings).
+import { extractAnnotation } from "@rendered-review/annotation-domain";
 import { renderMarkdown, type ResourceOptions } from "@rendered-review/markdown-domain";
 import type { Element, Nodes } from "hast";
 import { toString } from "hast-util-to-string";
@@ -25,10 +26,36 @@ function strip(node: Nodes) {
   if ("children" in node) node.children.forEach(strip);
 }
 
-const isSuggestion = (pre?: Element) => {
+const isCode = (language: string, pre?: Element) => {
   const code = pre?.children[0];
-  return code?.type === "element" && String(code.properties.className ?? "").includes("language-suggestion");
+  return code?.type === "element" && String(code.properties.className ?? "").includes(`language-${language}`);
 };
+
+// The manual-apply line of a Rendered Review proposed change, as rendered text.
+const MANUAL_APPLY =
+  "Suggested change (apply it manually; GitHub cannot apply suggestions outside the pull request diff):";
+
+/**
+ * "L22–24" when `source` carries a Rendered Review suggestion annotation, which makes its `diff`
+ * block a proposed change; otherwise undefined.
+ */
+function proposedChangeLines(source: string): string | undefined {
+  const found = extractAnnotation(source);
+  if (found.status !== "ok" || found.annotation.motivation !== "suggesting") return undefined;
+  const range = found.annotation.target.selectors.find((s) => s.type === "MarkdownSourceRangeSelector");
+  if (!range) return "";
+  // Half-open: ending at column 1 means the previous line was the last one.
+  const end = range.endColumn === 1 && range.endLine > range.startLine ? range.endLine - 1 : range.endLine;
+  return end === range.startLine ? `L${end}` : `L${range.startLine}–${end}`;
+}
+
+/** Removed and added lines of a proposed change's `diff` block; null if any line is neither. */
+function parseChange(text: string): { original: string[]; proposed: string[] } | null {
+  const lines = text.replace(/\n$/, "").split("\n");
+  if (!lines.every((l) => l.startsWith("-") || l.startsWith("+"))) return null;
+  const side = (sign: string) => lines.filter((l) => l.startsWith(sign)).map((l) => l.slice(1));
+  return { original: side("-"), proposed: side("+") };
+}
 
 export function Markdown({
   source,
@@ -45,24 +72,48 @@ export function Markdown({
   const original = suggestion?.original?.join("\n");
   const href = suggestion?.href;
   const content = useMemo(() => {
+    const changeLines = proposedChangeLines(source);
+    const change = (pre?: Element) =>
+      changeLines !== undefined && isCode("diff", pre) ? parseChange(toString(pre!)) : null;
     const { tree } = renderMarkdown(source, options);
     strip(tree);
+    const hasChange = (n: Nodes): boolean =>
+      (n.type === "element" && n.tagName === "pre" && change(n) !== null) ||
+      ("children" in n && n.children.some(hasChange));
+    // The manual-apply line goes when the proposed change it introduces is shown with its own note.
+    const dropManualApply = hasChange(tree);
     return toJsxRuntime(tree, {
       Fragment,
       jsx,
       jsxs,
       passNode: true,
       components: {
-        pre: ({ node, children, ...props }) =>
-          href && isSuggestion(node) ? (
-            <ProposedChange
-              original={original === undefined ? null : original.split("\n")}
-              proposed={toString(node!).replace(/\n$/, "")}
-              href={href}
-            />
-          ) : (
-            <pre {...props}>{children}</pre>
-          ),
+        pre: ({ node, children, ...props }) => {
+          if (href && isCode("suggestion", node))
+            return (
+              <ProposedChange
+                original={original === undefined ? null : original.split("\n")}
+                proposed={toString(node!).replace(/\n$/, "")}
+                href={href}
+              />
+            );
+          const proposed = change(node);
+          if (proposed)
+            // Never an Apply action: GitHub cannot apply it, and the app makes no commits.
+            return (
+              <>
+                <ChangeDiff label="Proposed change" aside={<span>{changeLines}</span>} {...proposed} />
+                <p className="rr-notice">
+                  <span>
+                    Outside this PR's diff, so GitHub can't apply it. <b>Apply manually.</b>
+                  </span>
+                </p>
+              </>
+            );
+          return <pre {...props}>{children}</pre>;
+        },
+        p: ({ node, children, ...props }) =>
+          dropManualApply && toString(node!) === MANUAL_APPLY ? null : <p {...props}>{children}</p>,
         table: ({ children }) => <CommentTable>{children}</CommentTable>,
       },
     });
