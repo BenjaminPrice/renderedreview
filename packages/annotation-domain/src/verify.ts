@@ -9,14 +9,17 @@ const selector = <T extends AnnotationSelector["type"]>(a: RenderedReviewAnnotat
   a.target.selectors.find((s): s is Selector<T> => s.type === type)!;
 
 /**
- * Check an annotation against the blob it references (`source`, rendered as `rendered`): the
- * source range must lie inside the blob, and the quote must be the (normalized) source text at
- * that range, or be rendered by the innermost element enclosing it (inline formatting makes the
- * source differ from the rendered words).
+ * Check an annotation against the blob it references (`source`, rendered as `rendered`):
  *
- * ponytail: the TextPositionSelector is not checked until the selection module defines the
- * document's rendered text; a quote spanning several top-level blocks that is not a verbatim
- * source slice fails.
+ * 1. The source range lies inside the blob.
+ * 2. The text position (0-based UTF-16 offsets into the raw blob, end exclusive) is exactly the
+ *    source range's span.
+ * 3. The quote is the normalized source text of that span, or, when the span covers inline markup
+ *    (`**`, link syntax, escapes), the quote occurs in the normalized rendered text of the innermost
+ *    rendered element whose source range contains the whole span.
+ *
+ * ponytail: a quote spanning several top-level blocks that is not a verbatim source slice has no
+ * enclosing element and fails; compare against `sourceToRendered` runs if that proves too strict.
  */
 export function verifyContent(
   annotation: RenderedReviewAnnotationV1,
@@ -41,6 +44,9 @@ export function verifyContent(
   const from = offset(range.startLine, range.startColumn);
   const to = offset(range.endLine, range.endColumn);
   if (from === undefined || to === undefined) return { ok: false, reason: "The source range is outside the document" };
+  const position = selector(annotation, "TextPositionSelector");
+  if (position.start !== from || position.end !== to)
+    return { ok: false, reason: "The text position does not match the source range" };
   if (normalizeText(source.slice(from, to)) === exact) return { ok: true };
   const enclosing = rendered.nodes.filter((n) => n.range.start.offset <= from && to <= n.range.end.offset).at(-1);
   if (enclosing?.text.includes(exact)) return { ok: true };

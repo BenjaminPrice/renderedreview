@@ -39,7 +39,7 @@ export function annotation(over: Partial<RenderedReviewAnnotationV1> = {}): Rend
           prefix: "The system ",
           suffix: " indefinitely.",
         },
-        { type: "TextPositionSelector", start: 23, end: 46 },
+        { type: "TextPositionSelector", start: 26, end: 49 },
         { type: "MarkdownSourceRangeSelector", startLine: 3, startColumn: 12, endLine: 3, endColumn: 35 },
       ],
     },

@@ -23,6 +23,7 @@ export interface RenderedReviewAnnotationV1 {
 
 export type AnnotationSelector =
   | { type: "TextQuoteSelector"; exact: string; prefix?: string; suffix?: string }
+  /** 0-based UTF-16 offsets into the raw blob source, end exclusive: the source range's span. */
   | { type: "TextPositionSelector"; start: number; end: number }
   | { type: "MarkdownSourceRangeSelector"; startLine: number; startColumn: number; endLine: number; endColumn: number };
 

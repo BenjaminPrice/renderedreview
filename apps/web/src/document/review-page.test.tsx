@@ -799,7 +799,8 @@ function appComment(id: number, over: { pullRequest?: number; blobOid?: string }
       blobOid: over.blobOid ?? HEAD_BLOB,
       selectors: [
         { type: "TextQuoteSelector", exact: "indicates that the client" },
-        { type: "TextPositionSelector", start: 0, end: 25 },
+        // Raw-blob offsets of the same span as the source range.
+        { type: "TextPositionSelector", start: 999, end: 1024 },
         { type: "MarkdownSourceRangeSelector", startLine: 26, startColumn: 29, endLine: 26, endColumn: 54 },
       ],
     },
