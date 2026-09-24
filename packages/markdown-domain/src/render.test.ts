@@ -495,6 +495,21 @@ describe("MDX", () => {
     expect(at(lineOf("Use <Highlight"))).toEqual([starting("paragraph:Use MDX<Highlight")]);
   });
 
+  test("a component's opening and closing tag lines resolve to the tags, not only the whole component", () => {
+    const src = '<Timeline>\n  <Event time="09:12">First.</Event>\n  <Event time="11:40">Second.</Event>\n</Timeline>\n';
+    const d = mdx(src);
+    const lines = (s: number, e = s) => blocksForLines(d, s, e).map((n) => `${n.type}:${n.text}`);
+    expect(lines(1)).toEqual(["mdxJsxTag:<Timeline>"]);
+    expect(lines(4)).toEqual(["mdxJsxTag:</Timeline>"]);
+    expect(lines(3)).toEqual([starting('paragraph:MDX<Event time="09:12">')]);
+    // Every line of an all-new component resolves to a block, so each gets a change marker.
+    expect(lines(1, 4)).toEqual([
+      "mdxJsxTag:<Timeline>",
+      starting('paragraph:MDX<Event time="09:12">'),
+      "mdxJsxTag:</Timeline>",
+    ]);
+  });
+
   test("invalid MDX throws a concise error with its position", () => {
     expect(() => mdx("Bad {expression\n")).toThrow(/^Invalid MDX at line 1, column 16: Unexpected end of file/);
     // Some errors carry their position only in the reason.
