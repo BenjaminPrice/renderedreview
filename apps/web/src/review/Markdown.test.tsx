@@ -54,6 +54,16 @@ describe("comment tables", () => {
     expect(document.activeElement).toBe(expand);
   });
 
+  it("keep Escape inside the dialog from also closing the page's slide-over rail", async () => {
+    const pageEscape = vi.fn();
+    document.addEventListener("keydown", pageEscape);
+    render(<Markdown source={TABLE} />);
+    await userEvent.click(screen.getByRole("button", { name: "Expand table" }));
+    await userEvent.keyboard("{Escape}");
+    document.removeEventListener("keydown", pageEscape);
+    expect(pageEscape).not.toHaveBeenCalled();
+  });
+
   it("each table in a comment has its own expand button", () => {
     render(<Markdown source={`${TABLE}\n\ntext\n\n${TABLE}`} />);
     expect(screen.getAllByRole("button", { name: "Expand table" })).toHaveLength(2);
