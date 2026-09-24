@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import type { Element, Root } from "hast";
 import { toString } from "hast-util-to-string";
+import { visit } from "unist-util-visit";
 import { describe, expect, test } from "vitest";
 import { renderMarkdown, type RenderOptions } from "./render.js";
 import {
@@ -315,6 +316,28 @@ describe("documentText finds rendered text and claims it like a selection", () =
     expect(text).not.toContain("\r");
     expect(src.slice(ok(result).textPosition.start, ok(result).textPosition.end)).toBe("one\r\nline");
     expect(ok(result).exact).toBe("one\nline");
+  });
+
+  test("a claim reads the same amount of the document however long the document is", () => {
+    // Work is counted as reads of text node positions, which every segment examined makes.
+    const work = (paragraphs: number) => {
+      const src = Array.from({ length: paragraphs }, (_, i) => `Paragraph ${i} is here.\n\n`).join("");
+      const doc = renderMarkdown(src);
+      let reads = 0;
+      visit(doc.tree, "text", (node) => {
+        if (node.position)
+          node.position = new Proxy(node.position, {
+            get: (target, key) => (key === "start" && reads++, Reflect.get(target, key)),
+          });
+      });
+      const t = documentText(doc, src);
+      ok(t.select(0, 1)); // the per-document index is built once, up front
+      reads = 0;
+      const at = t.text.indexOf(`Paragraph ${paragraphs / 2} is`);
+      ok(t.select(at, at + 12));
+      return reads;
+    };
+    expect(work(4000)).toBe(work(40));
   });
 
   test("decomposed Unicode is searched in NFC", () => {

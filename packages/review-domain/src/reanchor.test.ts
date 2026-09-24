@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import type { RenderedReviewAnnotationV1 } from "@rendered-review/annotation-domain";
 import { documentText, renderMarkdown, type RenderOptions } from "@rendered-review/markdown-domain";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { reanchor, type ReanchorInput } from "./reanchor.js";
 
 /** A stand-in blob OID that differs whenever the content does. */
@@ -293,18 +293,32 @@ describe("performance", () => {
     expect(reanchor(input)).toBe(reanchor({ ...input, doc: renderMarkdown(after) }));
   });
 
-  test("a large document re-anchors quickly, on both the exact and the fuzzy path", () => {
+  test("a large document re-anchors with bounded work per claim, on both the exact and the fuzzy path", () => {
     const para = (i: number) => `Paragraph ${i} talks about topic ${i % 97} in some detail.\n\n`;
     const before = Array.from({ length: 4000 }, (_, i) => (i % 400 === 0 ? `# Part ${i}\n\n` : para(i))).join("");
     const after = "Preface.\n\n" + before.replace("Paragraph 3210 talks", "Paragraph 3210 speaks");
     const doc = renderMarkdown(after);
+    // Work is counted as reads of text node positions, which every segment examined makes.
+    let reads = 0;
+    const walk = (node: { position?: object; children?: unknown[] }) => {
+      if (node.position)
+        node.position = new Proxy(node.position, {
+          get: (target, key) => (key === "start" && reads++, Reflect.get(target, key)),
+        });
+      node.children?.forEach((c) => walk(c as typeof node));
+    };
+    walk(doc.tree);
+    const text = documentText(doc, after);
+    text.select(0, 1); // the per-document index is built once, up front
+    const claims = vi.spyOn(text, "select");
+    reads = 0;
     const [a, b] = [annotate(before, "topic 9 in"), annotate(before, "Paragraph 3210 talks about")];
-    const t0 = performance.now();
     const exact = reanchor({ annotation: a, blobOid: oid(after), source: after, doc });
     const fuzzy = reanchor({ annotation: b, blobOid: oid(after), source: after, doc });
-    const elapsed = performance.now() - t0;
     expect(exact.state).toBe("moved");
     expect(fuzzy.state).not.toBe("current");
-    expect(elapsed).toBeLessThan(200);
+    // Each claim examines a few segments around it, never the document's thousands.
+    expect(claims.mock.calls.length).toBeGreaterThan(100);
+    expect(reads / claims.mock.calls.length).toBeLessThan(50);
   });
 });
