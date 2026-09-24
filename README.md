@@ -32,18 +32,25 @@ ACCESS_POLICY=disabled
 
 All builds read the same environment variables (`packages/runtime/src/config.ts`). Only what the chosen mode needs is required. Startup reports every problem at once and logs the effective configuration with secrets redacted.
 
-| Variable                                                                                                                   | Required                                                                   |
-| -------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| `HOSTING_MODE` (`hosted`, `dedicated`, `community`)                                                                        | Always                                                                     |
-| `ACCESS_POLICY` (`disabled`, `allowlist`, `installed`, `all-accessible`)                                                   | Defaults to `allowlist` in community, `installed` otherwise                |
-| `ACCESS_ALLOWLIST` (comma-separated `owner` or `owner/repo`)                                                               | When the policy is `allowlist`                                             |
-| `GITHUB_URL`                                                                                                               | Defaults to `https://github.com`; set it to a GitHub Enterprise Server URL |
-| `GITHUB_APP_ID`, `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_APP_WEBHOOK_SECRET` | Hosted and dedicated; community unless the policy is `disabled`            |
-| `GITHUB_OAUTH_CLIENT_ID`, `GITHUB_OAUTH_CLIENT_SECRET`                                                                     | Hosted; optional elsewhere                                                 |
-| `ENCRYPTION_KEY` (`openssl rand -base64 32`)                                                                               | Whenever GitHub credentials are set                                        |
-| `DATABASE_URL` (`postgres://`, `sqlite://`, `file://`)                                                                     | Node build, when GitHub credentials are set or the mode is not `community` |
-| `BILLING_PROVIDER` (`polar`, `stripe`), `BILLING_API_KEY`, `BILLING_WEBHOOK_SECRET`                                        | Hosted only; ignored otherwise                                             |
-| `PORT`                                                                                                                     | Node server listen port (default 3000)                                     |
+| Variable                                                                                                                   | Required                                                                     |
+| -------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `HOSTING_MODE` (`hosted`, `dedicated`, `community`)                                                                        | Always                                                                       |
+| `ACCESS_POLICY` (`disabled`, `allowlist`, `installed`, `all-accessible`)                                                   | Defaults to `allowlist` in community, `installed` otherwise                  |
+| `ACCESS_ALLOWLIST` (comma-separated `owner` or `owner/repo`)                                                               | When the policy is `allowlist`                                               |
+| `GITHUB_URL`                                                                                                               | Defaults to `https://github.com`; set it to a GitHub Enterprise Server URL   |
+| `GITHUB_APP_ID`, `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_APP_WEBHOOK_SECRET` | Hosted and dedicated; community unless the policy is `disabled`              |
+| `GITHUB_OAUTH_CLIENT_ID`, `GITHUB_OAUTH_CLIENT_SECRET`                                                                     | Hosted; optional elsewhere                                                   |
+| `ENCRYPTION_KEY` (`openssl rand -base64 32`)                                                                               | Whenever GitHub credentials are set                                          |
+| `DATABASE_URL` (`postgres://`, `sqlite://`, `file://`)                                                                     | Node build, when GitHub credentials are set or the mode is not `community`   |
+| `BILLING_PROVIDER` (`polar`, `stripe`), `BILLING_API_KEY`, `BILLING_WEBHOOK_SECRET`                                        | Hosted only; ignored otherwise                                               |
+| `PORT`                                                                                                                     | Node server listen port (default 3000)                                       |
+| `GITHUB_PUBLIC_READ_TOKEN`                                                                                                 | Optional, any mode; meant for local development and self-hosting (see below) |
+
+### Public read token
+
+Without sign-in, public pull requests are read anonymously, which GitHub limits to 60 requests an hour per IP address. Set `GITHUB_PUBLIC_READ_TOKEN` to have the server read public repositories with your token instead (5,000 requests an hour). Browsers then send public reads through the server's `/api/github/public/` proxy; the token never leaves the server and is redacted from logs.
+
+Use a [fine-grained token](https://github.com/settings/personal-access-tokens/new) with **Public repositories (read-only)** access, or a classic token with no scopes. The token only goes to the host in `GITHUB_URL`. Because a token may be able to read private repositories, the proxy first checks that each repository is public (cached for a few minutes) and answers "not found" for private, internal or unverifiable repositories.
 
 ## Scripts
 

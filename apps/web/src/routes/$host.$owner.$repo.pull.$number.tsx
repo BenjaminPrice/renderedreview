@@ -21,7 +21,8 @@ import {
 } from "../document/document";
 import { allDocs, changedDocs, selectedPath, sourceUrl } from "../document/docs";
 import { Sidebar } from "../document/Sidebar";
-import { allowedHosts } from "../github/proxy";
+import { preferProxy } from "../github/client";
+import { allowedHosts, proxyFirstHosts } from "../github/proxy";
 import {
   changedFilesQuery,
   issueCommentsQuery,
@@ -46,9 +47,13 @@ import {
 import { AppShell } from "../ui/AppShell";
 import { parsePrParams, validatePrSearch } from "../pr-url";
 
-const getAllowedHosts = createServerFn({ method: "GET" }).handler(({ context }) => allowedHosts(context.config));
+// Never exposes the read token itself, only which host it serves.
+const getAllowedHosts = createServerFn({ method: "GET" }).handler(({ context: { config } }) => ({
+  hosts: allowedHosts(config),
+  proxyFirst: proxyFirstHosts(config),
+}));
 
-/** Deployment config; fetched once per session. */
+/** Deployment config: served GitHub hosts, and hosts to read through the proxy first. Fetched once per session. */
 export const allowedHostsQuery = queryOptions({
   queryKey: ["allowed-hosts"],
   queryFn: () => getAllowedHosts(),
@@ -65,7 +70,8 @@ export const Route = createFileRoute("/$host/$owner/$repo/pull/$number")({
     stringify: (params) => ({ ...params, number: String(params.number) }),
   },
   loader: async ({ params, context }) => {
-    const hosts = await context.queryClient.ensureQueryData(allowedHostsQuery);
+    const { hosts, proxyFirst } = await context.queryClient.ensureQueryData(allowedHostsQuery);
+    proxyFirst.forEach(preferProxy);
     if (!hosts.includes(params.host)) throw notFound({ data: { unsupportedHost: params.host } });
   },
   validateSearch: validatePrSearch,

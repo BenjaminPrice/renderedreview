@@ -129,7 +129,12 @@ async function authScope(authorization: string | undefined): Promise<string> {
   return Array.from(new Uint8Array(digest).slice(0, 16), (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-async function toError(res: Response, url: string, rateLimit: RateLimit | undefined): Promise<GitHubError> {
+async function toError(
+  res: Response,
+  url: string,
+  rateLimit: RateLimit | undefined,
+  rest: boolean,
+): Promise<GitHubError> {
   const requestId = res.headers.get("x-github-request-id") ?? undefined;
   const message: string =
     (await res
@@ -141,9 +146,11 @@ async function toError(res: Response, url: string, rateLimit: RateLimit | undefi
     if (retryAfter !== null) {
       return new RateLimitError(message, res.status, url, requestId, new Date(Date.now() + Number(retryAfter) * 1000));
     }
-    if (rateLimit?.remaining === 0) return new RateLimitError(message, res.status, url, requestId, rateLimit.resetAt);
+    // Only REST reports exhaustion this way: anonymous GraphQL answers 403 with a zero limit.
+    if (rest && rateLimit?.remaining === 0)
+      return new RateLimitError(message, res.status, url, requestId, rateLimit.resetAt);
     // Secondary limits without Retry-After: GitHub asks clients to wait at least a minute.
-    if (/rate limit/i.test(message)) {
+    if (rest && /rate limit/i.test(message)) {
       return new RateLimitError(message, res.status, url, requestId, new Date(Date.now() + 60_000));
     }
   }
@@ -224,7 +231,7 @@ export function createGitHubClient(options: GitHubClientOptions = {}) {
         await retry();
         continue;
       }
-      throw await toError(res, url, rl);
+      throw await toError(res, url, rl, url !== graphqlUrl);
     }
   }
 

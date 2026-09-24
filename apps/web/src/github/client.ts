@@ -4,6 +4,7 @@ import { openBrowserCache } from "@rendered-review/browser-cache";
 import {
   createGitHubClient,
   type GitHubClient,
+  GitHubError,
   NetworkError,
   RateLimitError,
 } from "@rendered-review/github-integration";
@@ -19,6 +20,8 @@ export type FallbackReason = "network" | "rate-limit";
 export function fallbackReason(error: unknown): FallbackReason | undefined {
   // Browsers report CORS rejections as plain network failures; the two are indistinguishable.
   if (error instanceof NetworkError) return "network";
+  // The proxy serves REST only, and a GraphQL limit says nothing about the REST limit.
+  if (error instanceof GitHubError && error.url.endsWith("/graphql")) return undefined;
   if (error instanceof RateLimitError) return "rate-limit";
   return undefined;
 }
@@ -53,6 +56,11 @@ function clientsFor(host: string): HostClients {
     clients.set(host, entry);
   }
   return entry;
+}
+
+/** Sends `host` reads to the proxy first: the server reads it with a token, so it is not rate-limited like anonymous calls. */
+export function preferProxy(host: string) {
+  clientsFor(host).proxyUntil = Infinity;
 }
 
 /** Runs `call` against GitHub directly, retrying through the proxy for fallback-eligible failures. */
