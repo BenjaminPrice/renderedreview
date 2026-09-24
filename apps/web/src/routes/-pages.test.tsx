@@ -9,6 +9,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { routeTree } from "../routeTree.gen";
+import { expectNewTab } from "../test-utils";
 import { allowedHostsQuery } from "./$host.$owner.$repo.pull.$number";
 import { Route as RootRoute } from "./__root";
 
@@ -137,7 +138,9 @@ describe("pull request page states", () => {
     stubGitHub((url) => (responses[url] === undefined ? undefined : json(responses[url])));
     renderApp("/github.com/mdn/content/pull/45377");
     expect(await screen.findByRole("heading", { name: "No Markdown changed in this pull request" })).toBeTruthy();
-    expect(screen.getByRole("link", { name: "review the changes on GitHub" }).getAttribute("href")).toBe(
+    const link = screen.getByRole("link", { name: "review the changes on GitHub (opens in new tab)" });
+    expectNewTab(link);
+    expect(link.getAttribute("href")).toBe(
       "https://github.com/mdn/content/pull/45377/files",
     );
   });

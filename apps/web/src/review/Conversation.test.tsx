@@ -5,6 +5,7 @@ import { conversation } from "@rendered-review/review-domain";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { ConversationPanel, ReviewSummaries } from "./Conversation";
+import { expectNewTab } from "../test-utils";
 import { HEAD, repository } from "./fixtures";
 
 // The link comment the GitHub Action posts: this marker, written by the Actions bot.
@@ -42,6 +43,8 @@ describe("ConversationPanel", () => {
     expect(within(first!).getByText("Inferred location")).toBeTruthy();
     const link = within(first!).getByRole("link", { name: /docs\/guide\.md · L3–L5 @/ });
     expect(link.getAttribute("href")).toBe(`https://github.com/acme/docs/blob/${HEAD}/docs/guide.md#L3-L5`);
+    expectNewTab(link);
+    expectNewTab(within(first!).getByRole("link", { name: "View on GitHub (opens in new tab)" }));
     expect(within(second!).queryByText("Inferred location")).toBeNull();
   });
 
@@ -106,7 +109,9 @@ describe("ReviewSummaries", () => {
     ]);
     expect(within(articles[0]!).getByText("Approved")).toBeTruthy();
     expect(within(articles[0]!).getByText("Ship it")).toBeTruthy();
-    expect(within(articles[0]!).getByRole("link", { name: "View on GitHub" }).getAttribute("href")).toBe(
+    const link = within(articles[0]!).getByRole("link", { name: "View on GitHub (opens in new tab)" });
+    expectNewTab(link);
+    expect(link.getAttribute("href")).toBe(
       "https://github.com/acme/docs/pull/7#pullrequestreview-1",
     );
   });

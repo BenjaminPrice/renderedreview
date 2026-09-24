@@ -4,6 +4,7 @@ import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it } from "vitest";
 import { comment, lineAnchor, OLD, repository, thread } from "./fixtures";
+import { expectNewTab } from "../test-utils";
 import { ThreadCard } from "./ThreadCard";
 
 afterEach(cleanup);
@@ -31,7 +32,9 @@ describe("location labels", () => {
     expect(screen.getByText("Outdated")).toBeTruthy();
     const loc = screen.getByText(/^From/);
     expect(loc.textContent).toBe(`From ${OLD.slice(0, 7)} · L3–L5`);
-    expect(screen.getByRole("link", { name: "View in original" }).getAttribute("href")).toBe(
+    const original = screen.getByRole("link", { name: "View in original (opens in new tab)" });
+    expectNewTab(original);
+    expect(original.getAttribute("href")).toBe(
       `https://github.com/acme/docs/blob/${OLD}/docs/guide.md#L3-L5`,
     );
   });
@@ -39,7 +42,9 @@ describe("location labels", () => {
   it("links every thread to GitHub", () => {
     const root = comment();
     card(thread("t1", lineAnchor(3), "unknown", [root]));
-    expect(screen.getByRole("link", { name: "View on GitHub" }).getAttribute("href")).toBe(root.htmlUrl);
+    const link = screen.getByRole("link", { name: "View on GitHub (opens in new tab)" });
+    expectNewTab(link);
+    expect(link.getAttribute("href")).toBe(root.htmlUrl);
   });
 });
 
@@ -73,7 +78,9 @@ describe("suggestions", () => {
     const change = screen.getByRole("group", { name: "Suggested change" });
     expect(within(change).getByText(/three$/).textContent).toBe("Removed: three");
     expect(within(change).getByText(/THREE$/).textContent).toBe("Added: THREE");
-    expect(within(change).getByRole("link").getAttribute("href")).toBe(c.htmlUrl);
+    const apply = within(change).getByRole("link", { name: "Apply on GitHub (opens in new tab)" });
+    expectNewTab(apply);
+    expect(apply.getAttribute("href")).toBe(c.htmlUrl);
     expect(screen.queryByRole("button", { name: /apply/i })).toBeNull();
   });
 });
