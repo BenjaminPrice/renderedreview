@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import viteReact from "@vitejs/plugin-react";
+import { nitro } from "nitro/vite";
 import { build, defineConfig, type Plugin } from "vite";
 
 // Builds src/sw/sw.ts into /sw.js with the client build's file list inlined. Start allows
@@ -45,6 +46,13 @@ function serviceWorker(): Plugin {
 
 export default defineConfig({
   server: { port: 3000 },
+  // Nitro builds the portable Node server (.output/server/index.mjs, listens on PORT)
+  // and validates configuration at boot.
   // React's plugin must come after Start's plugin.
-  plugins: [tanstackStart(), viteReact(), serviceWorker()],
+  plugins: [
+    tanstackStart(),
+    nitro({ plugins: [fileURLToPath(import.meta.resolve("@rendered-review/runtime-node/startup"))] }),
+    viteReact(),
+    serviceWorker(),
+  ],
 });

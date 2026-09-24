@@ -4,8 +4,17 @@
   "private": true,
   "license": "AGPL-3.0-only",
   "type": "module",
-  "exports": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./startup": "./src/startup.ts"
+  },
   "scripts": {
     "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@rendered-review/runtime": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.6"
   }
 }

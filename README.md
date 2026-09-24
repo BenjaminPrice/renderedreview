@@ -20,16 +20,43 @@ pnpm install
 
 Put local secrets in `.env.local`. It is git-ignored, and `.envrc` loads it automatically. If you don't use direnv, run commands through `devbox shell` or `devbox run -- <cmd>`.
 
+The server refuses to start without a valid configuration. The smallest one is a public-only community instance:
+
+```sh
+# .env.local
+HOSTING_MODE=community
+ACCESS_POLICY=disabled
+```
+
+## Configuration
+
+All builds read the same environment variables (`packages/runtime/src/config.ts`). Only what the chosen mode needs is required. Startup reports every problem at once and logs the effective configuration with secrets redacted.
+
+| Variable                                                                                                                   | Required                                                                   |
+| -------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| `HOSTING_MODE` (`hosted`, `dedicated`, `community`)                                                                        | Always                                                                     |
+| `ACCESS_POLICY` (`disabled`, `allowlist`, `installed`, `all-accessible`)                                                   | Defaults to `allowlist`                                                    |
+| `ACCESS_ALLOWLIST` (comma-separated `owner` or `owner/repo`)                                                               | When the policy is `allowlist`                                             |
+| `GITHUB_URL`                                                                                                               | Defaults to `https://github.com`; set it to a GitHub Enterprise Server URL |
+| `GITHUB_APP_ID`, `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_APP_WEBHOOK_SECRET` | Hosted and dedicated; community unless the policy is `disabled`            |
+| `GITHUB_OAUTH_CLIENT_ID`, `GITHUB_OAUTH_CLIENT_SECRET`                                                                     | Hosted; optional elsewhere                                                 |
+| `ENCRYPTION_KEY` (`openssl rand -base64 32`)                                                                               | Whenever GitHub credentials are set                                        |
+| `DATABASE_URL` (`postgres://`, `sqlite://`, `file://`)                                                                     | Node build, when GitHub credentials are set or the mode is not `community` |
+| `BILLING_PROVIDER` (`polar`, `stripe`), `BILLING_API_KEY`, `BILLING_WEBHOOK_SECRET`                                        | Hosted only; ignored otherwise                                             |
+| `PORT`                                                                                                                     | Node server listen port (default 3000)                                     |
+
 ## Scripts
 
-| Command          | What it does                                     |
-| ---------------- | ------------------------------------------------ |
-| `pnpm dev`       | Start the web app dev server on :3000            |
-| `pnpm build`     | Build every package that has a `build` script    |
-| `pnpm test`      | Run Vitest across all packages                   |
-| `pnpm lint`      | Run ESLint, including the domain boundary rule   |
-| `pnpm typecheck` | Run `tsc --noEmit` at the root and every package |
-| `pnpm format`    | Format with Prettier (CI runs `format:check`)    |
+| Command                                    | What it does                                       |
+| ------------------------------------------ | -------------------------------------------------- |
+| `pnpm dev`                                 | Start the web app dev server on :3000              |
+| `pnpm build`                               | Build every package that has a `build` script      |
+| `pnpm --filter @rendered-review/web start` | Run the built Node server (`/health` for probes)   |
+| `pnpm --filter @rendered-review/web smoke` | Check the built server answers `/health` on `PORT` |
+| `pnpm test`                                | Run Vitest across all packages                     |
+| `pnpm lint`                                | Run ESLint, including the domain boundary rule     |
+| `pnpm typecheck`                           | Run `tsc --noEmit` at the root and every package   |
+| `pnpm format`                              | Format with Prettier (CI runs `format:check`)      |
 
 CI (`.github/workflows/ci.yml`) runs the same commands inside devbox.
 
@@ -44,7 +71,8 @@ packages/annotation-domain      Annotation schemas, encoding, validation
 packages/github-integration     GitHub API client, credential broker, webhooks
 packages/identity               Better Auth, sessions, account linking
 packages/control-plane          Billing, installations, plans, entitlements
-packages/runtime-node           Node HTTP server entry, PostgreSQL/SQLite
+packages/runtime                Runtime adapter interfaces, shared config loader
+packages/runtime-node           Node adapters, startup config check, PostgreSQL/SQLite
 packages/runtime-cloudflare     Worker entry, D1, bindings
 packages/github-action          PR discovery GitHub Action
 ```
@@ -53,7 +81,7 @@ Packages are named `@rendered-review/<dir>`. Each one exports its TypeScript sou
 
 ### Domain boundary
 
-The four `*-domain` packages must run in a browser. They can use Web Platform APIs and narrow interfaces only. Two checks enforce this:
+The four `*-domain` packages and `runtime` must run in a browser. They can use Web Platform APIs and narrow interfaces only. Two checks enforce this:
 
 - `eslint.config.ts` blocks imports of Node built-ins, `cloudflare:*` / `@cloudflare/*`, database drivers, Better Auth, and the runtime, identity and control-plane packages. `eslint.config.test.ts` shows the rule firing.
 - `tsconfig.base.json` sets `"types": []`, so Node globals and dynamic `import("node:*")` calls fail typecheck.

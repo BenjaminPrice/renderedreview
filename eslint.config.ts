@@ -6,7 +6,8 @@ import tseslint from "typescript-eslint";
 
 // Domain packages must stay portable: Web Platform APIs and narrow interfaces only.
 // Runtime adapters supply persistence, secrets and request integration.
-export const domainPackages = ["review-domain", "markdown-domain", "diagram-domain", "annotation-domain"];
+// `runtime` holds the adapter interfaces and config loader shared by the Node and Workers builds.
+export const domainPackages = ["review-domain", "markdown-domain", "diagram-domain", "annotation-domain", "runtime"];
 
 const boundary = "Domain packages must not depend on runtime-specific APIs; inject them through an interface.";
 
