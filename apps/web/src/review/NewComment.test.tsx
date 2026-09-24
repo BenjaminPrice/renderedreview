@@ -8,7 +8,7 @@ import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 import { type PrIdentity, viewerQuery } from "../github/queries";
-import { expectNoSeriousA11yViolations } from "../test-utils";
+import { expectNewTab, expectNoSeriousA11yViolations } from "../test-utils";
 import { authorizePublicComments, signIn } from "../ui/Viewer";
 import { HEAD } from "./fixtures";
 import { NewConversationComment } from "./NewComment";
@@ -123,6 +123,29 @@ it("keeps the text and explains a refusal", async () => {
   expect((await screen.findByRole("alert")).textContent).toBe("GitHub's rate limit was reached. Try again later.");
   expect((box() as HTMLTextAreaElement).value).toBe("Keep me");
   expect(status().textContent).toBe("");
+});
+
+it("explains an organization's third-party app restriction and links to request approval", async () => {
+  const approvalUrl = "https://github.com/settings/connections/applications/Ov23abc";
+  mount(undefined, () =>
+    Response.json(
+      {
+        code: "oauth-org-restricted",
+        message: "The Call-for-Code organization restricts third-party apps",
+        org: "Call-for-Code",
+        approvalUrl,
+      },
+      { status: 403 },
+    ),
+  );
+  await userEvent.type(box(), "Good find!");
+  await userEvent.click(screen.getByRole("button", { name: "Comment" }));
+  const alert = await screen.findByRole("alert");
+  expect(within(alert).getByText("The Call-for-Code organization restricts third-party apps.").tagName).toBe("STRONG");
+  const link = within(alert).getByRole("link", { name: /Request approval/ });
+  expect(link.getAttribute("href")).toBe(approvalUrl);
+  expectNewTab(link);
+  expect((box() as HTMLTextAreaElement).value).toBe("Good find!");
 });
 
 it("asks GitHub for public-repository permission when publishing needs it", async () => {
