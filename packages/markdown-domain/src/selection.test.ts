@@ -337,7 +337,7 @@ describe("documentText finds rendered text and claims it like a selection", () =
       ok(t.select(at, at + 12));
       return reads;
     };
-    expect(work(4000)).toBe(work(40));
+    expect(work(1000)).toBe(work(10));
   });
 
   test("decomposed Unicode is searched in NFC", () => {

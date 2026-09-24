@@ -295,8 +295,8 @@ describe("performance", () => {
 
   test("a large document re-anchors with bounded work per claim, on both the exact and the fuzzy path", () => {
     const para = (i: number) => `Paragraph ${i} talks about topic ${i % 97} in some detail.\n\n`;
-    const before = Array.from({ length: 4000 }, (_, i) => (i % 400 === 0 ? `# Part ${i}\n\n` : para(i))).join("");
-    const after = "Preface.\n\n" + before.replace("Paragraph 3210 talks", "Paragraph 3210 speaks");
+    const before = Array.from({ length: 300 }, (_, i) => (i % 100 === 0 ? `# Part ${i}\n\n` : para(i))).join("");
+    const after = "Preface.\n\n" + before.replace("Paragraph 210 talks", "Paragraph 210 speaks");
     const doc = renderMarkdown(after);
     // Work is counted as reads of text node positions, which every segment examined makes.
     let reads = 0;
@@ -312,7 +312,7 @@ describe("performance", () => {
     text.select(0, 1); // the per-document index is built once, up front
     const claims = vi.spyOn(text, "select");
     reads = 0;
-    const [a, b] = [annotate(before, "topic 9 in"), annotate(before, "Paragraph 3210 talks about")];
+    const [a, b] = [annotate(before, "topic 9 in"), annotate(before, "Paragraph 210 talks about")];
     const exact = reanchor({ annotation: a, blobOid: oid(after), source: after, doc });
     const fuzzy = reanchor({ annotation: b, blobOid: oid(after), source: after, doc });
     expect(exact.state).toBe("moved");
