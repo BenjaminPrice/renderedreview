@@ -47,6 +47,7 @@ export type PublishErrorCode =
   | "annotation-mismatch"
   | "thread-mismatch"
   | "rate-limited"
+  | "oauth-org-restricted"
   | "github-rejected"
   | "github-error";
 
@@ -73,14 +74,27 @@ const refuse = (...args: ConstructorParameters<typeof Refusal>): never => {
 };
 const invalid = (message: string) => refuse(400, "invalid-request", message);
 
-/** A GitHub failure as a typed refusal. `retryAs`: offered when GitHub rejects a native line location. */
-function fromGitHub(error: unknown, representation?: Representation): Refusal {
+const ORG_DOCS = "https://docs.github.com/articles/restricting-access-to-your-organization-s-data/";
+/** GitHub has no error code for it: the phrase is the stable part of its 403 message. */
+const ORG_RESTRICTED = /the `([^`]+)` organization has enabled OAuth App access restrictions/;
+
+/**
+ * A GitHub failure as a typed refusal. `retryAs`: offered when GitHub rejects a native line location.
+ * `approvalUrl`: where users ask an organization to approve the OAuth App.
+ */
+function fromGitHub(error: unknown, approvalUrl?: string, representation?: Representation): Refusal {
   if (!(error instanceof GitHubError)) throw error;
   if (error instanceof RateLimitError)
     return new Refusal(429, "rate-limited", "GitHub's rate limit was reached", {
       resetAt: error.resetAt.toISOString(),
     });
   if (error.status === 401) return new Refusal(401, "reauth", "Sign in with GitHub again");
+  const org = error.status === 403 && ORG_RESTRICTED.exec(error.message)?.[1];
+  if (org)
+    return new Refusal(403, "oauth-org-restricted", `The ${org} organization restricts third-party apps`, {
+      org,
+      approvalUrl: approvalUrl ?? ORG_DOCS,
+    });
   if (error.status >= 400 && error.status < 500) {
     const retry = error.status === 422 && representation === "review-line" && { retryAs: "review-file" };
     return new Refusal(error.status, "github-rejected", error.message, retry || {});
@@ -182,6 +196,8 @@ interface Deps {
   identity: Pick<Identity, "getSessionUser" | "getUserGitHubToken" | "getUserPublicWriteToken"> | undefined;
   installed?: InstallationCheck;
   fetch?: typeof fetch;
+  /** The OAuth App's page on GitHub, where users ask an organization to approve it. */
+  approvalUrl?: string;
 }
 
 interface Target {
@@ -215,7 +231,7 @@ async function connect(t: Target, operation: WriteOperation["operation"], deps: 
     maxRetries: 0,
   });
   const pr = await client.getPullRequest(t.owner, t.repo, t.number).catch((e: unknown) => {
-    throw fromGitHub(e);
+    throw fromGitHub(e, deps.approvalUrl);
   });
   return { client, pr };
 }
@@ -300,9 +316,9 @@ async function submitReview(
       native = { ok: true, reviewId: id };
       for (const d of lines) outcomes.set(d.id, { draftId: d.id, ok: true, reviewId: id });
     } catch (error) {
-      native = { ok: false, error: fromGitHub(error).body };
+      native = { ok: false, error: fromGitHub(error, deps.approvalUrl).body };
       for (const d of lines)
-        outcomes.set(d.id, { draftId: d.id, ok: false, error: fromGitHub(error, "review-line").body });
+        outcomes.set(d.id, { draftId: d.id, ok: false, error: fromGitHub(error, deps.approvalUrl, "review-line").body });
     }
   }
   // One at a time: GitHub asks for serial writes to avoid secondary rate limits.
@@ -312,7 +328,7 @@ async function submitReview(
       const comment = await publishDraft(client, t, d, pr.head.sha);
       outcomes.set(d.id, { draftId: d.id, ok: true, commentId: comment.id, url: comment.htmlUrl });
     } catch (error) {
-      outcomes.set(d.id, { draftId: d.id, ok: false, error: fromGitHub(error, d.representation).body });
+      outcomes.set(d.id, { draftId: d.id, ok: false, error: fromGitHub(error, deps.approvalUrl, d.representation).body });
     }
   }
   const results = review.drafts.map((d) => outcomes.get(d.id)!);
@@ -374,7 +390,7 @@ async function handle(request: Request, deps: Deps): Promise<Result> {
       checkHead(pr, expected);
       checkTarget(d.annotation, t.host, pr);
       const comment = await publishDraft(client, t, d, pr.head.sha).catch((e: unknown) => {
-        throw fromGitHub(e, d.representation);
+        throw fromGitHub(e, deps.approvalUrl, d.representation);
       });
       return { status: 201, body: { comment } };
     }
@@ -388,7 +404,7 @@ async function handle(request: Request, deps: Deps): Promise<Result> {
       const comment = await client
         .replyToReviewComment(t.owner, t.repo, t.number, inReplyTo, body)
         .catch((e: unknown) => {
-          throw fromGitHub(e);
+          throw fromGitHub(e, deps.approvalUrl);
         });
       return { status: 201, body: { comment } };
     }
@@ -406,7 +422,7 @@ async function handle(request: Request, deps: Deps): Promise<Result> {
           refuse(400, "thread-mismatch", "The thread belongs to a different pull request");
         return resolved ? client.resolveReviewThread(id) : client.unresolveReviewThread(id);
       })().catch((e: unknown) => {
-        throw e instanceof Refusal ? e : fromGitHub(e);
+        throw e instanceof Refusal ? e : fromGitHub(e, deps.approvalUrl);
       });
       return { status: 200, body: { thread } };
     }
