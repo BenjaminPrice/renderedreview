@@ -22,6 +22,12 @@ const env = {
   DATABASE_URL: "sqlite::memory:",
 };
 const config = loadConfig(env);
+// With an OAuth App as well: signed-in users may link it to comment on public repositories.
+const publicConfig = loadConfig({
+  ...env,
+  GITHUB_OAUTH_CLIENT_ID: "Ov23.oauth-client",
+  GITHUB_OAUTH_CLIENT_SECRET: "oauth-client-secret",
+});
 const BASE = "https://rr.example";
 const DEEP_LINK = "/github.com/mdn/content/pull/45377?doc=files%2Fen-us%2Findex.md&thread=123#rr-thread-123";
 
@@ -37,6 +43,12 @@ const firstTokens = () => ({
 });
 let tokenReply: (body: URLSearchParams) => object = firstTokens;
 const tokenRequests: URLSearchParams[] = [];
+// The OAuth App's token: classic OAuth App tokens do not expire unless the app opts in.
+const oauthToken = "gho_publicToken1";
+const oauthTokens = () => ({ access_token: oauthToken, token_type: "bearer", scope: "public_repo" });
+let oauthReply: (body: URLSearchParams) => object = oauthTokens;
+// Who the OAuth App token belongs to; a different ID is another GitHub account.
+let oauthUserId = 583231;
 
 beforeAll(() => {
   vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -45,7 +57,15 @@ beforeAll(() => {
     if (request.url === "https://github.com/login/oauth/access_token") {
       const body = new URLSearchParams(await request.text());
       tokenRequests.push(body);
-      return json(tokenReply(body));
+      return json(body.get("client_id") === "Ov23.oauth-client" ? oauthReply(body) : tokenReply(body));
+    }
+    if (request.url === "https://api.github.com/user" && request.headers.get("authorization")?.includes("gho_")) {
+      return json({
+        id: oauthUserId,
+        login: oauthUserId === 583231 ? "octocat" : "someone-else",
+        email: null,
+        avatar_url: "https://avatars.githubusercontent.com/u/1?v=4",
+      });
     }
     if (request.url === "https://api.github.com/user") {
       return json({
@@ -65,6 +85,8 @@ afterAll(() => vi.unstubAllGlobals());
 afterEach(() => {
   tokenRequests.length = 0;
   tokenReply = firstTokens;
+  oauthReply = oauthTokens;
+  oauthUserId = 583231;
   vi.useRealTimers();
 });
 
@@ -246,6 +268,112 @@ describe.each(databases)("GitHub sign-in on %s", (_, open) => {
     expect((await viewer(identity, cookie)).body).not.toBeNull();
     expect((await signOut(BASE)).status).toBe(200);
     expect((await viewer(identity, cookie)).body).toBeNull();
+  });
+
+  describe("commenting on public repositories (OAuth App link)", () => {
+    let pub: Identity;
+    beforeEach(async () => {
+      pub = await createIdentity({ config: publicConfig, db, baseURL: BASE });
+    });
+    const userId = async () => (await db.all<{ id: string }>(`SELECT "id" FROM "user"`))[0]!.id;
+    const startLink = (cookie: string | undefined, provider = "github-public") =>
+      pub.handle(
+        new Request(`${BASE}/api/auth/link-social`, {
+          method: "POST",
+          headers: { origin: BASE, "content-type": "application/json", ...(cookie ? { cookie } : {}) },
+          body: JSON.stringify({ provider, callbackURL: DEEP_LINK }),
+        }),
+      );
+    async function link(cookie: string) {
+      const start = await startLink(cookie);
+      expect(start.status).toBe(200);
+      const { url } = (await start.json()) as { url: string };
+      const state = new URL(url).searchParams.get("state");
+      const callback = await pub.handle(
+        new Request(`${BASE}/api/auth/callback/github-public?code=oauth-code&state=${state}`, {
+          headers: { cookie: [cookie, cookieHeader(start.headers.getSetCookie())].filter(Boolean).join("; ") },
+        }),
+      );
+      return { authorizeUrl: new URL(url), callback };
+    }
+
+    it("authorizes the OAuth App with only public_repo and returns to the exact page", async () => {
+      const { cookie } = await signIn(pub, "/");
+      const { authorizeUrl, callback } = await link(cookie);
+      expect(authorizeUrl.origin + authorizeUrl.pathname).toBe("https://github.com/login/oauth/authorize");
+      expect(authorizeUrl.searchParams.get("client_id")).toBe("Ov23.oauth-client");
+      expect(authorizeUrl.searchParams.get("scope")).toBe("public_repo");
+      expect(authorizeUrl.searchParams.get("redirect_uri")).toBe(`${BASE}/api/auth/callback/github-public`);
+      expect(callback.status).toBe(302);
+      expect(callback.headers.get("location")).toBe(DEEP_LINK);
+      expect(await pub.getUserPublicWriteToken(await userId(), "github.com")).toBe(oauthToken);
+      // The sign-in token is untouched.
+      expect(await pub.getUserGitHubToken(await userId(), "github.com")).toBe(tokens.access);
+    });
+
+    it("stores the OAuth App token only as ciphertext", async () => {
+      const { cookie } = await signIn(pub, "/");
+      await link(cookie);
+      const rows = await db.all<Record<string, string | null>>(`SELECT * FROM "account" WHERE "providerId" = 'github-public'`);
+      expect(rows).toHaveLength(1);
+      expect(JSON.stringify(rows)).not.toContain(oauthToken);
+      expect(await (await createTokenCipher(key)).decrypt(rows[0]!.accessToken!)).toBe(oauthToken);
+    });
+
+    it("refuses to link a different GitHub account than the one signed in", async () => {
+      const { cookie } = await signIn(pub, "/");
+      oauthUserId = 999;
+      const { callback } = await link(cookie);
+      expect(callback.status).toBe(302);
+      expect(callback.headers.get("location")).toMatch(/error=/);
+      expect(await pub.getUserPublicWriteToken(await userId(), "github.com")).toBeNull();
+      expect(await db.all(`SELECT * FROM "account" WHERE "providerId" = 'github-public'`)).toEqual([]);
+    });
+
+    it("needs a signed-in user, and never signs anyone in or up through the OAuth App", async () => {
+      expect((await startLink(undefined)).status).toBe(401);
+      const signInPublic = await pub.handle(
+        new Request(`${BASE}/api/auth/sign-in/social`, {
+          method: "POST",
+          headers: { origin: BASE, "content-type": "application/json" },
+          body: JSON.stringify({ provider: "github-public", callbackURL: "/" }),
+        }),
+      );
+      expect(signInPublic.status).toBe(404);
+      // Linking is only for the OAuth App: no second GitHub App account.
+      const { cookie } = await signIn(pub, "/");
+      expect((await startLink(cookie, "github")).status).toBe(404);
+    });
+
+    it("tells the viewer whether public commenting is linked, only when the OAuth App is configured", async () => {
+      const { cookie } = await signIn(pub, "/");
+      expect((await viewer(pub, cookie)).body).toMatchObject({ publicComments: "unlinked" });
+      await link(cookie);
+      expect((await viewer(pub, cookie)).body).toMatchObject({ publicComments: "linked" });
+      expect((await viewer(identity, cookie)).body).not.toHaveProperty("publicComments");
+    });
+
+    it("has no public write token without the OAuth App configured or linked", async () => {
+      await signIn(pub, "/");
+      expect(await pub.getUserPublicWriteToken(await userId(), "github.com")).toBeNull();
+      expect(await identity.getUserPublicWriteToken(await userId(), "github.com")).toBeNull();
+    });
+
+    it("refreshes an expiring OAuth App token with the OAuth App's own client", async () => {
+      oauthReply = () => ({ access_token: oauthToken, expires_in: 28800, refresh_token: "ghr_publicRefresh1" });
+      const { cookie } = await signIn(pub, "/");
+      await link(cookie);
+      vi.useFakeTimers({ now: Date.now() + 28800 * 1000, toFake: ["Date"] });
+      tokenRequests.length = 0;
+      oauthReply = () => ({ access_token: "gho_publicToken2", expires_in: 28800, refresh_token: "ghr_publicRefresh2" });
+      expect(await pub.getUserPublicWriteToken(await userId(), "github.com")).toBe("gho_publicToken2");
+      expect(Object.fromEntries(tokenRequests[0]!)).toMatchObject({
+        grant_type: "refresh_token",
+        refresh_token: "ghr_publicRefresh1",
+        client_id: "Ov23.oauth-client",
+        client_secret: "oauth-client-secret",
+      });
+    });
   });
 
   describe("getUserGitHubToken", () => {
