@@ -3,14 +3,20 @@
 // the documents-with-comments rail beside it, and the toolbar breadcrumbs of both views.
 import type { Actor, PullRequest, Review } from "@rendered-review/github-integration";
 import type { ResourceOptions } from "@rendered-review/markdown-domain";
-import type { InferredLocation, NativeThread, RepositoryRef, TimelineItem } from "@rendered-review/review-domain";
+import {
+  anchorLines,
+  type InferredLocation,
+  type NativeThread,
+  type RepositoryRef,
+  type TimelineItem,
+} from "@rendered-review/review-domain";
 import { Link } from "@tanstack/react-router";
 import { useEffect, useMemo } from "react";
 import type { PrIdentity } from "../github/queries";
 import { isMarkdownPath } from "../pr-url";
 import { filterCounts, Markdown, THREAD_STATES } from "../review";
 import { blobUrl, relativeTime } from "../review/model";
-import { Badge, initials, ReviewIcon, type ReviewIconName } from "../review/ThreadCard";
+import { Badge, initials, MetadataNotice, ReviewIcon, type ReviewIconName } from "../review/ThreadCard";
 import { Icon } from "../ui/AppShell";
 import { ExternalLink } from "../ui/ExternalLink";
 import { inAppDocLink, useInAppLinks } from "./document";
@@ -195,7 +201,7 @@ function CommentItem({
   item: Extract<TimelineItem, { kind: "comment" }>;
   repository: RepositoryRef;
 }) {
-  const { comment, inferred } = entry;
+  const { comment, inferred, metadata } = entry;
   const who = comment.author?.login ?? "ghost";
   return (
     <li id={commentDomId(comment.id)} className="rr-tl-item" tabIndex={-1} aria-label={`${who} commented`}>
@@ -210,6 +216,9 @@ function CommentItem({
             <span title="Location inferred from a GitHub permalink in the comment">
               <Badge tone="neutral">Inferred location</Badge>
             </span>
+          )}
+          {(metadata?.state === "damaged" || metadata?.state === "unsupported") && (
+            <MetadataNotice state={metadata.state} reason={metadata.reason} />
           )}
           <span className="rr-spacer" />
           <ExternalLink className="rr-btn rr-btn-sm rr-btn-ghost" href={comment.htmlUrl}>
@@ -241,7 +250,8 @@ export const REVIEW_STATE: Record<
 };
 
 function threadLabel(t: NativeThread) {
-  return t.anchor.type === "file" ? "file" : lines(t.anchor);
+  const range = anchorLines(t.anchor);
+  return range ? lines(range) : "file";
 }
 
 function ReviewItem({ item: { review, threads, at } }: { item: Extract<TimelineItem, { kind: "review" }> }) {
