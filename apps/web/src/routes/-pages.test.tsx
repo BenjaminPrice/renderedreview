@@ -78,6 +78,14 @@ describe("home page", () => {
     await vi.waitFor(() => expect(router.state.location.pathname).toBe(`/${GHES}/team/handbook/pull/12`));
   });
 
+  it("shows no document sidebar or comment rail", async () => {
+    renderApp("/");
+    await screen.findByLabelText("GitHub pull request URL");
+    expect(screen.queryByRole("navigation", { name: "Documents" })).toBeNull();
+    expect(screen.queryByRole("complementary", { name: /Comments/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Comments/ })).toBeNull();
+  });
+
   it("explains an invalid link and stays put", async () => {
     const router = await submit("https://gitlab.com/o/r/-/merge_requests/1");
     const error = screen.getByText("That is not a GitHub pull request URL.");
