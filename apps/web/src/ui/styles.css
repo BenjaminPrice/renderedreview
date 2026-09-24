@@ -102,6 +102,10 @@ a {
 a:hover {
   text-decoration: underline;
 }
+/* Links in running text: colour alone does not set them apart from it (WCAG 1.4.1). */
+p a:not(.rr-btn) {
+  text-decoration: underline;
+}
 button {
   font: inherit;
   color: inherit;
