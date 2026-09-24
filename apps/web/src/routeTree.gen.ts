@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as HealthRouteImport } from './routes/health'
+import { Route as FramesMermaidRouteImport } from './routes/frames.mermaid'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiGithubPublicSplatRouteImport } from './routes/api/github/public/$'
 import { Route as ApiGithubUserSplatRouteImport } from './routes/api/github/user/$'
@@ -24,6 +25,11 @@ const IndexRoute = IndexRouteImport.update({
 const HealthRoute = HealthRouteImport.update({
   id: '/health',
   path: '/health',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FramesMermaidRoute = FramesMermaidRouteImport.update({
+  id: '/frames/mermaid',
+  path: '/frames/mermaid',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
@@ -50,6 +56,7 @@ const HostOwnerRepoPullNumberRoute = HostOwnerRepoPullNumberRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/health': typeof HealthRoute
+  '/frames/mermaid': typeof FramesMermaidRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/github/public/$': typeof ApiGithubPublicSplatRoute
   '/api/github/user/$': typeof ApiGithubUserSplatRoute
@@ -58,6 +65,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/health': typeof HealthRoute
+  '/frames/mermaid': typeof FramesMermaidRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/github/public/$': typeof ApiGithubPublicSplatRoute
   '/api/github/user/$': typeof ApiGithubUserSplatRoute
@@ -67,6 +75,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/health': typeof HealthRoute
+  '/frames/mermaid': typeof FramesMermaidRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/github/public/$': typeof ApiGithubPublicSplatRoute
   '/api/github/user/$': typeof ApiGithubUserSplatRoute
@@ -77,6 +86,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/health'
+    | '/frames/mermaid'
     | '/api/auth/$'
     | '/api/github/public/$'
     | '/api/github/user/$'
@@ -85,6 +95,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/health'
+    | '/frames/mermaid'
     | '/api/auth/$'
     | '/api/github/public/$'
     | '/api/github/user/$'
@@ -93,6 +104,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/health'
+    | '/frames/mermaid'
     | '/api/auth/$'
     | '/api/github/public/$'
     | '/api/github/user/$'
@@ -102,6 +114,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   HealthRoute: typeof HealthRoute
+  FramesMermaidRoute: typeof FramesMermaidRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiGithubPublicSplatRoute: typeof ApiGithubPublicSplatRoute
   ApiGithubUserSplatRoute: typeof ApiGithubUserSplatRoute
@@ -122,6 +135,13 @@ declare module '@tanstack/react-router' {
       path: '/health'
       fullPath: '/health'
       preLoaderRoute: typeof HealthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/frames/mermaid': {
+      id: '/frames/mermaid'
+      path: '/frames/mermaid'
+      fullPath: '/frames/mermaid'
+      preLoaderRoute: typeof FramesMermaidRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/auth/$': {
@@ -158,6 +178,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   HealthRoute: HealthRoute,
+  FramesMermaidRoute: FramesMermaidRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiGithubPublicSplatRoute: ApiGithubPublicSplatRoute,
   ApiGithubUserSplatRoute: ApiGithubUserSplatRoute,
