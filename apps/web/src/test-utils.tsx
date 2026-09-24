@@ -46,3 +46,30 @@ export async function expectNoSeriousA11yViolations(root: Element = document.bod
   expect(serious.map((v) => `${v.id}: ${v.help} (${v.nodes.map((n) => n.target.join(" ")).join(", ")})`)).toEqual([]);
 }
 
+/**
+ * Stand-in for `Selection.modify`, which browsers have and the test DOMs lack: extends forward or
+ * backward by one character through the document's text. Other granularities are not needed here.
+ */
+export function stubSelectionModify() {
+  Selection.prototype.modify = function (this: Selection, _alter, direction) {
+    const texts: Text[] = [];
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) texts.push(walker.currentNode as Text);
+    const focus = this.focusNode!;
+    // A boundary between nodes resolves to the next text at or after it.
+    let i = texts.indexOf(focus as Text);
+    let offset = this.focusOffset;
+    if (i < 0) {
+      const after = focus.childNodes[offset] ?? focus;
+      i = texts.findIndex(
+        (t) =>
+          after === t || after.contains(t) || !!(after.compareDocumentPosition(t) & Node.DOCUMENT_POSITION_FOLLOWING),
+      );
+      offset = 0;
+    }
+    const forward = direction === "forward";
+    if (forward && offset >= texts[i]!.length) [i, offset] = [i + 1, 0];
+    if (!forward && offset === 0) [i, offset] = [i - 1, texts[i - 1]!.length];
+    this.extend(texts[i]!, offset + (forward ? 1 : -1));
+  };
+}

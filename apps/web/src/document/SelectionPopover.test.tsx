@@ -7,8 +7,11 @@ import userEvent from "@testing-library/user-event";
 import { toJsxRuntime } from "hast-util-to-jsx-runtime";
 import { useState } from "react";
 import { Fragment, jsx, jsxs } from "react/jsx-runtime";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, expect, it, vi } from "vitest";
+import { stubSelectionModify } from "../test-utils";
 import { SelectionPopover } from "./SelectionPopover";
+
+beforeAll(stubSelectionModify);
 
 afterEach(() => {
   cleanup();
@@ -22,7 +25,9 @@ function mount(source: string) {
     const [article, setArticle] = useState<HTMLElement | null>(null);
     return (
       <>
-        <article ref={setArticle}>{toJsxRuntime(rendered.tree, { Fragment, jsx, jsxs })}</article>
+        <article ref={setArticle} tabIndex={0}>
+          {toJsxRuntime(rendered.tree, { Fragment, jsx, jsxs })}
+        </article>
         <SelectionPopover article={article} rendered={rendered} source={source} onCompose={onCompose} />
       </>
     );
@@ -68,6 +73,7 @@ it("appears after a keyboard selection; C composes and Escape dismisses", async 
   await userEvent.keyboard("{Escape}");
   expect(toolbar()).toBeNull();
 
+  selectText(article, "brave");
   fireEvent.keyUp(article, { key: "ArrowRight", shiftKey: true });
   // Copying keeps working: modified keys are not shortcuts.
   await userEvent.keyboard("{Meta>}c{/Meta}");
@@ -116,4 +122,52 @@ it("stays hidden for collapsed selections", () => {
   document.getSelection()!.setBaseAndExtent(text, 3, text, 3);
   fireEvent.mouseUp(article);
   expect(toolbar()).toBeNull();
+});
+
+it("starts a selection at the focused element with Shift+arrows, and extends it", async () => {
+  const { article, onCompose } = mount("Hello [brave](https://example.com) new world.\n");
+  article.querySelector("a")!.focus();
+  await userEvent.keyboard("{Shift>}{ArrowRight}{ArrowRight}{ArrowRight}{ArrowRight}{ArrowLeft}{/Shift}");
+  expect(document.getSelection()!.toString()).toBe("bra");
+  expect(toolbar()).toBeTruthy();
+  await userEvent.keyboard("c");
+  expect(onCompose).toHaveBeenCalledWith(expect.objectContaining({ exact: "bra" }));
+});
+
+it("starts at the first block in view when the document itself has focus", async () => {
+  const { article } = mount("First para.\n\nSecond para.\n");
+  // The first paragraph is scrolled out of view above.
+  vi.spyOn(article.querySelector("p")!, "getBoundingClientRect").mockReturnValue(new DOMRect(0, -40, 100, 20));
+  article.focus();
+  await userEvent.keyboard("{Shift>}{ArrowRight}{ArrowRight}{/Shift}");
+  expect(document.getSelection()!.toString()).toBe("Se");
+});
+
+it("leaves Shift+arrows alone in form fields", async () => {
+  mount("Hello brave new world.\n");
+  const input = document.createElement("input");
+  document.querySelector("article")!.append(input);
+  input.focus();
+  await userEvent.keyboard("{Shift>}{ArrowRight}{/Shift}");
+  expect(document.getSelection()!.toString()).toBe("");
+});
+
+it("Escape collapses the selection to where it ends, so Shift+arrows can start a new one there", async () => {
+  const { article, onCompose } = mount("Hello brave new world.\n");
+  article.focus();
+  await userEvent.keyboard("{Shift>}{ArrowRight}{ArrowRight}{ArrowRight}{ArrowRight}{ArrowRight}{ArrowRight}{/Shift}");
+  expect(document.getSelection()!.toString()).toBe("Hello ");
+  await userEvent.keyboard("{Escape}");
+  expect(toolbar()).toBeNull();
+  await userEvent.keyboard("{Shift>}{ArrowRight}{ArrowRight}{ArrowRight}{ArrowRight}{ArrowRight}{/Shift}");
+  expect(document.getSelection()!.toString()).toBe("brave");
+  await userEvent.keyboard("c");
+  expect(onCompose).toHaveBeenCalledWith(expect.objectContaining({ exact: "brave" }));
+});
+
+it("starts after the front matter, which cannot be commented on", async () => {
+  const { article } = mount("---\ntitle: Hello\n---\n\nBody text.\n");
+  article.focus();
+  await userEvent.keyboard("{Shift>}{ArrowRight}{ArrowRight}{/Shift}");
+  expect(document.getSelection()!.toString()).toBe("Bo");
 });
