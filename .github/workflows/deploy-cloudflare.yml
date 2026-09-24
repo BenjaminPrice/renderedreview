@@ -1,0 +1,48 @@
+name: Deploy to Cloudflare
+
+# Manual only. Requires the CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID secrets on the chosen
+# GitHub environment, and real D1 database IDs in apps/web/wrangler.jsonc. See docs/deploy-cloudflare.md.
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Cloudflare environment
+        type: choice
+        options: [preview, production]
+        default: preview
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-cloudflare-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    # Production deploys only from main.
+    if: inputs.environment != 'production' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    env:
+      # Selects the wrangler.jsonc environment at build time; the build output is already flattened
+      # for it, so later wrangler commands take no --env flag.
+      CLOUDFLARE_ENV: ${{ inputs.environment }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      WRANGLER_SEND_METRICS: "false"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: jetify-com/devbox-install-action@8c6a66ed6273138b1915457069de78cb52fe3bd7 # v0.15.0
+        with:
+          devbox-version: 0.17.2
+          enable-cache: true
+      - run: devbox run -- pnpm install --frozen-lockfile
+      - run: devbox run -- pnpm test
+      - run: devbox run -- pnpm --filter @rendered-review/web build:workers
+      # Skipped until the control-plane schema ships D1 migrations.
+      - name: Apply D1 migrations
+        if: hashFiles('apps/web/migrations/*.sql') != ''
+        run: devbox run -- sh -c 'cd apps/web && pnpm exec wrangler d1 migrations apply DB --remote'
+      - name: Deploy
+        run: devbox run -- sh -c 'cd apps/web && pnpm exec wrangler deploy'

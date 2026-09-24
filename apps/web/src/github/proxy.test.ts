@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
+import { loadConfig } from "@rendered-review/runtime";
 import { describe, expect, it, vi } from "vitest";
-import { proxyPublicGitHub } from "./proxy";
+import { allowedHosts, proxyPublicGitHub } from "./proxy";
 
 const OID = "a".repeat(40);
 const origin = "https://app.example";
@@ -8,9 +9,20 @@ const origin = "https://app.example";
 function setup(response = new Response("{}", { status: 200, headers: { etag: '"e"', "set-cookie": "x=1" } })) {
   const fetch = vi.fn<typeof globalThis.fetch>(async () => response.clone());
   const call = (path: string, init?: RequestInit) =>
-    proxyPublicGitHub(new Request(`${origin}/api/github/public/${path}`, init), { fetch });
+    proxyPublicGitHub(new Request(`${origin}/api/github/public/${path}`, init), {
+      allowedHosts: ["github.com", "ghe.example.com:8443"],
+      fetch,
+    });
   return { fetch, call };
 }
+
+describe("allowedHosts", () => {
+  const hosts = (GITHUB_URL?: string) =>
+    allowedHosts(loadConfig({ HOSTING_MODE: "community", ACCESS_POLICY: "disabled", GITHUB_URL }));
+  it("always allows github.com", () => expect(hosts()).toEqual(["github.com"]));
+  it("adds the configured Enterprise Server host", () =>
+    expect(hosts("https://GHE.example.com:8443/")).toEqual(["github.com", "ghe.example.com:8443"]));
+});
 
 describe("proxyPublicGitHub", () => {
   it.each([
@@ -50,6 +62,7 @@ describe("proxyPublicGitHub", () => {
     "github.com/repos/acme/widgets/pulls/1/files/../../../../user",
     "github.com/graphql",
     "evil.example.com/repos/acme/widgets/pulls/1",
+    "ghe.example.com/repos/acme/widgets/pulls/1",
     "api.github.com/repos/acme/widgets/pulls/1",
     "github.com",
   ])("rejects %s", async (path) => {
@@ -58,6 +71,12 @@ describe("proxyPublicGitHub", () => {
     expect(res.status).toBe(403);
     expect(res.headers.get("cache-control")).toBe("no-store");
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("forwards to an allowed Enterprise Server host", async () => {
+    const { fetch, call } = setup();
+    expect((await call("ghe.example.com:8443/repos/acme/widgets/pulls/1")).status).toBe(200);
+    expect(fetch.mock.calls[0]![0]).toBe("https://ghe.example.com:8443/api/v3/repos/acme/widgets/pulls/1");
   });
 
   it.each(["POST", "PUT", "PATCH", "DELETE"])("rejects %s", async (method) => {

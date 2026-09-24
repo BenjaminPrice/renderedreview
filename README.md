@@ -47,18 +47,23 @@ All builds read the same environment variables (`packages/runtime/src/config.ts`
 
 ## Scripts
 
-| Command                                    | What it does                                       |
-| ------------------------------------------ | -------------------------------------------------- |
-| `pnpm dev`                                 | Start the web app dev server on :3000              |
-| `pnpm build`                               | Build every package that has a `build` script      |
-| `pnpm --filter @rendered-review/web start` | Run the built Node server (`/health` for probes)   |
-| `pnpm --filter @rendered-review/web smoke` | Check the built server answers `/health` on `PORT` |
-| `pnpm test`                                | Run Vitest across all packages                     |
-| `pnpm lint`                                | Run ESLint, including the domain boundary rule     |
-| `pnpm typecheck`                           | Run `tsc --noEmit` at the root and every package   |
-| `pnpm format`                              | Format with Prettier (CI runs `format:check`)      |
+| Command                                            | What it does                                                    |
+| -------------------------------------------------- | --------------------------------------------------------------- |
+| `pnpm dev`                                         | Start the web app dev server on :3000                           |
+| `pnpm build`                                       | Build every package that has a `build` script                   |
+| `pnpm --filter @rendered-review/web start`         | Run the built Node server (`/health` for probes)                |
+| `pnpm --filter @rendered-review/web smoke`         | Check the built server answers `/health` on `PORT`              |
+| `pnpm --filter @rendered-review/web dev:workers`   | Dev server running the app in local workerd                     |
+| `pnpm --filter @rendered-review/web build:workers` | Build the Cloudflare Worker (`apps/web/dist`)                   |
+| `pnpm --filter @rendered-review/web smoke:workers` | Serve the built Worker with `wrangler dev` and check its routes |
+| `pnpm test`                                        | Run Vitest across all packages                                  |
+| `pnpm lint`                                        | Run ESLint, including the domain boundary rule                  |
+| `pnpm typecheck`                                   | Run `tsc --noEmit` at the root and every package                |
+| `pnpm format`                                      | Format with Prettier (CI runs `format:check`)                   |
 
 CI (`.github/workflows/ci.yml`) runs the same commands inside devbox.
+
+On Cloudflare Workers, configuration comes from `vars` and secrets in `apps/web/wrangler.jsonc` instead of the process environment, and the database is the D1 binding `DB` rather than `DATABASE_URL`. Deploying and rolling back: [docs/deploy-cloudflare.md](docs/deploy-cloudflare.md).
 
 ## Repository layout
 
@@ -73,7 +78,7 @@ packages/identity               Better Auth, sessions, account linking
 packages/control-plane          Billing, installations, plans, entitlements
 packages/runtime                Runtime adapter interfaces, shared config loader
 packages/runtime-node           Node adapters, startup config check, PostgreSQL/SQLite
-packages/runtime-cloudflare     Worker entry, D1, bindings
+packages/runtime-cloudflare     Workers adapters: bindings, D1, waitUntil
 packages/github-action          PR discovery GitHub Action
 ```
 

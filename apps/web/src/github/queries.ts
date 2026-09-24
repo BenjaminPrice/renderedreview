@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // TanStack Query options for public PR data. Use with `useQuery`, `useSuspenseQuery` or
 // `queryClient.ensureQueryData` in loaders.
+import { objectKey } from "@rendered-review/browser-cache";
 import type { PullRequest } from "@rendered-review/github-integration";
 import { queryOptions } from "@tanstack/react-query";
 import type { PrParams } from "../pr-url";
-import { withPublicGitHub } from "./client";
+import { browserCache, withPublicGitHub } from "./client";
 
 /** Mutable PR data: refetched (with ETag revalidation) once this old. */
 const PR_STALE_MS = 30_000;
@@ -78,11 +79,25 @@ export const issueCommentsQuery = (id: PrIdentity) =>
     staleTime: PR_STALE_MS,
   });
 
+/** Immutable content by OID: served from the browser's object store, fetched and stored on a miss. */
+async function immutable<T>(id: PrIdentity, key: string, fetchFn: () => Promise<T>): Promise<T> {
+  const cacheKey = objectKey(id.host, id.repositoryId, key);
+  const hit = await browserCache.get<T>("objects", cacheKey);
+  if (hit !== undefined) return hit;
+  const value = await fetchFn();
+  await browserCache.set("objects", cacheKey, value, { private: false });
+  return value;
+}
+
 /** Recursive tree at a commit or tree OID (e.g. `id.headSha`). Immutable. */
 export const treeQuery = (id: PrIdentity, oid: string) =>
   queryOptions({
     queryKey: ["github", id.host, id.repositoryId, "tree", oid],
-    queryFn: () => withPublicGitHub(id.host, (c) => c.getTree(id.owner, id.repo, oid, { recursive: true })),
+    // Keyed apart from blobs: a commit OID resolves to a tree here, not to the commit object.
+    queryFn: () =>
+      immutable(id, `tree:${oid}`, () =>
+        withPublicGitHub(id.host, (c) => c.getTree(id.owner, id.repo, oid, { recursive: true })),
+      ),
     staleTime: Infinity,
   });
 
@@ -90,6 +105,6 @@ export const treeQuery = (id: PrIdentity, oid: string) =>
 export const blobQuery = (id: PrIdentity, oid: string) =>
   queryOptions({
     queryKey: ["github", id.host, id.repositoryId, "blob", oid],
-    queryFn: () => withPublicGitHub(id.host, (c) => c.getBlob(id.owner, id.repo, oid)),
+    queryFn: () => immutable(id, oid, () => withPublicGitHub(id.host, (c) => c.getBlob(id.owner, id.repo, oid))),
     staleTime: Infinity,
   });

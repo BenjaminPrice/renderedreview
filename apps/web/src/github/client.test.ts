@@ -80,6 +80,18 @@ describe("withPublicGitHub", () => {
     expect(info).toHaveBeenCalledExactlyOnceWith("github public fallback: rate-limit");
   });
 
+  it("revalidates through the shared response cache", async () => {
+    let calls = 0;
+    const { urls } = stubFetch(() =>
+      calls++ ? new Response(null, { status: 304 }) : Response.json(TREE, { headers: { etag: '"t"' } }),
+    );
+    expect(await getTree("etag.example.com")).toBe("ok");
+    expect(await getTree("etag.example.com")).toBe("ok");
+    expect(urls()).toHaveLength(2);
+    const fetch = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+    expect(new Headers(fetch.mock.calls[1]![1].headers).get("if-none-match")).toBe('"t"');
+  });
+
   it("does not fall back on 404", async () => {
     const { urls } = stubFetch(() => Response.json({ message: "Not Found" }, { status: 404 }));
     expect(await getTree("missing.example.com")).toBeInstanceOf(NotFoundError);

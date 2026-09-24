@@ -41,10 +41,19 @@ describe("parsePrParams", () => {
   const raw = { host: "github.com", owner: "acme", repo: "widgets", number: "123" };
 
   it("accepts a valid deep link", () => expect(parsePrParams(raw)).toEqual(pr));
+  it.each(["ghe.example.com:1", "ghe.example.com:8443", "ghe.example.com:65535"])("accepts port in %s", (host) =>
+    expect(parsePrParams({ ...raw, host })?.host).toBe(host),
+  );
   it("lowercases the host", () => expect(parsePrParams({ ...raw, host: "GitHub.com" })?.host).toBe("github.com"));
   it.each([
     { host: "github" },
     { host: "git hub.com" },
+    { host: "ghe.example.com:0" },
+    { host: "ghe.example.com:65536" },
+    { host: "ghe.example.com:99999" },
+    { host: "ghe.example.com:0443" },
+    { host: "ghe.example.com:" },
+    { host: "ghe.example.com:1:2" },
     { owner: ".." },
     { repo: "." },
     { repo: "a/b" },

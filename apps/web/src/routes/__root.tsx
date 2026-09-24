@@ -2,6 +2,8 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { createRootRouteWithContext, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
 import { useEffect } from "react";
+import { PREFS_SCRIPT } from "../ui/prefs";
+import styles from "../ui/styles.css?url";
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
   head: () => ({
@@ -10,6 +12,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: "Rendered Review" },
     ],
+    links: [{ rel: "stylesheet", href: styles }],
   }),
   component: RootComponent,
 });
@@ -24,8 +27,10 @@ function RootComponent() {
     }
   }, []);
   return (
-    <html lang="en">
+    // The pre-paint script sets data-theme / data-rail on <html> before React hydrates.
+    <html lang="en" suppressHydrationWarning>
       <head>
+        <script dangerouslySetInnerHTML={{ __html: PREFS_SCRIPT }} />
         <HeadContent />
       </head>
       <body>
