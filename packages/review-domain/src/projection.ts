@@ -4,7 +4,11 @@
 //
 // Application comments stored as PR conversation comments are rebuilt into threads (./threads.ts)
 // and classified by their annotation metadata (./classify.ts).
-import { type RenderedReviewAnnotationV1, verifyContent } from "@rendered-review/annotation-domain";
+import {
+  type RenderedReviewAnnotationV1,
+  stripRedundantContext,
+  verifyContent,
+} from "@rendered-review/annotation-domain";
 import { ACTIONS_BOT, MARKER } from "@rendered-review/github-action";
 import type { Actor, IssueComment, Review, ReviewComment, ReviewThread } from "@rendered-review/github-integration";
 import { blocksForLines, type RenderedMarkdown, type SourceNode } from "@rendered-review/markdown-domain";
@@ -319,6 +323,18 @@ export function placeThreads(
         },
       };
     });
+}
+
+/**
+ * Body to show for a thread comment. The quote and permalink repeat what the highlight shows, so
+ * they are hidden, but only when the thread's anchor was verified against the document (`verified`,
+ * i.e. its placement has a `range`) and the comment's own validated annotation names that same target.
+ */
+export function displayBody(thread: NativeThread, comment: ThreadComment, verified: boolean): string {
+  const anchor = thread.anchor.type === "annotation" ? thread.anchor.annotation : undefined;
+  const own = thread.metadata?.[comment.id]?.annotation;
+  const same = !!anchor && !!own && JSON.stringify(own.target) === JSON.stringify(anchor.target);
+  return own ? stripRedundantContext(comment.body, own, verified && same) : comment.body;
 }
 
 export function reviewSummaries(reviews: Review[]): Review[] {

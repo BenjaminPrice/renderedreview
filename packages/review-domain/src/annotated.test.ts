@@ -4,7 +4,7 @@ import { composeCommentBody, type RenderedReviewAnnotationV1 } from "@rendered-r
 import { renderMarkdown } from "@rendered-review/markdown-domain";
 import { describe, expect, it } from "vitest";
 import { annotation, at, BLOB, context, DOC, issueComment, OLD_BLOB, reviewComment, target } from "./fixtures.js";
-import { anchorLines, type NativeThread, placeThreads, projectReview } from "./projection.js";
+import { anchorLines, displayBody, type NativeThread, placeThreads, projectReview } from "./projection.js";
 
 const body = (a: RenderedReviewAnnotationV1, text = "Should this define a retry limit?") =>
   composeCommentBody({ annotation: a, comment: text, location: "conversation" });
@@ -135,5 +135,38 @@ describe("placeThreads with annotations", () => {
     );
     // A range ending at column 1 does not include that line.
     expect(anchorLines({ type: "annotation", annotation: multi })).toEqual({ startLine: 3, endLine: 5 });
+  });
+});
+
+describe("displayBody", () => {
+  const a = annotation();
+  const root = issueComment(body(a, "Root text"));
+  const sameTarget = issueComment(body({ ...a, motivation: "replying", replyTo: String(root.id) }, "Reply text"));
+  const otherQuote = target({});
+  otherQuote.target.selectors = otherQuote.target.selectors.map((s) =>
+    s.type === "TextQuoteSelector" ? { ...s, exact: "The system" } : s,
+  );
+  const otherTarget = issueComment(body({ ...otherQuote, motivation: "replying", replyTo: String(root.id) }, "Other"));
+  const t = projectReview({
+    repository: context,
+    reviewComments: [],
+    reviews: [],
+    issueComments: [root, sameTarget, otherTarget],
+  }).threads[0]!;
+
+  it("hides the quote and permalink only once the anchor is verified", () => {
+    // The marker stays; it is an HTML comment and renders as nothing.
+    expect(displayBody(t, root, true)).toMatch(/^Root text\n\n<!-- rendered-review:v1:\S+ -->$/);
+    expect(displayBody(t, root, false)).toBe(root.body);
+  });
+
+  it("hides them in replies only when they quote the same verified target", () => {
+    expect(displayBody(t, sameTarget, true)).toMatch(/^Reply text\n\n<!--/);
+    expect(displayBody(t, otherTarget, true)).toBe(otherTarget.body);
+  });
+
+  it("never touches comments without validated metadata", () => {
+    const plain = issueComment("> retries failed requests\n\nplain");
+    expect(displayBody(t, plain, true)).toBe(plain.body);
   });
 });
