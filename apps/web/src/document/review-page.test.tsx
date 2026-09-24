@@ -131,6 +131,14 @@ it("shows a document's front matter as terms and definitions, not as a heading",
   expect(within(article).queryByRole("heading", { name: /title:/ })).toBeNull();
 });
 
+it("shows GitHub alerts as titled callouts without the marker", async () => {
+  renderPage(`?doc=${encodeURIComponent(INDEX)}`);
+  const article = await screen.findByRole("article", { name: "Rendered document" });
+  const title = await within(article).findByText("Note");
+  expect(title.closest(".markdown-alert-note")?.textContent).toMatch(/^Note\s*If you receive a response/);
+  expect(within(article).queryByText(/\[!NOTE\]/)).toBeNull();
+});
+
 it("switches to raw source with GitHub line links, and back, without refetching", async () => {
   renderPage(`?doc=${encodeURIComponent(INDEX)}`);
   await screen.findByRole("article", { name: "Rendered document" });
