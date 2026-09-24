@@ -8,6 +8,6 @@ export const { load: loadStl } = frameRenderer({
   id: "stl",
   fenceNames: ["stl"],
   version: "1",
-  label: "STL model",
+  label: "STL",
   src: rendererFrameSrc(script),
 });

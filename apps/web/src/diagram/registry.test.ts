@@ -37,7 +37,7 @@ it.each([
   [["dot", "graphviz", "DOT"], "Graphviz", "graphviz"],
   [["wavedrom"], "WaveDrom", "wavedrom"],
   [["geojson", "topojson"], "Map", "geo"],
-  [["stl"], "STL model", "stl"],
+  [["stl"], "STL", "stl"],
   [["vega", "vega-lite"], "Vega", "vega"],
 ])(
   "renders %j fences with %s, loading it on first use",

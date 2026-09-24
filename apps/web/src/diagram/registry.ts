@@ -31,7 +31,7 @@ export const diagramRegistry = createDiagramRegistry([
     load: () => (import.meta.env.SSR ? SERVER() : import("./geo").then((m) => m.loadGeo())),
   },
   {
-    label: "STL model",
+    label: "STL",
     fenceNames: ["stl"],
     load: () => (import.meta.env.SSR ? SERVER() : import("./stl").then((m) => m.loadStl())),
   },

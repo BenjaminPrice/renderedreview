@@ -14,8 +14,8 @@ const HEIGHT = 450;
 const CAPTION = 24;
 const PAD = 12;
 
-// Isometric camera, Z up: turned 45° about Z and looking down by atan(1/√2).
-const YAW = Math.PI / 4;
+// Isometric camera, Z up: from the front right (+X, -Y), looking down by atan(1/√2).
+const YAW = -Math.PI / 4;
 const PITCH = Math.atan(Math.SQRT1_2);
 // Light from the viewer's upper left, in view coordinates (right, up, towards the viewer).
 const LIGHT = normalize([-0.3, 0.5, 1]);
@@ -71,7 +71,7 @@ function draw(triangles: Vec[][], theme: DiagramTheme): string {
   const polygons = faces
     .map(({ v, light }) => {
       const points = v.map((p) => `${round(PAD + (p[0] - left) * scale)},${round(PAD + (top - p[1]) * scale)}`);
-      const shade = `rgb(${base.map((c) => Math.round(c * (0.35 + 0.65 * (Number.isNaN(light) ? 0 : light)))).join(",")})`;
+      const shade = `rgb(${base.map((c) => Math.round(c * (0.5 + 0.5 * (Number.isNaN(light) ? 0 : light)))).join(",")})`;
       return `<polygon points="${points.join(" ")}" fill="${shade}" stroke="${shade}" stroke-width="0.5" stroke-linejoin="round"/>`;
     })
     .join("");
