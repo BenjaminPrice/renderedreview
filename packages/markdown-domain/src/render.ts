@@ -4,20 +4,23 @@ import { toString } from "hast-util-to-string";
 import type { Root as MdastRoot } from "mdast";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize from "rehype-sanitize";
+import remarkFrontmatter from "remark-frontmatter";
 import remarkGfm from "remark-gfm";
 import remarkParse from "remark-parse";
 import remarkRehype from "remark-rehype";
 import { unified } from "unified";
 import type { Position } from "unist";
 import { visit } from "unist-util-visit";
+import { renderFrontmatter } from "./frontmatter.js";
 import { normalizeText } from "./normalize.js";
 import { resolveResources, type ResourceOptions } from "./resources.js";
 
 /*
  * Source-map representation
  * -------------------------
- * Pipeline: remark-parse + remark-gfm -> remark-rehype -> rehype-raw -> rehype-sanitize (GitHub
- * allowlist) -> resource resolution (./resources.ts) -> stamping. Stamping runs after sanitization, so authored HTML can never supply or
+ * Pipeline: remark-parse + remark-gfm + remark-frontmatter (YAML) -> remark-rehype -> rehype-raw -> rehype-sanitize (GitHub
+ * allowlist) -> resource resolution (./resources.ts) -> front matter (./frontmatter.ts, text
+ * nodes only, prepended after sanitization so it can carry its own class) -> stamping. Stamping runs after sanitization, so authored HTML can never supply or
  * forge the markers, and the sanitizer (which keeps `position`) cannot strip them.
  *
  * - Each element with a source position gets `data-rr-id="<n>"`; `nodes[n]` holds its range,
@@ -50,7 +53,8 @@ export interface SourceNode {
   /**
    * Markdown node type (`paragraph`, `heading`, `code`, `tableCell`, `emphasis`, ...) when the
    * element corresponds exactly to an mdast node, `part` for `thead`/`tbody`, otherwise `html`
-   * (an element parsed from raw HTML).
+   * (an element parsed from raw HTML). Front matter is `yaml` (the block), `yamlEntry` (one
+   * top-level key and its value), `yamlKey` and `yamlValue`.
    */
   type: string;
   tagName: string;
@@ -79,12 +83,14 @@ const BLOCK_TYPES = new Set([
   "paragraph",
   "tableRow",
   "thematicBreak",
+  "yaml",
+  "yamlEntry",
 ]);
 
 // remark-rehype gives these the position of their first/only row; they are not Markdown nodes.
 const STRUCTURAL = new Set(["thead", "tbody"]);
 
-const markdownParser = unified().use(remarkParse).use(remarkGfm).freeze();
+const markdownParser = unified().use(remarkParse).use(remarkGfm).use(remarkFrontmatter).freeze();
 const toSafeHast = unified()
   // Ids are left bare here so the sanitizer's clobber prefix yields GitHub's `user-content-` ids.
   .use(remarkRehype, { allowDangerousHtml: true, clobberPrefix: "" })
@@ -121,6 +127,12 @@ export function renderMarkdown(source: string, options: ResourceOptions = {}): R
 
   const tree = toSafeHast.runSync(structuredClone(mdast)) as HastRoot;
   resolveResources(tree, options);
+  const first = mdast.children[0];
+  if (first?.type === "yaml") {
+    const front = renderFrontmatter(source, first);
+    for (const [p, type] of front.types) mdastTypes.set(key(p), { type });
+    tree.children.unshift(front.element, { type: "text", value: "\n" });
+  }
   const nodes: SourceNode[] = [];
   const headings: { depth: number; text: string }[] = [];
 

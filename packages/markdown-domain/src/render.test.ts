@@ -201,17 +201,19 @@ describe("front matter", () => {
     expect(out).toContain("<dt>sidebar</dt><dd><code>order: 2\n  label: Intro</code></dd>");
     expect(out).toContain("<dt>authors</dt><dd><ul><li>ada</li><li>grace</li></ul></dd>");
     expect(out).toContain("<dt>draft</dt><dd>false</dd>");
-    expect(out).toContain("<dt>summary</dt><dd>Folded text over two lines.</dd>");
+    expect(out).toContain("<dt>summary</dt><dd>Folded text\n  over two lines.</dd>");
   });
 
   test("invalid YAML falls back to the raw front matter as code", () => {
     const out = html(frontmatterInvalid);
     expect(out).toMatch(/^<pre class="rr-frontmatter"><code>title: \[unclosed\nkey: : bad<\/code><\/pre>/);
-    expect(out).toContain("<h1>Still rendered</h1>");
+    expect(out).toContain('<h1 id="user-content-still-rendered">Still rendered</h1>');
   });
 
   test("front matter that is not a mapping falls back to code", () => {
-    expect(html("---\njust prose\n---\n\nBody")).toMatch(/^<pre class="rr-frontmatter"><code>just prose<\/code><\/pre>/);
+    expect(html("---\njust prose\n---\n\nBody")).toMatch(
+      /^<pre class="rr-frontmatter"><code>just prose<\/code><\/pre>/,
+    );
   });
 
   test("a leading rule without a closing fence is not front matter", () => {
@@ -230,6 +232,14 @@ describe("front matter", () => {
     expect(at(9)).toEqual(["yamlEntry:tagsJavaScriptArray"]);
     expect(at(11)).toEqual([expect.stringMatching(/^yaml:/)]);
     expect(entries(frontmatterDocs)).toHaveLength(7);
+  });
+
+  test("CRLF front matter keeps line numbers and raw offsets", () => {
+    const lf = renderMarkdown("---\na: 1\nb: [x]\n---\n\nText\n");
+    const crlf = renderMarkdown("---\r\na: 1\r\nb: [x]\r\n---\r\n\r\nText\r\n");
+    const shape = (d: typeof lf) => d.nodes.map((n) => [n.type, n.range.start.line, n.range.start.column, n.text]);
+    expect(shape(crlf)).toEqual(shape(lf));
+    expect(crlf.nodes.find((n) => n.text === "b")!.range.start.offset).toBe(11);
   });
 
   test("headings are unaffected", () => {
