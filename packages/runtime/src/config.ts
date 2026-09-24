@@ -25,6 +25,10 @@ export interface AppConfig {
   };
   /** Base64 of 32 bytes; encrypts persisted GitHub tokens. Present whenever GitHub credentials are. */
   encryptionKey?: string;
+  /** The key being rotated out: still decrypts, never encrypts. */
+  previousEncryptionKey?: string;
+  /** Signs sessions and OAuth state (Better Auth). Present whenever the GitHub App is. */
+  authSecret?: string;
   databaseUrl?: string;
   /** Only in hosted mode. */
   billing?: { provider: BillingProviderName; apiKey: string; webhookSecret: string };
@@ -128,6 +132,21 @@ export function loadConfig(env: Env, options: LoadConfigOptions = {}): AppConfig
     );
   }
 
+  const previousEncryptionKey = read("ENCRYPTION_KEY_PREVIOUS");
+  if (previousEncryptionKey && !is32ByteBase64(previousEncryptionKey)) {
+    problems.push("ENCRYPTION_KEY_PREVIOUS must be 32 random bytes, base64-encoded");
+  }
+
+  // GitHub App user authorization is the sign-in flow, so its credentials imply sessions.
+  const authSecret = read("BETTER_AUTH_SECRET");
+  if (authSecret ? authSecret.length < 32 : app !== undefined) {
+    problems.push(
+      authSecret
+        ? "BETTER_AUTH_SECRET must be at least 32 characters (openssl rand -base64 32)"
+        : "BETTER_AUTH_SECRET required when GitHub App credentials are set: at least 32 random characters (openssl rand -base64 32)",
+    );
+  }
+
   const databaseUrl = read("DATABASE_URL");
   if (databaseUrl) {
     if (!databaseProtocols.includes(parseUrl(databaseUrl)?.protocol ?? "")) {
@@ -158,12 +177,22 @@ export function loadConfig(env: Env, options: LoadConfigOptions = {}): AppConfig
     allowlist,
     github: { ...github, app, oauth },
     encryptionKey,
+    previousEncryptionKey,
+    authSecret,
     databaseUrl,
     billing,
   };
 }
 
-const secretKeys = new Set(["clientSecret", "privateKey", "webhookSecret", "encryptionKey", "apiKey"]);
+const secretKeys = new Set([
+  "clientSecret",
+  "privateKey",
+  "webhookSecret",
+  "encryptionKey",
+  "previousEncryptionKey",
+  "authSecret",
+  "apiKey",
+]);
 
 /** JSON dump of the config that is safe to log: secrets replaced, database password stripped. */
 export function redactConfig(config: AppConfig): string {
