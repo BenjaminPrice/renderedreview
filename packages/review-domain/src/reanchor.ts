@@ -17,7 +17,8 @@ import {
  *
  * 1. same blob -> current (confidence 1)
  * 2. an exact quote hit at the stored source offsets -> current (1)
- * 3. exactly one exact hit whose 32-character prefix and suffix both equal the stored context
+ * 3. exactly one exact hit whose prefix and suffix both match the stored context (up to 32
+ *    characters each; an empty one means the document's start or end)
  *    -> moved (0.95); of several such hits, exactly one in the stored heading path and node type
  *    -> moved (0.9)
  * 4. structural: exactly one exact hit of the stored node type that keeps its heading path or one
@@ -125,10 +126,11 @@ function compute({ annotation, blobOid, source, doc, original }: ReanchorInput):
     !!target.structure &&
     s.nodeType === target.structure.nodeType &&
     JSON.stringify(s.headingPath) === JSON.stringify(target.structure.headingPath ?? []);
+  // Context matches as far as it was stored; an empty one means the document's start or end.
   const samePrefix = (s: SourceSelection) =>
-    quote.prefix !== undefined && s.prefix.slice(-CONTEXT) === quote.prefix.slice(-CONTEXT);
+    quote.prefix !== undefined && (quote.prefix ? s.prefix.endsWith(quote.prefix.slice(-CONTEXT)) : !s.prefix);
   const sameSuffix = (s: SourceSelection) =>
-    quote.suffix !== undefined && s.suffix.slice(0, CONTEXT) === quote.suffix.slice(0, CONTEXT);
+    quote.suffix !== undefined && (quote.suffix ? s.suffix.startsWith(quote.suffix.slice(0, CONTEXT)) : !s.suffix);
   const inContext = (s: SourceSelection) => samePrefix(s) && sameSuffix(s);
   // Rung 4 for exact hits: same kind of block, and its heading path or one side of its context kept.
   const nearby = (s: SourceSelection) =>

@@ -140,6 +140,31 @@ describe("moved: a unique match elsewhere", () => {
   });
 });
 
+describe("stored context", () => {
+  test("a shorter stored context than 32 characters matches as far as it goes", () => {
+    const annotation = annotate(DOC, "retries failed");
+    annotation.target.selectors[0] = {
+      type: "TextQuoteSelector",
+      exact: "retries failed",
+      prefix: "service ",
+      suffix: " req",
+    };
+    delete annotation.target.structure;
+    const after = "Intro.\n\n" + DOC;
+    const result = reanchor({ annotation, blobOid: oid(after), source: after, doc: renderMarkdown(after) });
+    expect(result).toMatchObject({ state: "moved", evidence: "quote-context" });
+  });
+
+  test("an empty stored prefix means the start of the document", () => {
+    const before = "Start here. Then more.\n";
+    const after = "New opening.\n\nStart here. Then more.\n\n# Other\n\nStart here. Then less.\n";
+    const annotation = annotate(before, "Start here.");
+    delete annotation.target.structure;
+    const result = reanchor({ annotation, blobOid: oid(after), source: after, doc: renderMarkdown(after) });
+    expect(result.state).toBe("ambiguous");
+  });
+});
+
 describe("duplicates never resolve without enough context", () => {
   const before = "# Notes\n\nCheck the logs. Then restart.\n\nIf that fails: Check the logs. Then escalate.\n";
 
