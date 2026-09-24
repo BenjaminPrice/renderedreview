@@ -29,4 +29,6 @@ export interface RequestContext {
   config: AppConfig;
   secrets: SecretStore;
   scheduler: Scheduler;
+  /** Control-plane database, migrated. Absent when the deployment has none (public-only community mode). */
+  db?: SqlDatabase;
 }
