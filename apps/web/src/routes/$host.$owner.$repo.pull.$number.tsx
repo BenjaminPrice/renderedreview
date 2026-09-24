@@ -353,7 +353,13 @@ function ReviewPage({ pr, id, files }: { pr: PullRequest; id: PrIdentity; files:
             </>
           ) : doc.rendered ? (
             <>
-              <RenderedDocument rendered={doc.rendered} changes={doc.changes} containerRef={setArticle} />
+              <RenderedDocument
+                rendered={doc.rendered}
+                changes={doc.changes}
+                link={link}
+                blobOid={entry.oid}
+                containerRef={setArticle}
+              />
               <SelectionPopover
                 article={article}
                 rendered={doc.rendered}

@@ -23,7 +23,10 @@ export default createServerEntry({
     const response = await handler.fetch(request, { context: { ...context, nonce } });
     // Copy, since some responses (e.g. Response.json, redirects) have immutable headers.
     const secured = new Response(response.body, response);
-    secured.headers.set(CSP_HEADER, contentSecurityPolicy(context.config, nonce));
+    // A response with its own policy (the diagram renderer frame) keeps it.
+    if (!secured.headers.has("content-security-policy")) {
+      secured.headers.set(CSP_HEADER, contentSecurityPolicy(context.config, nonce));
+    }
     // Following a link out (to GitHub, an external image) must not reveal the page being read.
     secured.headers.set("Referrer-Policy", "no-referrer");
     return secured;

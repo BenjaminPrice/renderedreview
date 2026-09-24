@@ -5,8 +5,11 @@ import { render } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { expect } from "vitest";
 
-export async function renderWithRouter(ui: () => ReactNode) {
-  const router = createRouter({ routeTree: createRootRoute({ component: ui }), history: createMemoryHistory() });
+export async function renderWithRouter(ui: () => ReactNode, url = "/") {
+  const router = createRouter({
+    routeTree: createRootRoute({ component: ui }),
+    history: createMemoryHistory({ initialEntries: [url] }),
+  });
   await router.load();
   return render(<RouterProvider router={router} />);
 }

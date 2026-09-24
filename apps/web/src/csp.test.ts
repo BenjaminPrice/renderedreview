@@ -13,7 +13,8 @@ test("github.com policy blocks inline scripts and unapproved origins", () => {
   const csp = directives(contentSecurityPolicy(config(), "abc"));
   expect(csp["script-src"]).toEqual(["'self'", "'nonce-abc'"]);
   expect(csp["style-src"]).toEqual(["'self'", "'nonce-abc'"]);
-  expect(csp["img-src"]).toEqual(["'self'", "https://github.com", "https://*.githubusercontent.com"]);
+  // blob: carries sanitized diagram SVG shown as images; only app code can mint blob URLs.
+  expect(csp["img-src"]).toEqual(["'self'", "blob:", "https://github.com", "https://*.githubusercontent.com"]);
   expect(csp["connect-src"]).toEqual([
     "'self'",
     "https://api.github.com",
@@ -32,6 +33,7 @@ test("Enterprise Server policy adds its own host and API", () => {
   const csp = directives(contentSecurityPolicy(config("https://ghe.example.com"), "abc"));
   expect(csp["img-src"]).toEqual([
     "'self'",
+    "blob:",
     "https://github.com",
     "https://*.githubusercontent.com",
     "https://ghe.example.com",
