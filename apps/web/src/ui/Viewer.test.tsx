@@ -43,15 +43,17 @@ it("offers GitHub sign-in when signed out, returning to the exact current URL", 
   expect(navigate).toHaveBeenCalledWith("https://github.com/login/oauth/authorize?client_id=x");
 });
 
-it("shows the signed-in user's avatar and login, and signs out", async () => {
+it("shows the signed-in user's avatar and login, and signs out, reloading to drop per-user data", async () => {
   viewer = Response.json(octocat);
-  render(<ViewerSlot navigate={vi.fn()} />);
+  const navigate = vi.fn();
+  render(<ViewerSlot navigate={navigate} />);
   expect(await screen.findByText("octocat")).toBeTruthy();
   expect(document.querySelector("img")?.getAttribute("src")).toBe(octocat.avatarUrl);
   await userEvent.click(screen.getByRole("button", { name: "Sign out" }));
   expect(requests.some((r) => r.method === "POST" && r.url.endsWith("/api/auth/sign-out"))).toBe(true);
   expect(await screen.findByRole("button", { name: "Sign in with GitHub" })).toBeTruthy();
   expect(screen.queryByText("octocat")).toBeNull();
+  expect(navigate).toHaveBeenCalledWith(location.href);
 });
 
 it("shows nothing when sign-in is not available on this deployment", async () => {
