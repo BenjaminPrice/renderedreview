@@ -10,6 +10,7 @@ import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { routeTree } from "../routeTree.gen";
+import { expectNewTab } from "../test-utils";
 import { allowedHostsQuery } from "../routes/$host.$owner.$repo.pull.$number";
 import { Route as RootRoute } from "../routes/__root";
 import { MAX_RENDER_CHARS } from "./document";
@@ -85,9 +86,9 @@ it("shows the PR in the top bar and lists changed docs with letter statuses", as
   renderPage();
   expect(await screen.findByRole("heading", { level: 1, name: /Remove HTTP status 102 page/ })).toBeTruthy();
   expect(screen.getByText("Merged")).toBeTruthy();
-  expect(screen.getByRole("link", { name: /Open in GitHub/ }).getAttribute("href")).toBe(
-    "https://github.com/mdn/content/pull/45377",
-  );
+  const openInGitHub = screen.getByRole("link", { name: "Open in GitHub (opens in new tab)" });
+  expectNewTab(openInGitHub);
+  expect(openInGitHub.getAttribute("href")).toBe("https://github.com/mdn/content/pull/45377");
 
   const deleted = fileLink(/102\/index\.md, deleted/);
   const modified = fileLink(/status\/index\.md, modified/);
@@ -96,6 +97,7 @@ it("shows the PR in the top bar and lists changed docs with letter statuses", as
   expect(within(modified).getByText("M")).toBeTruthy();
   // The non-Markdown change links out instead of opening here.
   expect(within(sidebar()).getByText(/1 other file changed/)).toBeTruthy();
+  expectNewTab(within(sidebar()).getByRole("link", { name: "view on GitHub (opens in new tab)" }));
 });
 
 it("opens the first changed doc; a deleted doc renders read-only from the base revision", async () => {
@@ -104,9 +106,9 @@ it("opens the first changed doc; a deleted doc renders read-only from the base r
   expect(within(article).getByRole("heading", { name: /102 Processing/ })).toBeTruthy();
   expect(fileLink(/102\/index\.md/).getAttribute("aria-current")).toBe("page");
   expect(screen.getByText(/Deleted in this pull request\. Showing the base revision/)).toBeTruthy();
-  expect(screen.getByRole("link", { name: "Source" }).getAttribute("href")).toBe(
-    `https://github.com/mdn/content/blob/${BASE}/${DELETED}`,
-  );
+  const source = screen.getByRole("link", { name: "Source (opens in new tab)" });
+  expectNewTab(source);
+  expect(source.getAttribute("href")).toBe(`https://github.com/mdn/content/blob/${BASE}/${DELETED}`);
 });
 
 it("binds the selected doc to the URL and marks changed sections of a modified doc", async () => {
@@ -139,7 +141,8 @@ it("switches to raw source with GitHub line links, and back, without refetching"
   const fetches = requested.length;
 
   await userEvent.click(screen.getByRole("button", { name: "Raw" }));
-  const line1 = screen.getByRole("link", { name: "Line 1 on GitHub" });
+  const line1 = screen.getByRole("link", { name: "Line 1 on GitHub (opens in new tab)" });
+  expectNewTab(line1);
   expect(line1.getAttribute("href")).toBe(`https://github.com/mdn/content/blob/${HEAD}/${INDEX}#L1`);
   expect(screen.getByLabelText("Markdown source").textContent).toContain("title: HTTP response status codes");
 
@@ -183,7 +186,7 @@ it("shows a size-limit state for documents too large to render, with raw still a
   renderPage();
   expect(await screen.findByRole("heading", { name: "This document is too large to render" })).toBeTruthy();
   await userEvent.click(screen.getByRole("button", { name: "View raw" }));
-  expect(screen.getByRole("link", { name: "Line 1 on GitHub" })).toBeTruthy();
+  expect(screen.getByRole("link", { name: "Line 1 on GitHub (opens in new tab)" })).toBeTruthy();
 });
 
 it("shows the old path of a renamed doc", async () => {

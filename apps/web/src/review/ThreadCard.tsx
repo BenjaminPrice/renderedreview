@@ -2,6 +2,7 @@
 import type { Actor, ReviewComment } from "@rendered-review/github-integration";
 import type { NativeThread, RepositoryRef } from "@rendered-review/review-domain";
 import type { ReactNode } from "react";
+import { ExternalLink } from "../ui/ExternalLink";
 import { Markdown } from "./Markdown";
 import { anchorLabel, blobUrl, isEdited, relativeTime, suggestionOriginal, threadState } from "./model";
 
@@ -159,18 +160,16 @@ export function ThreadCard({ thread, repository, active, unplaced, onActivate }:
         </span>
         <span className="rr-spacer" />
         {a.type === "outdated" && (
-          <a
+          <ExternalLink
             className="rr-btn rr-btn-sm rr-btn-ghost"
             href={blobUrl(repository, a.commitOid, thread.path, a)}
-            target="_blank"
-            rel="noreferrer"
           >
             View in original
-          </a>
+          </ExternalLink>
         )}
-        <a className="rr-btn rr-btn-sm rr-btn-ghost" href={root.htmlUrl} target="_blank" rel="noreferrer">
+        <ExternalLink className="rr-btn rr-btn-sm rr-btn-ghost" href={root.htmlUrl}>
           View on GitHub
-        </a>
+        </ExternalLink>
       </div>
     </>
   );

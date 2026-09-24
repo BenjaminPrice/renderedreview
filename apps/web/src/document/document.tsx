@@ -176,7 +176,9 @@ export function RawDocument({
             <a
               className="rr-raw-num"
               href={sourceUrl(link, link.sha, link.path, i + 1)}
-              aria-label={`Line ${i + 1} on GitHub`}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label={`Line ${i + 1} on GitHub (opens in new tab)`}
             >
               {i + 1}
             </a>
@@ -185,13 +187,5 @@ export function RawDocument({
         ))}
       </code>
     </pre>
-  );
-}
-/** Outbound-link icon. */
-export function ExternalIcon() {
-  return (
-    <svg className="rr-icon rr-icon-sm" viewBox="0 0 16 16" aria-hidden="true">
-      <path d="M9.5 2.5h4v4M13.5 2.5 7.5 8.5M11.5 9.5v4h-9v-9h4" />
-    </svg>
   );
 }
