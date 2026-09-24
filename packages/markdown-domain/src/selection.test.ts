@@ -321,6 +321,8 @@ describe("documentText finds rendered text and claims it like a selection", () =
     const src = "Café au lait.\n";
     const { result } = find(src, "Café au");
     expect(ok(result)).toMatchObject({ exact: "Café au", textPosition: { start: 0, end: 8 } });
+  });
+});
 
 describe("the rendered text of a source range", () => {
   test.each<[string, string, string, string, RenderOptions?]>([

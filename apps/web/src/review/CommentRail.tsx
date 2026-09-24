@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // The comment rail for one rendered document: threads aligned to their anchors (pinned), a packed
 // list (slide-over), margin markers (collapsed) and optional connector lines.
-import type { RepositoryRef, ThreadPlacement } from "@rendered-review/review-domain";
+import { rangeLines, type RepositoryRef, type ThreadPlacement } from "@rendered-review/review-domain";
 import {
   Fragment,
   type ReactNode,
@@ -243,8 +243,10 @@ export function CommentRail(props: CommentRailProps) {
       active={p.thread.id === active}
       unplaced={!p.blocks.length}
       reason={p.reason}
-      verified={!!p.range}
+      // A moved thread keeps its original quote visible: the highlighted words may differ.
+      verified={!!p.range && p.reanchor?.state !== "moved"}
       damaged={p.damaged}
+      moved={p.reanchor?.state === "moved" ? rangeLines(p.reanchor.sourceRange!) : undefined}
       onActivate={() => p.thread.id !== active && activate(p.thread.id)}
     />
   );

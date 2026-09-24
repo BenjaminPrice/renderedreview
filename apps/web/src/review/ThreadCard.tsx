@@ -296,7 +296,10 @@ export function ThreadCard({
     );
 
   return (
-    <section {...common} aria-label={`${label}, by ${who}${a.type === "outdated" ? ", outdated" : moved ? ", moved" : ""}`}>
+    <section
+      {...common}
+      aria-label={`${label}, by ${who}${a.type === "outdated" ? ", outdated" : moved ? ", moved" : ""}`}
+    >
       {body}
     </section>
   );

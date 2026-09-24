@@ -128,7 +128,13 @@ describe("threads and filters", () => {
     const moved = appThread([issueComment("Moved one")]);
     const sourceRange = { startLine: 5, startColumn: 12, endLine: 5, endColumn: 35 };
     const range = { kind: "annotation" as const, sourceRange, textQuote: { exact: "retries failed requests" } };
-    const reanchor = { state: "moved" as const, evidence: "quote-context" as const, confidence: 0.95, sourceRange, candidates: [] };
+    const reanchor = {
+      state: "moved" as const,
+      evidence: "quote-context" as const,
+      confidence: 0.95,
+      sourceRange,
+      candidates: [],
+    };
     await renderPage([{ thread: moved, blocks: [block(1)], range, reanchor }]);
     const card = within(rail()).getByRole("region", { name: "Selected text · L5, by alice, moved" });
     expect(within(card).getByText("Moved")).toBeTruthy();

@@ -223,13 +223,14 @@ function anchor(c: ReviewComment): NativeAnchor {
 export function anchorLines(a: NativeAnchor): { startLine: number; endLine: number } | undefined {
   if (a.type === "file") return undefined;
   if (a.type !== "annotation") return { startLine: a.startLine, endLine: a.endLine };
-  const r = sourceRange(a.annotation);
-  return { startLine: r.startLine, endLine: lastLine(r) };
+  return rangeLines(sourceRange(a.annotation));
 }
 
-// The range is half-open: ending at column 1 means the previous line was the last one selected.
-const lastLine = (r: AnnotationRange["sourceRange"]) =>
-  r.endColumn === 1 && r.endLine > r.startLine ? r.endLine - 1 : r.endLine;
+/** First and last line (inclusive) of a half-open source range: ending at column 1 excludes that line. */
+export const rangeLines = (r: AnnotationRange["sourceRange"]) => ({
+  startLine: r.startLine,
+  endLine: r.endColumn === 1 && r.endLine > r.startLine ? r.endLine - 1 : r.endLine,
+});
 
 const selector = <T extends RenderedReviewAnnotationV1["target"]["selectors"][number]["type"]>(
   a: RenderedReviewAnnotationV1,
@@ -320,7 +321,7 @@ export function placeThreads(
       const at = (range: AnnotationRange["sourceRange"], extra: Partial<ThreadPlacement> = {}): ThreadPlacement => {
         return {
           thread,
-          blocks: blocksForLines(head, range.startLine, lastLine(range)),
+          blocks: blocksForLines(head, range.startLine, rangeLines(range).endLine),
           range: { kind: "annotation", sourceRange: range, textQuote },
           ...extra,
         };
