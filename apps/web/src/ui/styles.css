@@ -243,6 +243,16 @@ samp {
   overflow: hidden;
 }
 
+.rr-viewer {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--rr-text-sm);
+}
+.rr-viewer-login {
+  font-weight: 600;
+}
+
 /* =====================================================================
    APP SHELL
    ===================================================================== */

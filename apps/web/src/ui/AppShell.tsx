@@ -12,6 +12,7 @@ import {
   type RailMode,
   type Theme,
 } from "./prefs";
+import { ViewerSlot } from "./Viewer";
 
 const RAIL_ID = "rr-rail";
 
@@ -54,7 +55,6 @@ export type AppShellProps = {
   title?: ReactNode;
   /** Top bar, right side before the theme toggle: "Open in GitHub", "Review". */
   actions?: ReactNode;
-  avatar?: ReactNode;
   /** Document sidebar. Omitted: no sidebar (e.g. the home page). */
   sidebar?: ReactNode;
   /** Toolbar content before the Comments button; `toolbarEnd` goes after it. */
@@ -148,7 +148,7 @@ export function AppShell(props: AppShellProps) {
           <span className="rr-spacer" />
           {props.actions}
           <ThemeToggle />
-          {props.avatar}
+          <ViewerSlot />
         </header>
 
         <div className="rr-body">
