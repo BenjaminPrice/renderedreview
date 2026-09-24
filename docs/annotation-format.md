@@ -29,7 +29,7 @@ Parts, separated by blank lines, in this order (empty parts are left out):
    written as `&#32;` and `&#9;`.
 2. **Comment.** The reviewer's Markdown, unchanged.
 3. **Permalink** (file-level review comments and PR conversation comments only, where GitHub has no
-   line location). `Document: [`path`](url)` with the URL
+   line location). ``Document: [`<path>`](<url>)`` with the URL
    `https://<host>/<owner>/<repo>/blob/<commitOid>/<path>?plain=1#L<start>-L<end>`. Each path
    segment is percent-encoded; `?plain=1` opens the source view, where line anchors work.
 4. **Marker.** The encoded annotation, last, on its own line.
