@@ -1,0 +1,54 @@
+[
+  {
+    "sha": "b368a8bc221bf02b547ed45972da1468dc405367",
+    "html_url": "https://github.com/mdn/content/commit/b368a8bc221bf02b547ed45972da1468dc405367",
+    "commit": {
+      "message": "Remove HTTP status 102 page",
+      "author": {
+        "date": "2026-08-28T15:18:45Z"
+      },
+      "committer": {
+        "date": "2026-08-28T15:18:45Z"
+      }
+    }
+  },
+  {
+    "sha": "c5ebc9f3071d5e5e143298f508c2aedb7060c884",
+    "html_url": "https://github.com/mdn/content/commit/c5ebc9f3071d5e5e143298f508c2aedb7060c884",
+    "commit": {
+      "message": "add more info about 102 status",
+      "author": {
+        "date": "2026-09-01T04:55:55Z"
+      },
+      "committer": {
+        "date": "2026-09-01T04:55:55Z"
+      }
+    }
+  },
+  {
+    "sha": "cd176a8b0178a6911d7b36fb83c8ce6d7c10f44f",
+    "html_url": "https://github.com/mdn/content/commit/cd176a8b0178a6911d7b36fb83c8ce6d7c10f44f",
+    "commit": {
+      "message": "Apply suggestion from @hamishwillee",
+      "author": {
+        "date": "2026-09-07T00:54:56Z"
+      },
+      "committer": {
+        "date": "2026-09-07T00:54:56Z"
+      }
+    }
+  },
+  {
+    "sha": "db23e1ea65fa47a95d8414d2d8be806a26dccf49",
+    "html_url": "https://github.com/mdn/content/commit/db23e1ea65fa47a95d8414d2d8be806a26dccf49",
+    "commit": {
+      "message": "Update files/en-us/web/http/reference/status/index.md\n\nCo-authored-by: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>",
+      "author": {
+        "date": "2026-09-07T00:56:20Z"
+      },
+      "committer": {
+        "date": "2026-09-07T00:56:20Z"
+      }
+    }
+  }
+]

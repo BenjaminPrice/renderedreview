@@ -61,6 +61,14 @@ export interface ChangedFile {
   patch?: string;
 }
 
+export interface PullRequestCommit {
+  oid: string;
+  /** First line of the commit message. */
+  title: string;
+  committedAt: string;
+  htmlUrl: string;
+}
+
 export interface TreeEntry {
   path: string;
   mode: string;
@@ -192,6 +200,13 @@ export const toChangedFile = (f: Raw): ChangedFile => ({
   deletions: f.deletions,
   changes: f.changes,
   ...(f.patch !== undefined && { patch: f.patch }),
+});
+
+export const toPullRequestCommit = (c: Raw): PullRequestCommit => ({
+  oid: c.sha,
+  title: String(c.commit.message).split("\n", 1)[0]!,
+  committedAt: c.commit.committer?.date ?? c.commit.author?.date,
+  htmlUrl: c.html_url,
 });
 
 export const toTree = (t: Raw): Tree => ({
