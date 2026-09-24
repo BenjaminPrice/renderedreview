@@ -218,7 +218,7 @@ it("shows the selected doc's threads in the rail beside their anchors, and switc
   const article = screen.getByRole("article", { name: "Rendered document" });
   expect(article.contains(anchorOf(card))).toBe(true);
   // The outdated linter thread has no anchor on head; it is listed apart.
-  const unanchored = within(rail()).getByRole("region", { name: "File-level and outdated" });
+  const unanchored = within(rail()).getByRole("region", { name: "Not placed in document" });
   expect(within(unanchored).getByRole("region", { name: /by github-actions\[bot\], outdated/ })).toBeTruthy();
 
   await userEvent.click(fileLink(/102\/index\.md/));
@@ -333,4 +333,13 @@ it("places a deleted doc's LEFT-side threads on its base revision", async () => 
   const anchor = anchorOf(card)!;
   expect(screen.getByRole("article", { name: "Rendered document" }).contains(anchor)).toBe(true);
   expect(anchor.textContent).toContain("102 Processing");
+});
+
+it("lists a comment on a blank line as not placed, saying why", async () => {
+  editComments((cs) => Object.assign(cs.find((c) => c.id === SUGGESTION)!, { line: 8, commit_id: HEAD }));
+  renderPage(`?doc=${encodeURIComponent(INDEX)}`);
+  const card = await threadCard(/GitHub line comment · L8, by hamishwillee/);
+  expect(anchorOf(card)).toBeNull();
+  expect(within(rail()).getByRole("region", { name: "Not placed in document" }).contains(card)).toBe(true);
+  expect(within(card).getByText(/no rendered block at this line/)).toBeTruthy();
 });
