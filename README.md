@@ -18,7 +18,7 @@ direnv allow     # activates the devbox environment whenever you cd in
 pnpm install
 ```
 
-Put local secrets in `.env.local`. It is git-ignored, and `.envrc` loads it automatically. If you don't use direnv, run commands through `devbox shell` or `devbox run -- <cmd>`.
+Put local secrets in `.env.local`. It is git-ignored, and `.envrc` loads it automatically. If you don't use direnv, run commands through `devbox shell` or `devbox run -- <cmd>`. Values must fit on one line; run `direnv reload` after editing it, which prints any parse error (a bad line can stop the whole file from loading).
 
 The server refuses to start without a valid configuration. The smallest one is a public-only community instance:
 
@@ -39,11 +39,12 @@ All builds read the same environment variables (`packages/runtime/src/config.ts`
 | `ACCESS_ALLOWLIST` (comma-separated `owner` or `owner/repo`)                                                               | When the policy is `allowlist`                                               |
 | `GITHUB_URL`                                                                                                               | Defaults to `https://github.com`; set it to a GitHub Enterprise Server URL   |
 | `GITHUB_APP_ID`, `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_APP_WEBHOOK_SECRET` | Hosted and dedicated; community unless the policy is `disabled`              |
+| `GITHUB_APP_PRIVATE_KEY_FILE` (path to the `.pem`)                                                                         | Node build: instead of `GITHUB_APP_PRIVATE_KEY`; set one, not both           |
 | `GITHUB_OAUTH_CLIENT_ID`, `GITHUB_OAUTH_CLIENT_SECRET`                                                                     | Hosted; optional elsewhere                                                   |
 | `ENCRYPTION_KEY` (`openssl rand -base64 32`)                                                                               | Whenever GitHub credentials are set                                          |
 | `ENCRYPTION_KEY_PREVIOUS`                                                                                                  | Optional: the key being rotated out (see below)                              |
 | `BETTER_AUTH_SECRET` (`openssl rand -base64 32`)                                                                           | Whenever GitHub App credentials are set; signs sessions and OAuth state      |
-| `DATABASE_URL` (`postgres://`, `sqlite://`, `file://`)                                                                     | Node build, when GitHub credentials are set or the mode is not `community`   |
+| `DATABASE_URL` (`postgres://…`, `sqlite:./relative.db`, `sqlite:///absolute.db`)                                           | Node build, when GitHub credentials are set or the mode is not `community`   |
 | `BILLING_PROVIDER` (`polar`, `stripe`), `BILLING_API_KEY`, `BILLING_WEBHOOK_SECRET`                                        | Hosted only; ignored otherwise                                               |
 | `PORT`                                                                                                                     | Node server listen port (default 3000)                                       |
 | `GITHUB_PUBLIC_READ_TOKEN`                                                                                                 | Optional, any mode; meant for local development and self-hosting (see below) |
@@ -59,6 +60,23 @@ Use a [fine-grained token](https://github.com/settings/personal-access-tokens/ne
 Sign-in uses the GitHub App's user authorization: `GITHUB_APP_CLIENT_ID` / `GITHUB_APP_CLIENT_SECRET` drive the flow, and the app's expiring user-to-server tokens are what the server keeps. It is on when the GitHub App credentials, `ENCRYPTION_KEY`, `BETTER_AUTH_SECRET` and a database are configured and `GITHUB_URL` is github.com (Enterprise Server sign-in is not supported yet). Otherwise the top bar shows no sign-in and every `/api/auth/*` route answers 404.
 
 In the GitHub App settings, set the callback URL to `<public origin>/api/auth/callback/github` (for local development `http://localhost:3000/api/auth/callback/github`) and enable **Expire user authorization tokens**. Give the app the **Email addresses** account permission (read) if you want users' email addresses; without it, accounts use GitHub's noreply address.
+
+A local `.env.local` with sign-in (generate `ENCRYPTION_KEY` and `BETTER_AUTH_SECRET` with `openssl rand -base64 32`):
+
+```sh
+HOSTING_MODE=community
+ACCESS_POLICY=installed
+GITHUB_APP_ID=123456
+GITHUB_APP_CLIENT_ID=Iv23li...
+GITHUB_APP_CLIENT_SECRET=...
+GITHUB_APP_WEBHOOK_SECRET=...
+GITHUB_APP_PRIVATE_KEY_FILE=.data/github-app.pem
+ENCRYPTION_KEY=...
+BETTER_AUTH_SECRET=...
+DATABASE_URL=sqlite:./.data/rendered-review.db
+```
+
+Relative paths in `DATABASE_URL` and `GITHUB_APP_PRIVATE_KEY_FILE` resolve from the repository root (the directory with `pnpm-workspace.yaml`), or from the working directory when run outside a checkout. The SQLite file's directory is created on first start. `.data/` is git-ignored; keep the key file and database there. To put the key in the env file instead, set `GITHUB_APP_PRIVATE_KEY` on one line with `\n` for each line break (`awk 'NF {printf "%s\\n", $0}' key.pem` prints that form); a multi-line value breaks the env file.
 
 The server must see the public origin in the request URL, because the OAuth redirect URI and cookie security follow it. Behind a TLS-terminating proxy, forward `Host` and configure the proxy so the Node server receives the public `https://` URL. Session cookies are `HttpOnly`, `SameSite=Lax` and `Secure` everywhere except `localhost`.
 
