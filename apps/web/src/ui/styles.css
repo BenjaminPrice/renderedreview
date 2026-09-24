@@ -1331,3 +1331,8 @@ samp {
 .rr-markdown [data-rr-anchor][data-rr-active] {
   outline: 2px solid var(--rr-hl-comment-line);
 }
+/* Keyboard focus on an anchored block: the standard focus ring replaces the anchor outline (WCAG 2.4.7). Keep last. */
+.rr-markdown [data-rr-anchor]:focus-visible {
+  outline: 2px solid var(--rr-focus);
+  outline-offset: 4px;
+}
