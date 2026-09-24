@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { createPrivateKey, generateKeyPairSync, verify } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
-import { appJwt, createInstallationCheck } from "./installation";
+import { loadConfig } from "@rendered-review/runtime";
+import { appJwt, createInstallationCheck, installationCheckFor } from "./installation";
 
 // GitHub hands out PKCS#1 ("BEGIN RSA PRIVATE KEY") keys; PKCS#8 works too.
 const { privateKey: pkcs1, publicKey } = generateKeyPairSync("rsa", {
@@ -68,5 +69,25 @@ describe("createInstallationCheck", () => {
     const installed = createInstallationCheck({ appId: "1", privateKey: pkcs1, fetch });
     expect(await installed("ghe.example.com", "acme", "widgets")).toBe(false);
     expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
+describe("installationCheckFor", () => {
+  it("is one shared check per config, and none without a GitHub App", () => {
+    const withApp = loadConfig({
+      HOSTING_MODE: "community",
+      ACCESS_POLICY: "disabled",
+      GITHUB_APP_ID: "1",
+      GITHUB_APP_CLIENT_ID: "Iv23.x",
+      GITHUB_APP_CLIENT_SECRET: "s",
+      GITHUB_APP_PRIVATE_KEY: pkcs1,
+      GITHUB_APP_WEBHOOK_SECRET: "w",
+      ENCRYPTION_KEY: btoa("k".repeat(32)),
+      BETTER_AUTH_SECRET: "s".repeat(32),
+      DATABASE_URL: "sqlite::memory:",
+    });
+    expect(installationCheckFor(withApp)).toBeTypeOf("function");
+    expect(installationCheckFor(withApp)).toBe(installationCheckFor(withApp));
+    expect(installationCheckFor(loadConfig({ HOSTING_MODE: "community", ACCESS_POLICY: "disabled" }))).toBeUndefined();
   });
 });
