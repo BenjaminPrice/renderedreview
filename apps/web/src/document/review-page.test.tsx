@@ -2,7 +2,7 @@
 // @vitest-environment happy-dom
 // The PR review page end to end, with GitHub answered from responses recorded for
 // mdn/content#45377 (one modified and one deleted Markdown file, one other file; trees trimmed;
-// review comments, reviews, conversation and GraphQL review threads trimmed to the fields read).
+// review comments, reviews and conversation trimmed to the fields read).
 import { readFileSync } from "node:fs";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryHistory, createRouter, Outlet, RouterProvider } from "@tanstack/react-router";
@@ -23,10 +23,11 @@ const DELETED = "files/en-us/web/http/reference/status/102/index.md";
 const API = "https://api.github.com/repos/mdn/content";
 
 let responses: Record<string, string>;
-/** GraphQL answer. Anonymous by default: GitHub rejects unauthenticated GraphQL with 401. */
-let graphql: () => Response;
+/** Every URL fetched. GitHub clients keep the first stubbed fetch, so it records into this shared list. */
+const requested: string[] = [];
 
 beforeEach(() => {
+  requested.length = 0;
   responses = {
     [`${API}/pulls/45377`]: fixture("pull.json"),
     [`${API}/pulls/45377/files?per_page=100`]: fixture("files.json"),
@@ -36,7 +37,6 @@ beforeEach(() => {
     [`${API}/pulls/45377/reviews?per_page=100`]: fixture("reviews.json"),
     [`${API}/issues/45377/comments?per_page=100`]: fixture("issue-comments.json"),
   };
-  graphql = () => new Response('{"message":"This endpoint requires you to be authenticated."}', { status: 401 });
   for (const oid of [
     "1a05f7e9c35e2bb310563708351758307f34a599",
     "4e1326aa2512d4d8eec8533471eee0dc684de810",
@@ -45,7 +45,7 @@ beforeEach(() => {
     responses[`${API}/git/blobs/${oid}`] = fixture(`blob-${oid}.md`);
   vi.stubGlobal("fetch", async (input: RequestInfo | URL) => {
     const url = String(input instanceof Request ? input.url : input);
-    if (url === "https://api.github.com/graphql") return graphql();
+    requested.push(url);
     const body = responses[url];
     return body === undefined
       ? new Response('{"message":"Not Found"}', { status: 404 })
@@ -264,7 +264,7 @@ it("selects the thread from the thread param on load, and updates the param when
   expect(anchorOf(card)!.hasAttribute("data-rr-active")).toBe(false);
 });
 
-it("filters threads by state with counts; resolution is unknown when GitHub refuses anonymous GraphQL", async () => {
+it("filters threads by state with counts; resolution is unknown anonymously", async () => {
   suggestionOnHead();
   renderPage(`?doc=${encodeURIComponent(INDEX)}`);
   await threadCard(/GitHub line comment · L30/);
@@ -280,17 +280,13 @@ it("filters threads by state with counts; resolution is unknown when GitHub refu
   expect(within(rail()).getByRole("region", { name: /GitHub line comment · L30/ })).toBeTruthy();
 });
 
-it("collapses resolved threads in place when GitHub reports resolution", async () => {
+it("never asks GraphQL for thread resolution anonymously", async () => {
+  // Anonymous GraphQL answers 403 with a zero rate limit, which would push every later call
+  // through the proxy until the reported reset.
   suggestionOnHead();
-  graphql = () => new Response(fixture("review-threads.json"), { headers: { "content-type": "application/json" } });
   renderPage(`?doc=${encodeURIComponent(INDEX)}`);
-  await screen.findByRole("article", { name: "Rendered document" });
-  const summary = await within(rail()).findByLabelText(/Resolved thread by hamishwillee, 1 comment/);
-  expect(summary.closest("details")!.open).toBe(false);
-  const filters = within(rail()).getByRole("group", { name: "Filter comments" });
-  expect(within(filters).getByRole("button", { name: "Resolved 2" })).toBeTruthy();
-  // Nothing open: no unresolved count in the sidebar.
-  expect(fileLink(/status\/index\.md, modified/).getAttribute("aria-label")).not.toContain("unresolved");
+  await threadCard(/GitHub line comment · L30/);
+  expect(requested.filter((u) => u.includes("graphql"))).toEqual([]);
 });
 
 it("counts open threads per doc in the sidebar and the doc's threads on the Comments button", async () => {
