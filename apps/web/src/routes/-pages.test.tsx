@@ -5,7 +5,7 @@
 import { readFileSync } from "node:fs";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryHistory, createRouter, Outlet, RouterProvider } from "@tanstack/react-router";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { routeTree } from "../routeTree.gen";
@@ -141,5 +141,29 @@ describe("pull request page states", () => {
     const link = screen.getByRole("link", { name: "review the changes on GitHub (opens in new tab)" });
     expectNewTab(link);
     expect(link.getAttribute("href")).toBe("https://github.com/mdn/content/pull/45377/files");
+  });
+});
+
+describe("top-bar account", () => {
+  const viewer = (body: string) => (url: string) => (url === "/api/auth/viewer" ? json(body) : undefined);
+
+  it("offers GitHub sign-in on the home page when signed out", async () => {
+    stubGitHub(viewer("null"));
+    renderApp("/");
+    expect(await screen.findByRole("button", { name: "Sign in with GitHub" })).toBeTruthy();
+  });
+
+  it("shows the signed-in login on a pull request page", async () => {
+    const files = JSON.parse(fixture("files.json")) as { filename: string }[];
+    const responses: Record<string, string> = {
+      "/api/auth/viewer": '{"login":"octocat","avatarUrl":"https://avatars.githubusercontent.com/u/583231?v=4"}',
+      [`${API}/pulls/45377`]: fixture("pull.json"),
+      [`${API}/pulls/45377/files?per_page=100`]: JSON.stringify(files.filter((f) => !f.filename.endsWith(".md"))),
+    };
+    stubGitHub((url) => (responses[url] === undefined ? undefined : json(responses[url])));
+    renderApp("/github.com/mdn/content/pull/45377");
+    expect(await screen.findByRole("heading", { name: "No Markdown changed in this pull request" })).toBeTruthy();
+    expect(await within(screen.getByRole("banner")).findByText("octocat")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Sign out" })).toBeTruthy();
   });
 });

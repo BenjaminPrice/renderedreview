@@ -7,5 +7,14 @@
   "exports": "./src/index.ts",
   "scripts": {
     "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@rendered-review/runtime": "workspace:*",
+    "better-auth": "^1.7.5"
+  },
+  "devDependencies": {
+    "@rendered-review/control-plane": "workspace:*",
+    "@rendered-review/runtime-node": "workspace:*",
+    "@types/node": "^24.13.6"
   }
 }

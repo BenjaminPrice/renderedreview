@@ -28,6 +28,7 @@ describe("buildRequestContext", () => {
       GITHUB_APP_PRIVATE_KEY: "pem",
       GITHUB_APP_WEBHOOK_SECRET: "webhook-secret",
       ENCRYPTION_KEY: btoa("k".repeat(32)),
+      BETTER_AUTH_SECRET: "s".repeat(32),
       DB: d1Binding,
     };
     expect(buildRequestContext(env, () => {}).config.databaseUrl).toBeUndefined();

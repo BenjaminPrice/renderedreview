@@ -2,11 +2,17 @@
 // @vitest-environment happy-dom
 import { cleanup, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderWithRouter } from "../test-utils";
 import { AppShell, useShell } from "./AppShell";
 
+// The top bar asks the server who is signed in; this deployment has no sign-in.
+beforeEach(() => {
+  vi.stubGlobal("fetch", async () => new Response("Not Found", { status: 404 }));
+});
+
 afterEach(() => {
+  vi.unstubAllGlobals();
   cleanup();
   localStorage.clear();
   delete document.documentElement.dataset.rail;
