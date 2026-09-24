@@ -23,6 +23,19 @@ const MUTABLE = new RegExp(
 );
 // Trees and blobs are only proxied by full OID, so the content behind a URL can never change.
 const IMMUTABLE = new RegExp(String.raw`^${REPO}/git/(?:trees|blobs)/${OID}$`);
+// A file at a commit, by full commit OID only (`ref`), so it is as immutable as a blob.
+const CONTENTS = new RegExp(String.raw`^${REPO}/contents/(.+)$`);
+const FULL_OID = new RegExp(`^${OID}$`);
+/** Every segment decodes to a plain name: no traversal, no smuggled separators. */
+const plainFilePath = (path: string) =>
+  path.split("/").every((segment) => {
+    try {
+      const name = decodeURIComponent(segment);
+      return name !== "" && name !== "." && name !== ".." && !/[/\\\0]/.test(name);
+    } catch {
+      return false;
+    }
+  });
 const QUERY: Record<string, RegExp> = { per_page: /^\d{1,3}$/, page: /^\d{1,6}$/, recursive: /^1$/ };
 export const ACCEPT = new Set(["application/vnd.github+json", "application/vnd.github.raw+json"]);
 const FORWARD_RESPONSE = [
@@ -42,6 +55,12 @@ export const apiBase = (host: string) => (host === "github.com" ? "https://api.g
 
 /** Classifies `path` (no leading slash) and query; `undefined` when not allowlisted. */
 export function classifyPath(path: string, query: URLSearchParams): "immutable" | "mutable" | undefined {
+  const contents = CONTENTS.exec(path);
+  if (contents) {
+    const [only, ...rest] = query;
+    const byOid = only?.[0] === "ref" && FULL_OID.test(only[1]) && rest.length === 0;
+    return byOid && plainFilePath(contents[1]!) ? "immutable" : undefined;
+  }
   for (const [key, value] of query) if (!QUERY[key]?.test(value)) return undefined;
   if (IMMUTABLE.test(path)) return "immutable";
   if (MUTABLE.test(path)) return "mutable";

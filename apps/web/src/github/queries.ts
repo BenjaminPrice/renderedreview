@@ -114,6 +114,17 @@ export const treeQuery = (id: PrIdentity, oid: string) =>
     staleTime: Infinity,
   });
 
+/** Raw text of the file at `path` in commit `commitOid`, without listing the tree. Immutable. */
+export const fileAtCommitQuery = (id: PrIdentity, commitOid: string, path: string) =>
+  queryOptions({
+    queryKey: ["github", id.access, id.host, id.repositoryId, "file", commitOid, path],
+    queryFn: () =>
+      immutable(id, `file:${commitOid}:${path}`, () =>
+        withGitHub(id.access, id.host, (c) => c.getFileContents(id.owner, id.repo, path, commitOid)),
+      ),
+    staleTime: Infinity,
+  });
+
 /** Raw blob text by blob OID. Immutable. */
 export const blobQuery = (id: PrIdentity, oid: string) =>
   queryOptions({
