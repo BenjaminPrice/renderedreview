@@ -20,6 +20,8 @@ export interface DiagramRenderer {
 }
 
 export interface DiagramRendererEntry {
+  /** Format name shown to readers, e.g. `Mermaid`. */
+  label: string;
   fenceNames: string[];
   /** Imports the renderer; called on first use only. */
   load: () => Promise<DiagramRenderer>;
@@ -35,7 +37,7 @@ export function createDiagramRegistry(entries: DiagramRendererEntry[]): DiagramR
   for (const entry of entries) {
     let loading: Promise<DiagramRenderer> | undefined;
     const memo: DiagramRendererEntry = {
-      fenceNames: entry.fenceNames,
+      ...entry,
       load: () =>
         (loading ??= entry.load().catch((error: unknown) => {
           loading = undefined; // a failed chunk load (offline, new deploy) may succeed later
@@ -72,9 +74,7 @@ export async function renderDiagram(
 ): Promise<RenderedDiagram> {
   const { maxInputChars, timeoutMs, maxOutputChars } = { ...DEFAULT_DIAGRAM_LIMITS, ...limits };
   if (input.source.length > maxInputChars) {
-    throw new Error(
-      `Diagram source is too large (${input.source.length} characters; the limit is ${maxInputChars})`,
-    );
+    throw new Error(`Diagram source is too large (${input.source.length} characters; the limit is ${maxInputChars})`);
   }
   const signal = AbortSignal.any([input.signal, AbortSignal.timeout(timeoutMs)]);
   signal.throwIfAborted();

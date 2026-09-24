@@ -10,7 +10,7 @@ const input = (source = "graph TD", signal = new AbortController().signal) =>
 
 describe("registry", () => {
   it("matches fence names case-insensitively and ignores unknown fences", () => {
-    const registry = createDiagramRegistry([{ fenceNames: ["mermaid"], load: async () => fake() }]);
+    const registry = createDiagramRegistry([{ label: "X", fenceNames: ["mermaid"], load: async () => fake() }]);
     expect(registry.match("mermaid")).toBeDefined();
     expect(registry.match("Mermaid")).toBeDefined();
     expect(registry.match("ts")).toBeUndefined();
@@ -19,7 +19,7 @@ describe("registry", () => {
 
   it("imports a renderer only when asked, and only once", async () => {
     const load = vi.fn(async () => fake());
-    const registry = createDiagramRegistry([{ fenceNames: ["dot", "graphviz"], load }]);
+    const registry = createDiagramRegistry([{ label: "X", fenceNames: ["dot", "graphviz"], load }]);
     expect(load).not.toHaveBeenCalled();
     const entry = registry.match("dot")!;
     const [a, b] = await Promise.all([entry.load(), registry.match("graphviz")!.load()]);
@@ -29,7 +29,7 @@ describe("registry", () => {
 
   it("retries a failed import on the next request", async () => {
     const load = vi.fn().mockRejectedValueOnce(new Error("offline")).mockResolvedValue(fake());
-    const entry = createDiagramRegistry([{ fenceNames: ["x"], load }]).match("x")!;
+    const entry = createDiagramRegistry([{ label: "X", fenceNames: ["x"], load }]).match("x")!;
     await expect(entry.load()).rejects.toThrow("offline");
     await expect(entry.load()).resolves.toMatchObject({ id: "fake" });
   });
@@ -71,9 +71,7 @@ describe("renderDiagram limits", () => {
 
   it("refuses oversized output", async () => {
     const big = fake(async () => ({ svg: "x".repeat(101) }));
-    await expect(renderDiagram(big, input(), { maxOutputChars: 100 })).rejects.toThrow(
-      "Rendered diagram is too large",
-    );
+    await expect(renderDiagram(big, input(), { maxOutputChars: 100 })).rejects.toThrow("Rendered diagram is too large");
   });
 
   it("passes renderer errors through", async () => {

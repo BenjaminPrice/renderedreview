@@ -4,7 +4,9 @@ import { MERMAID_FRAME_PATH, mermaidFrameResponse } from "./frame";
 
 const frame = (script: string | null) =>
   mermaidFrameResponse(
-    new Request(`https://rr.example${MERMAID_FRAME_PATH}${script === null ? "" : `?script=${encodeURIComponent(script)}`}`),
+    new Request(
+      `https://rr.example${MERMAID_FRAME_PATH}${script === null ? "" : `?script=${encodeURIComponent(script)}`}`,
+    ),
     "n0nce",
   );
 
@@ -39,9 +41,13 @@ it("accepts the development server's module path", () => {
   );
 });
 
-it.each([null, "https://evil.example/x.js", "//evil.example/x.js", "/x.js\"><script>alert(1)</script>", "/a/../x.css", "javascript:alert(1)"])(
-  "refuses script %s",
-  (script) => {
-    expect(frame(script).status).toBe(400);
-  },
-);
+it.each([
+  null,
+  "https://evil.example/x.js",
+  "//evil.example/x.js",
+  '/x.js"><script>alert(1)</script>',
+  "/a/../x.css",
+  "javascript:alert(1)",
+])("refuses script %s", (script) => {
+  expect(frame(script).status).toBe(400);
+});

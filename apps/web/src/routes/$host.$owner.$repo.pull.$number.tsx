@@ -342,7 +342,13 @@ function ReviewPage({ pr, id, files }: { pr: PullRequest; id: PrIdentity; files:
               <RawDocument source={doc.source} changes={doc.changes} link={link} />
             </>
           ) : doc.rendered ? (
-            <RenderedDocument rendered={doc.rendered} changes={doc.changes} containerRef={setArticle} />
+            <RenderedDocument
+              rendered={doc.rendered}
+              changes={doc.changes}
+              link={link}
+              blobOid={entry.oid}
+              containerRef={setArticle}
+            />
           ) : (
             <DocMessage title="This document is too large to render">
               It has {doc.source.length.toLocaleString()} characters; the limit is {MAX_RENDER_CHARS.toLocaleString()}.{" "}

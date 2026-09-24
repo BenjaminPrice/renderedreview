@@ -19,7 +19,11 @@ function frame() {
 
 afterEach(() => closeMermaidFrame());
 
-const input = (source = "graph TD; A-->B", theme: "light" | "dark" = "light", signal = new AbortController().signal) => ({
+const input = (
+  source = "graph TD; A-->B",
+  theme: "light" | "dark" = "light",
+  signal = new AbortController().signal,
+) => ({
   source,
   theme,
   signal,

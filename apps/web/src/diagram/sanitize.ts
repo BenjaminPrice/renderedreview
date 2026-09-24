@@ -13,7 +13,8 @@ function purifier() {
   if (purify) return purify;
   purify = DOMPurify(window);
   purify.addHook("uponSanitizeElement", (node, data) => {
-    if (data.tagName === "style") node.textContent = (node.textContent ?? "").replace(IMPORT, "").replace(EXTERNAL_URL, "none");
+    if (data.tagName === "style")
+      node.textContent = (node.textContent ?? "").replace(IMPORT, "").replace(EXTERNAL_URL, "none");
   });
   purify.addHook("afterSanitizeAttributes", (node) => {
     // Parsed as HTML these are plain attributes; the XML serializer declares namespaces itself.
@@ -46,12 +47,19 @@ export function sanitizeSvg(svg: string): string {
   });
   const root = fragment.firstElementChild;
   if (root?.localName !== "svg") throw new Error("Renderer produced no SVG");
-  const box = root.getAttribute("viewBox")?.trim().split(/[\s,]+/).map(Number);
+  const box = root
+    .getAttribute("viewBox")
+    ?.trim()
+    .split(/[\s,]+/)
+    .map(Number);
   if (box?.length === 4 && box.every(Number.isFinite)) {
     root.setAttribute("width", String(box[2]));
     root.setAttribute("height", String(box[3]));
   }
-  const style = root.getAttribute("style")?.replace(/max-width\s*:[^;]*;?/i, "").trim();
+  const style = root
+    .getAttribute("style")
+    ?.replace(/max-width\s*:[^;]*;?/i, "")
+    .trim();
   if (style) root.setAttribute("style", style);
   else root.removeAttribute("style");
   return new XMLSerializer().serializeToString(root);
