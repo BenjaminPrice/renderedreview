@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { sqlDatabaseContract } from "@rendered-review/control-plane/contract";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { openDatabase, toPostgresPlaceholders } from "./database";
+import { openDatabase, resolveLocalPath, toPostgresPlaceholders } from "./database";
 
 sqlDatabaseContract("SQLite", async () => {
   const db = openDatabase("sqlite::memory:");
@@ -47,5 +50,31 @@ describe("openDatabase", () => {
       expect(await db.all("SELECT 1 AS one")).toEqual([{ one: 1 }]);
       await db.close();
     }
+  });
+
+  it("creates missing parent directories for a SQLite file", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "rr-db-"));
+    for (const url of [`sqlite://${dir}/a/b/one.db`, `sqlite:${dir}/c/two.db`, `file://${dir}/d/three.db`]) {
+      const db = openDatabase(url);
+      expect(await db.all("SELECT 1 AS one")).toEqual([{ one: 1 }]);
+      await db.close();
+    }
+  });
+});
+
+describe("resolveLocalPath", () => {
+  it("resolves relative paths against the workspace root, from any directory inside it", () => {
+    const root = mkdtempSync(join(tmpdir(), "rr-root-"));
+    writeFileSync(join(root, "pnpm-workspace.yaml"), "");
+    mkdirSync(join(root, "apps/web"), { recursive: true });
+    for (const cwd of [root, join(root, "apps/web")]) {
+      expect(resolveLocalPath("./.data/x.db", cwd)).toBe(join(root, ".data/x.db"));
+    }
+  });
+
+  it("falls back to the working directory outside a workspace, and keeps absolute paths", () => {
+    const cwd = mkdtempSync(join(tmpdir(), "rr-cwd-"));
+    expect(resolveLocalPath(".data/x.db", cwd)).toBe(join(cwd, ".data/x.db"));
+    expect(resolveLocalPath("/abs/x.db", cwd)).toBe("/abs/x.db");
   });
 });
