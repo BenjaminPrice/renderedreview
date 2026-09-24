@@ -22,3 +22,10 @@ it("underlines links in running text, which colour alone does not set apart (WCA
     true,
   );
 });
+
+it("reflows to one column on narrow viewports and at 200% zoom (WCAG 1.4.10)", () => {
+  const css = readFileSync(`${import.meta.dirname}/styles.css`, "utf8");
+  const narrow = /@media \(max-width: 40rem\) \{([\s\S]*?)\n\}/.exec(css)?.[1] ?? "";
+  for (const layout of [".rr-body", ".rr-canvas"])
+    expect(narrow, layout).toMatch(new RegExp(`\\${layout} \\{[^}]*grid-template-columns: minmax\\(0, 1fr\\);`));
+});
