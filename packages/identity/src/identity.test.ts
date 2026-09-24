@@ -324,5 +324,18 @@ describe.each(databases)("GitHub sign-in on %s", (_, open) => {
       const [row] = await db.all<{ accessToken: string }>(`SELECT "accessToken" FROM "account"`);
       expect(await (await createTokenCipher(newKey)).decrypt(row!.accessToken)).toBe("ghu_accessToken3");
     });
+
+    it("treats tokens under a dropped key as absent, and signing in again replaces them", async () => {
+      await signIn(identity, "/");
+      const lost = await createIdentity({
+        config: { ...config, encryptionKey: btoa("n".repeat(32)) },
+        db,
+        baseURL: BASE,
+      });
+      expect(await lost.getUserGitHubToken(await userId(), "github.com")).toBeNull();
+      const { callback } = await signIn(lost, "/");
+      expect(callback.headers.get("location")).toBe("/");
+      expect(await lost.getUserGitHubToken(await userId(), "github.com")).toBe(tokens.access);
+    });
   });
 });
