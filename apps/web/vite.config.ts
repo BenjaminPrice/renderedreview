@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
+import { cloudflare } from "@cloudflare/vite-plugin";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import viteReact from "@vitejs/plugin-react";
 import { nitro } from "nitro/vite";
@@ -44,15 +45,21 @@ function serviceWorker(): Plugin {
   };
 }
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   server: { port: 3000 },
-  // Nitro builds the portable Node server (.output/server/index.mjs, listens on PORT)
-  // and validates configuration at boot.
   // React's plugin must come after Start's plugin.
   plugins: [
+    // `--mode workers`: the Cloudflare plugin runs the server in workerd (dev and preview) and
+    // builds a Worker from wrangler.jsonc. Its "workerd" resolve condition makes `#runtime`
+    // pick the Cloudflare adapters.
+    ...(mode === "workers" ? [cloudflare({ viteEnvironment: { name: "ssr" } })] : []),
     tanstackStart(),
-    nitro({ plugins: [fileURLToPath(import.meta.resolve("@rendered-review/runtime-node/startup"))] }),
+    // Otherwise Nitro builds the portable Node server (.output/server/index.mjs, listens on PORT)
+    // and validates configuration at boot.
+    ...(mode === "workers"
+      ? []
+      : [nitro({ plugins: [fileURLToPath(import.meta.resolve("@rendered-review/runtime-node/startup"))] })]),
     viteReact(),
     serviceWorker(),
   ],
-});
+}));
