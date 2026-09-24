@@ -783,3 +783,62 @@ it("lands on the Overview when no Markdown changed", async () => {
   expect(await overview()).toBeTruthy();
   expect(prEntry().getAttribute("aria-current")).toBe("page");
 });
+
+// Application comments: PR conversation comments carrying Rendered Review annotation metadata.
+const HEAD_BLOB = "1a05f7e9c35e2bb310563708351758307f34a599";
+function appComment(id: number, over: { pullRequest?: number; blobOid?: string } = {}) {
+  const annotation = {
+    version: 1,
+    target: {
+      githubHost: "github.com",
+      repositoryId: 295774370,
+      repository: "mdn/content",
+      pullRequest: over.pullRequest ?? 45377,
+      path: INDEX,
+      commitOid: HEAD,
+      blobOid: over.blobOid ?? HEAD_BLOB,
+      selectors: [
+        { type: "TextQuoteSelector", exact: "indicates that the client" },
+        { type: "TextPositionSelector", start: 0, end: 25 },
+        { type: "MarkdownSourceRangeSelector", startLine: 26, startColumn: 29, endLine: 26, endColumn: 54 },
+      ],
+    },
+    motivation: "commenting",
+  };
+  const permalink = `https://github.com/mdn/content/blob/${HEAD}/${INDEX}?plain=1#L26-L26`;
+  return {
+    id,
+    body: `> indicates that the client\n\nIs "client" the right word? (${id})\n\nDocument: [\`${INDEX}\`](${permalink})\n\n<!-- rendered-review:v1:${btoa(JSON.stringify(annotation))} -->`,
+    created_at: "2026-09-02T00:00:00Z",
+    updated_at: "2026-09-02T00:00:00Z",
+  };
+}
+
+it("shows application comments on their words in the document, not in the conversation", async () => {
+  editIssueComments((cs) =>
+    cs.push({ ...cs[0]!, ...appComment(11) }, { ...cs[0]!, ...appComment(12, { blobOid: "e".repeat(40) }) }),
+  );
+  renderPage(`?doc=${encodeURIComponent(INDEX)}`);
+  const placed = (await screen.findByText(/right word\? \(11\)/)).closest("section")!;
+  expect(placed.getAttribute("aria-label")).toMatch(/^Selected text · L26, by /);
+  expect(within(placed).queryByText("indicates that the client")).toBeNull();
+  expect(anchorOf(placed)?.textContent).toContain("indicates that the client");
+  const unanchored = within(rail()).getByRole("region", { name: "Not placed in document" });
+  expect(within(unanchored).getByText(/re-anchoring pending$/)).toBeTruthy();
+
+  await userEvent.click(prEntry());
+  const list = await within(await overview()).findByRole("list", { name: "Conversation, oldest first" });
+  expect(within(list).queryByText(/right word/)).toBeNull();
+});
+
+it("keeps an annotation copied from another pull request in the conversation, marked damaged", async () => {
+  editIssueComments((cs) => cs.push({ ...cs[0]!, ...appComment(13, { pullRequest: 1 }) }));
+  renderPage("?view=overview");
+  const list = await within(await overview()).findByRole("list", { name: "Conversation, oldest first" });
+  const item = within(list)
+    .getByText(/right word\? \(13\)/)
+    .closest("li")!;
+  expect(within(item).getByText("Metadata damaged")).toBeTruthy();
+  // The whole body stays visible.
+  expect(within(item).getByText("indicates that the client")).toBeTruthy();
+});

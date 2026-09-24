@@ -145,9 +145,11 @@ function ReviewPage({ pr, id, files }: { pr: PullRequest; id: PrIdentity; files:
     return placeThreads(
       review.data.threads,
       entry.path,
-      entry.status === "deleted" ? { base: rendered } : { head: rendered },
+      entry.status === "deleted"
+        ? { base: rendered }
+        : { head: rendered, blob: doc.source === undefined ? undefined : { oid: entry.oid, source: doc.source } },
     );
-  }, [review.data, entry, view, doc.rendered]);
+  }, [review.data, entry, view, doc.rendered, doc.source]);
   const unresolved = useMemo(() => new Map(Object.entries(review.data?.unresolvedByPath ?? {})), [review.data]);
   const [filters, setFilters] = useState<ReadonlySet<ThreadState>>(DEFAULT_FILTERS);
 
@@ -371,7 +373,13 @@ function useReview(id: PrIdentity) {
     () =>
       comments.data && reviews.data && issueComments.data && threadsSettled
         ? projectReview({
-            repository: { host: id.host, owner: id.owner, name: id.repo },
+            repository: {
+              host: id.host,
+              owner: id.owner,
+              name: id.repo,
+              repositoryId: id.repositoryId,
+              pullRequest: id.number,
+            },
             reviewComments: comments.data,
             reviewThreads: threads.data,
             reviews: reviews.data,
