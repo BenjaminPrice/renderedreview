@@ -7,7 +7,7 @@ Accounts, billing, GitHub installation associations, entitlements and aggregate 
 `migrations/NNNN_name.sql` holds plain SQL, applied in file-name order. The same files run on all three databases:
 
 - **Node (SQLite or PostgreSQL):** the Node runtime applies pending migrations on first use of `RequestContext.db` (`migrate()` in `src/migrate.ts`, tracked in `schema_migration`). The files are bundled into the server build, so no migrations directory has to ship.
-- **Cloudflare D1:** use Wrangler. Point the D1 binding's `migrations_dir` at this directory and run `wrangler d1 migrations apply <database> --remote` (or `--local`). Wrangler tracks what it applied in its own `d1_migrations` table. Don't run both tools against the same D1 database.
+- **Cloudflare D1:** use Wrangler. `apps/web/wrangler.jsonc` points every environment's `DB` binding (`migrations_dir`) at this directory; run `wrangler d1 migrations apply DB [--env <env>] --remote` (or `--local`) from `apps/web`. The deploy workflow does this before `wrangler deploy`. Wrangler tracks what it applied in its own `d1_migrations` table. Don't run both tools against the same D1 database.
 
 To change the schema, add a new numbered file. Never edit an applied one.
 
@@ -35,6 +35,6 @@ The `user`, `session`, `account` and `verification` tables match Better Auth's c
 `src/contract.ts` exports `sqlDatabaseContract(name, open)`, the shared behavioral suite every `SqlDatabase` adapter runs:
 
 - `packages/runtime-node/src/database.test.ts` covers SQLite and PostgreSQL. PostgreSQL runs when `TEST_POSTGRES_URL` is set, and is required in CI. Each run uses a throwaway schema.
-- `src/d1.test.ts` covers D1 on a real local D1 (workerd via Miniflare).
+- `packages/runtime-cloudflare/src/d1.contract.test.ts` covers the D1 adapter on a real local D1 (workerd via Miniflare).
 
 To run the PostgreSQL contract locally, start a scratch server and set `TEST_POSTGRES_URL=postgres://postgres@127.0.0.1:<port>/postgres`.

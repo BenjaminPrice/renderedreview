@@ -40,9 +40,8 @@ jobs:
       - run: devbox run -- pnpm install --frozen-lockfile
       - run: devbox run -- pnpm test
       - run: devbox run -- pnpm --filter @rendered-review/web build:workers
-      # Skipped until the control-plane schema ships D1 migrations.
       - name: Apply D1 migrations
-        if: hashFiles('apps/web/migrations/*.sql') != ''
+        if: hashFiles('packages/control-plane/migrations/*.sql') != ''
         run: devbox run -- sh -c 'cd apps/web && pnpm exec wrangler d1 migrations apply DB --remote'
       - name: Deploy
         run: devbox run -- sh -c 'cd apps/web && pnpm exec wrangler deploy'

@@ -7,7 +7,8 @@
 // Environments do not inherit `vars`, bindings or `secrets`, so each one repeats them.
 //
 // Bindings:
-//   DB       D1 database for the control plane.
+//   DB       D1 database for the control plane. Its schema is packages/control-plane/migrations,
+//            applied with `wrangler d1 migrations apply DB [--env <env>] --local|--remote`.
 //   vars     Non-secret configuration, the same variables the Node build reads from its environment.
 //   secrets  Set with `wrangler secret put NAME --env <env>` (locally: apps/web/.dev.vars). Listing a
 //            name under `secrets.required` makes `wrangler deploy` refuse to run while it is unset.
@@ -30,7 +31,14 @@
   "observability": { "enabled": true },
   "vars": { "HOSTING_MODE": "community", "ACCESS_POLICY": "disabled" },
   // Local only: workerd keeps this database under .wrangler/state.
-  "d1_databases": [{ "binding": "DB", "database_name": "rendered-review-local", "database_id": "local" }],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "rendered-review-local",
+      "database_id": "local",
+      "migrations_dir": "../../packages/control-plane/migrations",
+    },
+  ],
 
   "env": {
     "preview": {
@@ -43,6 +51,7 @@
           "binding": "DB",
           "database_name": "rendered-review-preview",
           "database_id": "00000000-0000-0000-0000-000000000000",
+          "migrations_dir": "../../packages/control-plane/migrations",
         },
       ],
     },
@@ -57,6 +66,7 @@
           "binding": "DB",
           "database_name": "rendered-review-production",
           "database_id": "00000000-0000-0000-0000-000000000000",
+          "migrations_dir": "../../packages/control-plane/migrations",
         },
       ],
     },

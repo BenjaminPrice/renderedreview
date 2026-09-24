@@ -56,7 +56,7 @@ Deploys are manual. Run the **Deploy to Cloudflare** workflow (`.github/workflow
 
 1. Installs dependencies and runs the tests.
 2. Builds the Worker for the chosen environment.
-3. Applies D1 migrations (`wrangler d1 migrations apply DB --remote`) when `apps/web/migrations/*.sql` exist; skipped until then.
+3. Applies D1 migrations (`wrangler d1 migrations apply DB --remote`) from `packages/control-plane/migrations`.
 4. Runs `wrangler deploy`.
 
 From a workstation, the equivalent is:
