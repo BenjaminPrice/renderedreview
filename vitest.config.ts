@@ -6,8 +6,14 @@ export default defineConfig({
     passWithNoTests: true,
     projects: [
       "packages/*",
-      { test: { name: "root", include: ["*.test.ts"] } },
-      { test: { name: "web", include: ["apps/web/src/**/*.test.{ts,tsx}"] } },
+      { test: { name: "root", include: ["*.test.ts"], benchmark: { include: ["*.bench.ts"] } } },
+      {
+        test: {
+          name: "web",
+          include: ["apps/web/src/**/*.test.{ts,tsx}"],
+          benchmark: { include: ["apps/web/src/**/*.bench.ts"] },
+        },
+      },
     ],
   },
 });
