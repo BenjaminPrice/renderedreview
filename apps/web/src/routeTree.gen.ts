@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as HealthRouteImport } from './routes/health'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiGithubPublicSplatRouteImport } from './routes/api/github/public/$'
+import { Route as ApiGithubUserSplatRouteImport } from './routes/api/github/user/$'
 import { Route as HostOwnerRepoPullNumberRouteImport } from './routes/$host.$owner.$repo.pull.$number'
 
 const IndexRoute = IndexRouteImport.update({
@@ -35,6 +36,11 @@ const ApiGithubPublicSplatRoute = ApiGithubPublicSplatRouteImport.update({
   path: '/api/github/public/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiGithubUserSplatRoute = ApiGithubUserSplatRouteImport.update({
+  id: '/api/github/user/$',
+  path: '/api/github/user/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const HostOwnerRepoPullNumberRoute = HostOwnerRepoPullNumberRouteImport.update({
   id: '/$host/$owner/$repo/pull/$number',
   path: '/$host/$owner/$repo/pull/$number',
@@ -46,6 +52,7 @@ export interface FileRoutesByFullPath {
   '/health': typeof HealthRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/github/public/$': typeof ApiGithubPublicSplatRoute
+  '/api/github/user/$': typeof ApiGithubUserSplatRoute
   '/$host/$owner/$repo/pull/$number': typeof HostOwnerRepoPullNumberRoute
 }
 export interface FileRoutesByTo {
@@ -53,6 +60,7 @@ export interface FileRoutesByTo {
   '/health': typeof HealthRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/github/public/$': typeof ApiGithubPublicSplatRoute
+  '/api/github/user/$': typeof ApiGithubUserSplatRoute
   '/$host/$owner/$repo/pull/$number': typeof HostOwnerRepoPullNumberRoute
 }
 export interface FileRoutesById {
@@ -61,6 +69,7 @@ export interface FileRoutesById {
   '/health': typeof HealthRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/github/public/$': typeof ApiGithubPublicSplatRoute
+  '/api/github/user/$': typeof ApiGithubUserSplatRoute
   '/$host/$owner/$repo/pull/$number': typeof HostOwnerRepoPullNumberRoute
 }
 export interface FileRouteTypes {
@@ -70,6 +79,7 @@ export interface FileRouteTypes {
     | '/health'
     | '/api/auth/$'
     | '/api/github/public/$'
+    | '/api/github/user/$'
     | '/$host/$owner/$repo/pull/$number'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -77,6 +87,7 @@ export interface FileRouteTypes {
     | '/health'
     | '/api/auth/$'
     | '/api/github/public/$'
+    | '/api/github/user/$'
     | '/$host/$owner/$repo/pull/$number'
   id:
     | '__root__'
@@ -84,6 +95,7 @@ export interface FileRouteTypes {
     | '/health'
     | '/api/auth/$'
     | '/api/github/public/$'
+    | '/api/github/user/$'
     | '/$host/$owner/$repo/pull/$number'
   fileRoutesById: FileRoutesById
 }
@@ -92,6 +104,7 @@ export interface RootRouteChildren {
   HealthRoute: typeof HealthRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiGithubPublicSplatRoute: typeof ApiGithubPublicSplatRoute
+  ApiGithubUserSplatRoute: typeof ApiGithubUserSplatRoute
   HostOwnerRepoPullNumberRoute: typeof HostOwnerRepoPullNumberRoute
 }
 
@@ -125,6 +138,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiGithubPublicSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/github/user/$': {
+      id: '/api/github/user/$'
+      path: '/api/github/user/$'
+      fullPath: '/api/github/user/$'
+      preLoaderRoute: typeof ApiGithubUserSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/$host/$owner/$repo/pull/$number': {
       id: '/$host/$owner/$repo/pull/$number'
       path: '/$host/$owner/$repo/pull/$number'
@@ -140,6 +160,7 @@ const rootRouteChildren: RootRouteChildren = {
   HealthRoute: HealthRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiGithubPublicSplatRoute: ApiGithubPublicSplatRoute,
+  ApiGithubUserSplatRoute: ApiGithubUserSplatRoute,
   HostOwnerRepoPullNumberRoute: HostOwnerRepoPullNumberRoute,
 }
 export const routeTree = rootRouteImport
