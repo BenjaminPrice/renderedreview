@@ -38,7 +38,7 @@ function mount(props: Partial<ComponentProps<typeof Composer>> = {}) {
     onCancel: vi.fn(),
     onSignIn: vi.fn(),
   };
-  render(<Composer selection={selection} representation={native} signedIn canPublish {...handlers} {...props} />);
+  render(<Composer selection={selection} representation={native} signedIn {...handlers} {...props} />);
   return { ...handlers, card: screen.getByRole("region", { name: /New comment|Edit draft/ }) };
 }
 
@@ -125,14 +125,6 @@ describe("composing", () => {
 });
 
 describe("publishing now", () => {
-  it("is unavailable, saying so, until publishing exists", () => {
-    mount({ canPublish: false });
-    const now = screen.getByRole("button", { name: "Comment now" });
-    expect(now.hasAttribute("disabled")).toBe(true);
-    expect(now.getAttribute("aria-describedby")).toBeTruthy();
-    expect(document.getElementById(now.getAttribute("aria-describedby")!)!.textContent).toMatch(/coming soon/);
-  });
-
   it("publishes, and keeps the text with the reason when it fails", async () => {
     const { onCommentNow } = mount();
     onCommentNow.mockRejectedValueOnce(new Error("The pull request changed since this page loaded."));

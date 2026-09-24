@@ -6,7 +6,6 @@ import type { Representation } from "@rendered-review/review-domain";
 import { useId, useState, type KeyboardEvent } from "react";
 import { linesLabel } from "../document/SelectionPopover";
 import { Markdown } from "./Markdown";
-import { PUBLISHING_UNAVAILABLE } from "./publish";
 
 const QUOTE_CHARS = 280;
 
@@ -18,8 +17,6 @@ export interface ComposerProps {
   signedIn: boolean;
   /** Starts sign-in; without it, signed-out readers are told commenting needs sign-in. */
   onSignIn?: () => void;
-  /** A publisher exists; otherwise Comment now is disabled with a note. */
-  canPublish: boolean;
   /** Editing an existing draft: starts from its text, saves instead of adding, no Comment now. */
   initial?: string;
   editing?: boolean;
@@ -61,12 +58,12 @@ export function Quote({ selection }: { selection: SourceSelection }) {
 }
 
 export function Composer(props: ComposerProps) {
-  const { selection, representation, error, signedIn, canPublish, editing } = props;
+  const { selection, representation, error, signedIn, editing } = props;
   const [text, setText] = useState(props.initial ?? "");
   const [preview, setPreview] = useState(false);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string>();
-  const ids = { text: useId(), hint: useId(), unavailable: useId() };
+  const ids = { text: useId(), hint: useId() };
   const blank = !text.trim();
   const canSave = !error && !blank && !busy;
 
@@ -173,13 +170,7 @@ export function Composer(props: ComposerProps) {
               {editing ? "Save draft" : "Add to review"}
             </button>
             {!editing && (
-              <button
-                type="button"
-                className="rr-btn rr-btn-sm"
-                disabled={!canPublish || !canSave}
-                aria-describedby={canPublish ? undefined : ids.unavailable}
-                onClick={() => void commentNow()}
-              >
+              <button type="button" className="rr-btn rr-btn-sm" disabled={!canSave} onClick={() => void commentNow()}>
                 Comment now
               </button>
             )}
@@ -188,11 +179,6 @@ export function Composer(props: ComposerProps) {
               Cancel
             </button>
           </div>
-          {!canPublish && !editing && (
-            <p className="rr-composer-note" id={ids.unavailable}>
-              {PUBLISHING_UNAVAILABLE}
-            </p>
-          )}
         </>
       )}
     </section>

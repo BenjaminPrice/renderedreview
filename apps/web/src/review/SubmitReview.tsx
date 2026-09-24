@@ -5,7 +5,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { linesLabel } from "../document/SelectionPopover";
 import { commentIntent } from "./compose";
 import type { Draft } from "./drafts";
-import { type DraftOutcome, type Publisher, PUBLISHING_UNAVAILABLE, type Verdict } from "./publish";
+import { type DraftOutcome, type Publisher, publishErrorMessage, type Verdict } from "./publish";
 import { Badge } from "./ThreadCard";
 
 const GROUPS = [
@@ -28,8 +28,7 @@ export interface SubmitReviewProps {
   drafts: Draft[];
   /** The PR's current head; drafts written against another are stale. */
   headOid: string;
-  /** Absent until publishing exists: submitting is disabled with a note. */
-  publisher?: Publisher;
+  publisher: Publisher;
   /** Drafts that were published and should be removed. */
   onPublished: (ids: string[]) => void;
   onClose: () => void;
@@ -37,7 +36,7 @@ export interface SubmitReviewProps {
 
 export function SubmitReview({ drafts, headOid, publisher, onPublished, onClose }: SubmitReviewProps) {
   const dialog = useRef<HTMLDialogElement>(null);
-  const ids = { title: useId(), summary: useId(), unavailable: useId() };
+  const ids = { title: useId(), summary: useId() };
   const [summary, setSummary] = useState("");
   const [verdict, setVerdict] = useState<Verdict>("COMMENT");
   const [staleConfirmed, setStaleConfirmed] = useState(false);
@@ -51,10 +50,9 @@ export function SubmitReview({ drafts, headOid, publisher, onPublished, onClose 
 
   const stale = drafts.filter((d) => d.headOid !== headOid);
   const empty = verdict === "COMMENT" && !summary.trim() && drafts.length === 0;
-  const blocked = !publisher || busy || empty || (stale.length > 0 && !staleConfirmed);
+  const blocked = busy || empty || (stale.length > 0 && !staleConfirmed);
 
   async function submit() {
-    if (!publisher) return;
     setBusy(true);
     setReport(undefined);
     try {
@@ -68,7 +66,7 @@ export function SubmitReview({ drafts, headOid, publisher, onPublished, onClose 
       if (failed.length) setReport({ published: published.length, failed });
       else dialog.current?.close();
     } catch (error) {
-      setReport({ published: 0, failed: [{ message: (error as Error).message }] });
+      setReport({ published: 0, failed: [{ message: publishErrorMessage(error as Error) }] });
     } finally {
       setBusy(false);
     }
@@ -176,19 +174,8 @@ export function SubmitReview({ drafts, headOid, publisher, onPublished, onClose 
         )}
       </div>
       <div className="rr-dialog-foot">
-        {!publisher && (
-          <p className="rr-composer-note" id={ids.unavailable}>
-            {PUBLISHING_UNAVAILABLE}
-          </p>
-        )}
         <span className="rr-spacer" />
-        <button
-          type="button"
-          className="rr-btn rr-btn-primary"
-          disabled={blocked}
-          aria-describedby={publisher ? undefined : ids.unavailable}
-          onClick={() => void submit()}
-        >
+        <button type="button" className="rr-btn rr-btn-primary" disabled={blocked} onClick={() => void submit()}>
           Submit review
         </button>
       </div>

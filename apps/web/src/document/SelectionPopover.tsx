@@ -122,23 +122,3 @@ export function SelectionPopover({
     </div>
   );
 }
-
-/** Placeholder for the comment being composed on `selection`, until the composer exists. */
-export function PendingComment({ selection, onCancel }: { selection: SourceSelection; onCancel: () => void }) {
-  return (
-    <section className="rr-thread rr-pending" aria-label="New comment">
-      <blockquote className="rr-pending-quote">{truncate(selection.exact)}</blockquote>
-      <p className="rr-pending-note">Writing comments is coming soon.</p>
-      <div className="rr-t-foot">
-        <span className="rr-t-loc">
-          Source {linesLabel(selection)}
-          {selection.expanded && " · whole blocks"}
-        </span>
-        <span className="rr-spacer" />
-        <button type="button" className="rr-btn rr-btn-sm rr-btn-ghost" onClick={onCancel}>
-          Cancel
-        </button>
-      </div>
-    </section>
-  );
-}

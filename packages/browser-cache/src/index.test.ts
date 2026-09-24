@@ -84,7 +84,7 @@ describe("openBrowserCache", () => {
   });
 
   it.each([
-    ["missing",() => vi.stubGlobal("indexedDB", undefined)],
+    ["missing", () => vi.stubGlobal("indexedDB", undefined)],
     [
       "failing to open",
       () =>

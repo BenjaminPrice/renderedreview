@@ -40,6 +40,8 @@ const drafts = [
   draft("d4", line(9)),
 ];
 
+const idle: Publisher = { publishComment: vi.fn(), submitReview: vi.fn(async () => []) };
+
 function mount(props: { drafts?: Draft[]; publisher?: Publisher } = {}) {
   const onPublished = vi.fn();
   const onClose = vi.fn();
@@ -47,7 +49,7 @@ function mount(props: { drafts?: Draft[]; publisher?: Publisher } = {}) {
     <SubmitReview
       drafts={props.drafts ?? drafts}
       headOid={HEAD}
-      publisher={props.publisher}
+      publisher={props.publisher ?? idle}
       onPublished={onPublished}
       onClose={onClose}
     />,
@@ -66,12 +68,6 @@ describe("submit review dialog", () => {
     ).toEqual([expect.stringContaining("Comment d1"), expect.stringContaining("Comment d4")]);
     expect(within(group(/^File comments/)).getByRole("listitem").textContent).toContain("Comment d2");
     expect(within(group(/^PR conversation comments/)).getByRole("listitem").textContent).toContain("README.md");
-  });
-
-  it("stays closed to publishing until publishing exists", () => {
-    const { dialog } = mount();
-    expect(within(dialog).getByRole("button", { name: "Submit review" }).hasAttribute("disabled")).toBe(true);
-    expect(within(dialog).getByText(/coming soon/)).toBeTruthy();
   });
 
   it("submits intents with the summary and verdict, removing published drafts and reporting failures", async () => {

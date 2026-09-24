@@ -2141,6 +2141,213 @@ samp {
   color: var(--rr-text-muted);
   white-space: pre-wrap;
 }
-.rr-pending-note {
+
+/* Comment composer and draft cards in the rail. */
+.rr-composer {
+  border-color: var(--rr-accent);
+  box-shadow: var(--rr-shadow);
+}
+.rr-composer-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px 0 12px;
+}
+.rr-composer-top .rr-seg button {
+  height: 22px;
+  padding: 0 8px;
+}
+.rr-composer-top [aria-disabled="true"] {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.rr-composer-text {
+  display: block;
+  width: calc(100% - 24px);
+  margin: 8px 12px;
+  min-height: 76px;
+  resize: vertical;
+  padding: 8px 10px;
+  border: 1px solid var(--rr-border-strong);
+  border-radius: var(--rr-radius);
+  background: var(--rr-bg);
+  color: var(--rr-text);
+  font: var(--rr-text-sm) / 1.45 var(--rr-font-ui);
+}
+.rr-composer-text:focus-visible {
+  outline-offset: 0;
+}
+.rr-composer-preview,
+.rr-draft-body {
+  margin: 8px 12px;
+}
+.rr-composer-note {
   margin: 0 12px 8px;
+  font-size: var(--rr-text-xs);
+  color: var(--rr-text-muted);
+}
+.rr-composer-error {
+  margin: 0 12px 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--rr-deleted-fg);
+  border-radius: var(--rr-radius);
+  background: var(--rr-deleted-bg);
+  font-size: var(--rr-text-xs);
+}
+.rr-composer-error p,
+.rr-composer-error ul {
+  margin: 0;
+}
+.rr-hint {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  margin: 0 12px 8px;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--rr-text-muted);
+}
+.rr-hint .rr-icon {
+  flex: none;
+  width: 13px;
+  height: 13px;
+  margin-top: 1px;
+  color: var(--rr-accent-text);
+}
+.rr-hint b {
+  color: var(--rr-text);
+  font-weight: 600;
+}
+.rr-composer-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px 10px;
+  border-top: 1px solid var(--rr-border-muted);
+}
+.rr-draft {
+  border-style: dashed;
+}
+
+/* The selection a comment is being written on. Text-exact where supported, whole blocks otherwise. */
+::highlight(rr-pending) {
+  background-color: var(--rr-hl-comment-active);
+}
+[data-rr-pending] {
+  background: var(--rr-hl-comment);
+  box-shadow: -6px 0 0 var(--rr-hl-comment-line);
+}
+
+/* Submit-review dialog: same surface as the table dialog. */
+.rr-dialog {
+  width: min(560px, 92vw);
+  max-height: 85vh;
+  padding: 0;
+  border: 1px solid var(--rr-border);
+  border-radius: var(--rr-radius-lg);
+  background: var(--rr-surface-raised);
+  color: var(--rr-text);
+  box-shadow: var(--rr-shadow);
+  font: var(--rr-text-sm) / 1.45 var(--rr-font-ui);
+}
+.rr-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+.rr-dialog::backdrop {
+  background: light-dark(#1f232866, #010409b3);
+}
+.rr-dialog-head,
+.rr-dialog-foot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+}
+.rr-dialog-head {
+  justify-content: space-between;
+  border-bottom: 1px solid var(--rr-border-muted);
+}
+.rr-dialog-head h2 {
+  margin: 0;
+  font-size: var(--rr-text-ui);
+}
+.rr-dialog-foot {
+  border-top: 1px solid var(--rr-border-muted);
+}
+.rr-dialog-foot .rr-composer-note {
+  margin: 0;
+}
+.rr-dialog-body {
+  overflow: auto;
+  padding: 12px 0;
+}
+.rr-dialog-body > .rr-field-label {
+  margin: 0 12px;
+}
+.rr-field-label {
+  display: block;
+  padding: 0;
+  font-weight: 600;
+}
+.rr-verdict,
+.rr-draft-group {
+  margin: 4px 12px 12px;
+  padding: 0;
+  border: 0;
+}
+.rr-verdict label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 4px 14px 0 0;
+}
+.rr-draft-group .rr-composer-note {
+  margin: 2px 0 6px;
+}
+.rr-draft-group ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--rr-border-muted);
+  border-radius: var(--rr-radius);
+}
+.rr-draft-group li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  padding: 6px 10px;
+}
+.rr-draft-group li + li {
+  border-top: 1px solid var(--rr-border-muted);
+}
+.rr-draft-loc {
+  font-size: var(--rr-text-xs);
+  color: var(--rr-text-muted);
+}
+.rr-draft-excerpt {
+  flex-basis: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.rr-stale-warning {
+  margin: 0 12px 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--rr-modified-fg);
+  border-radius: var(--rr-radius);
+  background: var(--rr-modified-bg);
+}
+.rr-stale-warning p {
+  margin: 0 0 6px;
+}
+.rr-stale-warning label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+.rr-dialog .rr-composer-error {
+  margin: 0 12px;
 }
