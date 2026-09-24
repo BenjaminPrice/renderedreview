@@ -3,7 +3,8 @@
 // `sandbox` CSP directive gives it an opaque origin even when opened directly, so the renderer
 // can never reach the app's cookies, storage or DOM; `default-src 'none'` stops all network
 // access except the renderer script itself. The parent posts `{ id, source, theme }` and gets
-// `{ id, svg }` or `{ id, error }` back; `{ ready: true }` announces the frame.
+// `{ id, svg }` or `{ id, error }` back; `{ ready: true }` announces the frame (`false`: the
+// renderer script did not load).
 //
 // The frame is a server route rather than `srcdoc`: a srcdoc document inherits the app's CSP,
 // which forbids the inline <style> Mermaid puts in its SVG.
@@ -16,6 +17,7 @@ const SCRIPT_PATH = /^\/(?!\/)[\w@.+/-]+\.js$/;
 
 // Runs in the frame. Renders are queued: Mermaid keeps global state while rendering.
 const BOOTSTRAP = `(() => {
+  if (typeof mermaid === "undefined") return parent.postMessage({ ready: false }, "*");
   const config = {
     startOnLoad: false,
     securityLevel: "strict",
