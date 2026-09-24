@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // DOM adapter for selection conversion: DOM boundary points <-> rendered points (stamped element + text offset).
 import {
+  rejectSelection,
   type RenderedMarkdown,
   type RenderedPoint,
   selectionToSource,
@@ -10,13 +11,30 @@ import {
 import { nodeElement } from "./document";
 
 const STAMPED = "[data-rr-id]";
+/** App UI inside the document (diagram toolbars, line numbers): not document text. */
+const UI = "[data-rr-ui]";
 
 const idOf = (el: Element) => Number(el.getAttribute("data-rr-id"));
 
+/** Document text nodes under `root` in order, skipping app UI. */
+function* textNodes(root: Node): Generator<Text> {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, {
+    acceptNode: (n) =>
+      n.nodeType === Node.TEXT_NODE
+        ? NodeFilter.FILTER_ACCEPT
+        : (n as Element).matches(UI)
+          ? NodeFilter.FILTER_REJECT
+          : NodeFilter.FILTER_SKIP,
+  });
+  for (let t = walker.nextNode(); t; t = walker.nextNode()) yield t as Text;
+}
+
+const textLength = (root: Node) => [...textNodes(root)].reduce((n, t) => n + t.length, 0);
+
 /**
  * The rendered point for a DOM boundary point in `article`: its nearest stamped ancestor and the
- * text length before it there. A boundary outside every stamped element (between blocks) moves to
- * the nearest stamped element after it (`start`) or before it (`end`).
+ * document text length before it there. A boundary outside every stamped element (between blocks)
+ * moves to the nearest stamped element after it (`start`) or before it (`end`).
  */
 function pointOf(article: HTMLElement, node: Node, offset: number, edge: "start" | "end"): RenderedPoint | null {
   const el = (node.nodeType === Node.ELEMENT_NODE ? (node as Element) : node.parentElement)?.closest(STAMPED);
@@ -24,7 +42,12 @@ function pointOf(article: HTMLElement, node: Node, offset: number, edge: "start"
     const before = document.createRange();
     before.setStart(el, 0);
     before.setEnd(node, offset);
-    return { id: idOf(el), offset: before.toString().length };
+    let length = 0;
+    for (const t of textNodes(el)) {
+      if (t === node) length += offset;
+      else if (before.intersectsNode(t)) length += t.length;
+    }
+    return { id: idOf(el), offset: length };
   }
   const step = edge === "start" ? 1 : -1;
   for (;;) {
@@ -37,12 +60,20 @@ function pointOf(article: HTMLElement, node: Node, offset: number, edge: "start"
         : edge === "start"
           ? (kid as Element).querySelector(STAMPED)
           : [...(kid as Element).querySelectorAll(STAMPED)].at(-1);
-      if (found) return { id: idOf(found), offset: edge === "start" ? 0 : found.textContent.length };
+      if (found) return { id: idOf(found), offset: edge === "start" ? 0 : textLength(found) };
     }
     if (node === article || !node.parentNode) return null;
     offset = [...node.parentNode.childNodes].indexOf(node as ChildNode) + (edge === "start" ? 1 : 0);
     node = node.parentNode;
   }
+}
+
+/** A boundary inside app UI moves out of it: past it (`start`) or before it (`end`); null if not inside. */
+function outOfUi(article: HTMLElement, node: Node, edge: "start" | "end"): [Node, number] | null {
+  const ui = (node.nodeType === Node.ELEMENT_NODE ? (node as Element) : node.parentElement)?.closest(UI);
+  if (!ui || !article.contains(ui)) return null;
+  const parent = ui.parentNode!;
+  return [parent, [...parent.childNodes].indexOf(ui) + (edge === "start" ? 1 : 0)];
 }
 
 /** Convert a DOM range inside `article` into a source claim; null when it is not inside the article. */
@@ -53,19 +84,33 @@ export function convertRange(
   range: Range,
 ): SelectionResult | null {
   if (!article.contains(range.startContainer) || !article.contains(range.endContainer)) return null;
-  const start = pointOf(article, range.startContainer, range.startOffset, "start");
-  const end = pointOf(article, range.endContainer, range.endOffset, "end");
-  return start && end ? selectionToSource(rendered, source, start, end) : null;
+  const movedStart = outOfUi(article, range.startContainer, "start");
+  const movedEnd = outOfUi(article, range.endContainer, "end");
+  const start = pointOf(article, ...(movedStart ?? [range.startContainer, range.startOffset]), "start");
+  const end = pointOf(article, ...(movedEnd ?? [range.endContainer, range.endOffset]), "end");
+  if (!start || !end) return null;
+  const result = selectionToSource(rendered, source, start, end);
+  // Nothing left once out of app UI: the reader selected only UI.
+  return !result.ok && result.reason === "empty" && (movedStart || movedEnd) ? rejectSelection("generated") : result;
 }
 
 /** The DOM position of a rendered point: inside the text node holding the next (`start`) or previous (`end`) character. */
-function domPosition(article: HTMLElement, p: RenderedPoint, edge: "start" | "end"): [Node, number] | null {
-  const el = nodeElement(article, p.id);
+function domPosition(
+  article: HTMLElement,
+  rendered: RenderedMarkdown,
+  p: RenderedPoint,
+  edge: "start" | "end",
+): [Node, number] | null {
+  let el = nodeElement(article, p.id);
+  // Not shown (a diagram's closed source view): the whole nearest shown ancestor.
+  for (let id = rendered.nodes[p.id]!.parentId; !el && id !== null; id = rendered.nodes[id]!.parentId) {
+    el = nodeElement(article, id);
+    if (el) return [el, edge === "start" ? 0 : el.childNodes.length];
+  }
   if (!el) return null;
-  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
   let seen = 0;
   let last: Text | null = null;
-  for (let t = walker.nextNode() as Text | null; t; t = walker.nextNode() as Text | null) {
+  for (const t of textNodes(el)) {
     if (edge === "start" ? p.offset < seen + t.length : p.offset <= seen + t.length) return [t, p.offset - seen];
     seen += t.length;
     last = t;
@@ -81,8 +126,8 @@ export function highlightRanges(
   claim: { start: number; end: number },
 ): Range[] {
   return sourceToRendered(rendered, source, claim).flatMap((run) => {
-    const a = domPosition(article, run.start, "start");
-    const b = domPosition(article, run.end, "end");
+    const a = domPosition(article, rendered, run.start, "start");
+    const b = domPosition(article, rendered, run.end, "end");
     if (!a || !b) return [];
     const range = document.createRange();
     range.setStart(...a);
