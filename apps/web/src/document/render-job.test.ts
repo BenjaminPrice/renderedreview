@@ -25,5 +25,4 @@ describe("renderJob", () => {
   it("parses .mdx as MDX, throwing its parse error", () => {
     expect(() => renderJob({ source: "<Tabs>\n", pr, sha: "abc", path: "a.mdx" })).toThrow(/Invalid MDX/);
   });
-
 });

@@ -22,7 +22,12 @@ export async function checkRenderWorker(assets: URL): Promise<void> {
         reject(new Error(`${file} failed to start: ${String(error)}`));
         return;
       }
-      const job = { source: "# Title\n\nA &amp; B\n", pr: { host: "github.com", owner: "o", repo: "r", number: 1 }, sha: "s", path: "a.md" };
+      const job = {
+        source: "# Title\n\nA &amp; B\n",
+        pr: { host: "github.com", owner: "o", repo: "r", number: 1 },
+        sha: "s",
+        path: "a.md",
+      };
       (self.onmessage as (event: { data: unknown }) => void)({ data: { id: 1, job } });
     },
   );

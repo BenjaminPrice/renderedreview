@@ -41,7 +41,10 @@ export const corpus: Record<string, string> = {
 const opts = { iterations: 5, time: 0, warmupIterations: 1, warmupTime: 0 };
 
 test("renderMarkdown", async ({ bench }) => {
-  await bench.compare(...Object.entries(corpus).map(([name, source]) => bench(name, () => void renderMarkdown(source))), opts);
+  await bench.compare(
+    ...Object.entries(corpus).map(([name, source]) => bench(name, () => void renderMarkdown(source))),
+    opts,
+  );
 });
 
 test("changedLines (base vs head, every 50th line edited)", async ({ bench }) => {
@@ -52,7 +55,11 @@ test("changedLines (base vs head, every 50th line edited)", async ({ bench }) =>
       .join("\n");
     return bench(name, () => void changedLines(base, source));
   });
-  await bench.compare(...runs, bench("typical, real revision", () => void changedLines(mdnBase, mdn)), opts);
+  await bench.compare(
+    ...runs,
+    bench("typical, real revision", () => void changedLines(mdnBase, mdn)),
+    opts,
+  );
 });
 
 test("re-anchoring 500 comments after an edit", async ({ bench }) => {

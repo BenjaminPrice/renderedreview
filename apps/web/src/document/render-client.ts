@@ -6,10 +6,7 @@ import type { RenderedMarkdown } from "@rendered-review/markdown-domain";
 import type { RenderJob } from "./render-job";
 import script from "./render-worker?worker&url";
 
-export type WorkerLike = Pick<Worker, "postMessage" | "terminate"> & {
-  onmessage: ((event: MessageEvent) => void) | null;
-  onerror: ((event: Event) => void) | null;
-};
+export type WorkerLike = Pick<Worker, "postMessage" | "terminate" | "onmessage" | "onerror">;
 
 export type RenderReply = { id: number; rendered: RenderedMarkdown } | { id: number; error: string };
 

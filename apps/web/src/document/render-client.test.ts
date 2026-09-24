@@ -21,7 +21,12 @@ class FakeWorker implements WorkerLike {
   }
 }
 
-const job = (path: string): RenderJob => ({ source: "# Hi\n", pr: { host: "h", owner: "o", repo: "r", number: 1 }, sha: "s", path });
+const job = (path: string): RenderJob => ({
+  source: "# Hi\n",
+  pr: { host: "h", owner: "o", repo: "r", number: 1 },
+  sha: "s",
+  path,
+});
 const doc = (tag: string) => ({ tree: { type: "root", children: [] }, nodes: [], tag }) as unknown as RenderedMarkdown;
 
 function setup() {
