@@ -80,11 +80,11 @@ describe("current: the stored location is still valid", () => {
 describe("moved: a unique match elsewhere", () => {
   test("text inserted above shifts the quote; exact quote and context still match", () => {
     const after = DOC.replace("# Guide\n", "# Guide\n\nAn introduction was added here.\n");
-    const { result, placed } = run(DOC, after, "retries failed");
+    const { result, placed } = run(DOC, after, "ten requests");
     expect(result).toMatchObject({ state: "moved", evidence: "quote-context" });
     expect(result.confidence).toBeGreaterThanOrEqual(0.9);
-    expect(placed).toBe("retries failed");
-    expect(result.sourceRange!.startLine).toBe(5);
+    expect(placed).toBe("ten requests");
+    expect(result.sourceRange!.startLine).toBe(9);
   });
 
   test("a paragraph moved within its section keeps its place by context", () => {
@@ -95,11 +95,17 @@ describe("moved: a unique match elsewhere", () => {
     expect(placed).toBe("which we discuss");
   });
 
-  test("a renamed heading: the paragraph below it moves, even though its heading path changed", () => {
-    const after = DOC.replace("## Limits", "## Rate limits and quotas");
-    const { result, placed } = run(DOC, after, "ten requests");
-    expect(result).toMatchObject({ state: "moved", evidence: "quote-context" });
-    expect(placed).toBe("ten requests");
+  test("a renamed heading: text below it moves, even though its heading path changed", () => {
+    const before = "# Guide\n\n## Limits\n\nEach client may send at most ten requests per second to the API.\n";
+    const after = before.replace("## Limits", "## Rate limits and quotas");
+    // Far enough from the heading that the whole context survives.
+    const deep = run(before, after, "per second");
+    expect(deep.result).toMatchObject({ state: "moved", evidence: "quote-context" });
+    expect(deep.placed).toBe("per second");
+    // Right under the heading: the prefix changed with it, the suffix and block kind still match.
+    const near = run(before, after, "Each client");
+    expect(near.result).toMatchObject({ state: "moved", evidence: "structure" });
+    expect(near.placed).toBe("Each client");
   });
 
   test("an edit right next to the quote breaks context, but the quote is unique in its section", () => {
@@ -245,7 +251,12 @@ describe("rendered documents with generated text", () => {
 describe("performance", () => {
   test("results are memoized by blob pair and annotation", () => {
     const after = "Intro.\n\n" + DOC;
-    const input = { annotation: annotate(DOC, "ten requests"), blobOid: oid(after), source: after, doc: renderMarkdown(after) };
+    const input = {
+      annotation: annotate(DOC, "ten requests"),
+      blobOid: oid(after),
+      source: after,
+      doc: renderMarkdown(after),
+    };
     expect(reanchor(input)).toBe(reanchor({ ...input, doc: renderMarkdown(after) }));
   });
 
@@ -254,17 +265,13 @@ describe("performance", () => {
     const before = Array.from({ length: 4000 }, (_, i) => (i % 400 === 0 ? `# Part ${i}\n\n` : para(i))).join("");
     const after = "Preface.\n\n" + before.replace("Paragraph 3210 talks", "Paragraph 3210 speaks");
     const doc = renderMarkdown(after);
+    const [a, b] = [annotate(before, "topic 9 in"), annotate(before, "Paragraph 3210 talks about")];
     const t0 = performance.now();
-    const exact = reanchor({ annotation: annotate(before, "topic 9 in"), blobOid: oid(after), source: after, doc });
-    const fuzzy = reanchor({
-      annotation: annotate(before, "Paragraph 3210 talks about"),
-      blobOid: oid(after),
-      source: after,
-      doc,
-    });
+    const exact = reanchor({ annotation: a, blobOid: oid(after), source: after, doc });
+    const fuzzy = reanchor({ annotation: b, blobOid: oid(after), source: after, doc });
     const elapsed = performance.now() - t0;
     expect(exact.state).toBe("moved");
     expect(fuzzy.state).not.toBe("current");
-    expect(elapsed).toBeLessThan(1000);
+    expect(elapsed).toBeLessThan(200);
   });
 });

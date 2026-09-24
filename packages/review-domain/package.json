@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@rendered-review/annotation-domain": "workspace:*",
     "@rendered-review/github-action": "workspace:*",
     "@rendered-review/github-integration": "workspace:*",
     "@rendered-review/markdown-domain": "workspace:*"
