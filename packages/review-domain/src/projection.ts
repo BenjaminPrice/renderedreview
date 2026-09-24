@@ -287,6 +287,7 @@ export interface ThreadPlacement {
 function unplacedReason(r: ReanchorResult): string {
   if (r.state === "ambiguous") return `The quoted text now appears in ${r.candidates.length} places`;
   if (r.state === "unavailable") return "The original version of this document is no longer available";
+  if (r.state === "historical-only") return "The quoted text is only in an earlier revision";
   return "The quoted text changed since this comment";
 }
 
@@ -303,6 +304,8 @@ export function placeThreads(
     base?: RenderedMarkdown;
     /** The head blob `head` was rendered from; annotations are placed only on the blob they name. */
     blob?: { oid: string; source: string };
+    /** Whether annotations' original blobs can still be read, by blob OID, where known. */
+    original?: ReadonlyMap<string, "available" | "missing">;
   },
 ): ThreadPlacement[] {
   const lineBlocks = (a: NativeAnchor | undefined) => {
@@ -327,7 +330,13 @@ export function placeThreads(
         };
       };
       if (blob.oid !== a.annotation.target.blobOid) {
-        const r = reanchor({ annotation: a.annotation, blobOid: blob.oid, source: blob.source, doc: head });
+        const r = reanchor({
+          annotation: a.annotation,
+          blobOid: blob.oid,
+          source: blob.source,
+          doc: head,
+          original: docs.original?.get(a.annotation.target.blobOid),
+        });
         // Reworded text is placed on its block only: no word range claims precision it lacks.
         if (r.approximate)
           return {

@@ -134,6 +134,22 @@ describe("placeThreads with annotations", () => {
     expect(p.range).toBeUndefined();
   });
 
+  it("says whether the original of an unplaced annotation can still be shown", () => {
+    const gone = "# Reliability\n\nThe system gives up after three attempts.\n";
+    const docs = (original: ReadonlyMap<string, "available" | "missing">) => ({
+      head: renderMarkdown(gone),
+      blob: { oid: "f".repeat(40), source: gone },
+      original,
+    });
+    const thread = appThread(target({ blobOid: OLD_BLOB }));
+    const [historical] = placeThreads([thread], "doc.md", docs(new Map([[OLD_BLOB, "available"]])));
+    expect(historical).toMatchObject({ blocks: [], reason: "The quoted text is only in an earlier revision" });
+    expect(historical!.reanchor?.state).toBe("historical-only");
+    const [missing] = placeThreads([thread], "doc.md", docs(new Map([[OLD_BLOB, "missing"]])));
+    expect(missing!.reanchor?.state).toBe("unavailable");
+    expect(missing!.reason).toBe("The original version of this document is no longer available");
+  });
+
   it("never places an ambiguous annotation, and counts its candidates", () => {
     const p = place("# Reliability\n\nIt retries failed requests. It also retries failed requests.\n");
     expect(p).toMatchObject({ blocks: [], reason: "The quoted text now appears in 2 places" });
