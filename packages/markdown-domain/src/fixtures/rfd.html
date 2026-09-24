@@ -1,0 +1,55 @@
+<h1 data-rr-id="0">RFD 42: Rendered review for Markdown documents</h1>
+<h2 data-rr-id="1">Background</h2>
+<p data-rr-id="2">Reviewing prose in a raw diff is painful. Reviewers lose the <em data-rr-id="3">structure</em> of the
+document and comment on <strong data-rr-id="4">line numbers</strong> rather than ideas.<sup data-rr-id="5"><a href="#fn-prior" id="user-content-fnref-prior" data-footnote-ref="" aria-describedby="user-content-footnote-label" data-rr-id="6">1</a></sup></p>
+<h2 data-rr-id="7">Proposal</h2>
+<p data-rr-id="8">We render the document and keep a map from every rendered element back to its
+source range. Selections become source claims:</p>
+<ol data-rr-id="9">
+<li data-rr-id="10">Exact selected text.</li>
+<li data-rr-id="11">A line and column range.</li>
+<li data-rr-id="12">Surrounding context, including the <code data-rr-id="13">heading path</code>.</li>
+</ol>
+<blockquote data-rr-id="14">
+<p data-rr-id="15">Source positions refer to the raw blob, never to normalized text.</p>
+</blockquote>
+<h3 data-rr-id="16">Data flow</h3>
+<pre data-rr-id="17"><code class="language-mermaid" data-rr-id="18">sequenceDiagram
+  Reviewer->>Browser: select text
+  Browser->>GitHub: post comment
+</code></pre>
+<h3 data-rr-id="19">Alternatives considered</h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table data-rr-id="20"><thead data-rr-id="21"><tr data-rr-id="22"><th align="left" data-rr-id="23">Option</th><th align="center" data-rr-id="24">Precision</th><th align="right" data-rr-id="25">Cost</th></tr></thead><tbody data-rr-id="26"><tr data-rr-id="27"><td align="left" data-rr-id="28">Raw diff comments</td><td align="center" data-rr-id="29">line</td><td align="right" data-rr-id="30">none</td></tr><tr data-rr-id="31"><td align="left" data-rr-id="32">Rendered review</td><td align="center" data-rr-id="33">character</td><td align="right" data-rr-id="34">parser</td></tr></tbody></table>
+<h2 data-rr-id="35">Open questions</h2>
+<ul class="contains-task-list" data-rr-id="36">
+<li class="task-list-item" data-rr-id="37"><input type="checkbox" checked disabled data-rr-unmapped> Do we support footnotes?</li>
+<li class="task-list-item" data-rr-id="38"><input type="checkbox" disabled data-rr-unmapped> Do we support <del data-rr-id="39">PlantUML</del> server rendering?</li>
+</ul>
+<p data-rr-id="40">See <a href="https://github.com/example/repo" data-rr-id="41">https://github.com/example/repo</a> and <a href="https://example.com/spec" data-rr-id="42">https://example.com/spec</a>.</p>
+<section data-footnotes="" class="footnotes" data-rr-unmapped><h2 class="sr-only" id="user-content-footnote-label" data-rr-unmapped>Footnotes</h2>
+<ol data-rr-unmapped>
+<li id="user-content-fn-prior" data-rr-id="43">
+<p data-rr-id="44">See the earlier discussion in RFD 17. <a href="#fnref-prior" data-footnote-backref="" aria-label="Back to reference 1" class="data-footnote-backref" data-rr-unmapped>↩</a></p>
+</li>
+</ol>
+</section>

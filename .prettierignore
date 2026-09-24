@@ -3,3 +3,5 @@ devbox.lock
 LICENSE
 **/routeTree.gen.ts
 packages/github-action/dist/
+# Markdown fixtures and their rendered snapshots must stay byte-exact
+packages/markdown-domain/src/fixtures/
