@@ -39,6 +39,7 @@ import {
   PrOverview,
   prState,
 } from "../document/Overview";
+import { useAnchors } from "../document/anchors";
 import { usePendingHighlight } from "../document/highlight";
 import { SelectionPopover } from "../document/SelectionPopover";
 import { Sidebar } from "../document/Sidebar";
@@ -59,15 +60,7 @@ import {
   treeQuery,
   viewerQuery,
 } from "../github/queries";
-import {
-  CommentRail,
-  DEFAULT_FILTERS,
-  placementCounts,
-  RailHeader,
-  threadDomId,
-  threadState,
-  type ThreadState,
-} from "../review";
+import { CommentRail, DEFAULT_FILTERS, placementCounts, RailHeader, type ThreadState } from "../review";
 import { relativeTime } from "../review/model";
 import { useReviewMode } from "../review/ReviewMode";
 import { AppShell } from "../ui/AppShell";
@@ -216,7 +209,7 @@ function ReviewPage({ pr, id, files }: { pr: PullRequest; id: PrIdentity; files:
     const root = threads?.find((t) => t.id === threadId)?.comments[0];
     void navigate({ search: (s) => ({ ...s, thread: root?.id }), replace: true });
   };
-  useAnchors(article, placements, filters, active?.id ?? null, setActive);
+  const wordRanges = useAnchors(article, rendered, doc.source, placements, filters, active?.id ?? null, setActive);
 
   // A new document starts at its top, unless a thread link targets it: focusing the thread scrolls there.
   const scrollTop = useEffectEvent(() => {
@@ -410,6 +403,7 @@ function ReviewPage({ pr, id, files }: { pr: PullRequest; id: PrIdentity; files:
                 repository={repository}
                 filters={filters}
                 docContainerRef={docColumn}
+                wordRanges={wordRanges}
                 activeThreadId={active?.id ?? null}
                 onActiveThreadChange={setActive}
                 extras={historical ? undefined : reviewMode.extras}
@@ -603,62 +597,6 @@ function useLineTarget(article: HTMLElement | null, rendered: RenderedMarkdown |
     el.addEventListener("animationend", done, { once: true });
     return done;
   }, [article, rendered, hash]);
-}
-
-/**
- * Marks the rendered blocks of visible threads: `aria-details` points at their cards, and
- * `data-rr-anchor` / `data-rr-active` drive the highlight. Clicking a block, or Enter/Space on it,
- * activates its thread. Attributes are set on React-rendered elements, so they are removed again
- * before every update.
- */
-function useAnchors(
-  article: HTMLElement | null,
-  placements: ThreadPlacement[],
-  filters: ReadonlySet<ThreadState>,
-  activeId: string | null,
-  activate: (threadId: string) => void,
-) {
-  const onActivate = useEffectEvent(activate);
-  useEffect(() => {
-    if (!article) return;
-    const threadsOf = new Map<HTMLElement, ThreadPlacement["thread"][]>();
-    for (const { thread, blocks } of placements) {
-      if (!filters.has(threadState(thread))) continue;
-      for (const block of blocks) {
-        const el = nodeElement(article, block.id);
-        if (el) threadsOf.set(el, [...(threadsOf.get(el) ?? []), thread]);
-      }
-    }
-    for (const [el, threads] of threadsOf) {
-      el.setAttribute("aria-details", threads.map((t) => threadDomId(t.id)).join(" "));
-      el.dataset.rrAnchor = threadState(threads[0]!);
-      if (threads.some((t) => t.id === activeId)) el.dataset.rrActive = "";
-      el.tabIndex = 0;
-    }
-    const handle = (event: MouseEvent | KeyboardEvent) => {
-      const target = event.target as HTMLElement;
-      const anchor = target.closest<HTMLElement>("[data-rr-anchor]");
-      const threads = anchor && threadsOf.get(anchor);
-      if (!threads) return;
-      if (event instanceof KeyboardEvent) {
-        if (target !== anchor || (event.key !== "Enter" && event.key !== " ")) return;
-        event.preventDefault();
-      } else if (target.closest("a, button, summary, input")) return; // links inside keep working
-      onActivate(threads[0]!.id);
-    };
-    article.addEventListener("click", handle);
-    article.addEventListener("keydown", handle);
-    return () => {
-      article.removeEventListener("click", handle);
-      article.removeEventListener("keydown", handle);
-      for (const el of threadsOf.keys()) {
-        el.removeAttribute("aria-details");
-        el.removeAttribute("data-rr-anchor");
-        el.removeAttribute("data-rr-active");
-        el.removeAttribute("tabindex");
-      }
-    };
-  }, [article, placements, filters, activeId]);
 }
 
 function PrTitle({ pr, id, docCount }: { pr: PullRequest; id: PrIdentity; docCount: number }) {

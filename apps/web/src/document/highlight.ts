@@ -7,6 +7,9 @@ import { highlightRanges } from "./selection";
 
 const NAME = "rr-pending";
 
+export const highlightsSupported = () =>
+  typeof CSS !== "undefined" && !!CSS.highlights && typeof Highlight !== "undefined";
+
 /**
  * Highlights exactly `selection`'s text with the CSS Custom Highlight API (styled by
  * `::highlight(rr-pending)`). Where the API is missing, marks its blocks with `data-rr-pending`
@@ -20,7 +23,7 @@ export function usePendingHighlight(
 ) {
   useEffect(() => {
     if (!article || !rendered || source === undefined || !selection) return;
-    if (typeof CSS !== "undefined" && CSS.highlights && typeof Highlight !== "undefined") {
+    if (highlightsSupported()) {
       CSS.highlights.set(NAME, new Highlight(...highlightRanges(article, rendered, source, selection.textPosition)));
       return () => void CSS.highlights.delete(NAME);
     }

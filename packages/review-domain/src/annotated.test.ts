@@ -96,6 +96,7 @@ describe("placeThreads with annotations", () => {
       kind: "annotation",
       sourceRange: { startLine: 3, startColumn: 12, endLine: 3, endColumn: 35 },
       textQuote: { exact: "retries failed requests", prefix: "The system ", suffix: " indefinitely." },
+      textPosition: { start: DOC.indexOf("retries"), end: DOC.indexOf(" indefinitely") },
     });
     expect(p!.reason).toBeUndefined();
   });
@@ -117,9 +118,12 @@ describe("placeThreads with annotations", () => {
   });
 
   it("places a moved annotation at its new words, marked moved", () => {
-    const p = place(DOC.replace("# Reliability\n", "# Reliability\n\nAn introduction.\n"));
+    const source = DOC.replace("# Reliability\n", "# Reliability\n\nAn introduction.\n");
+    const p = place(source);
     expect(p.reanchor?.state).toBe("moved");
     expect(p.range?.sourceRange).toEqual({ startLine: 5, startColumn: 12, endLine: 5, endColumn: 35 });
+    const at = p.range!.textPosition;
+    expect(source.slice(at.start, at.end)).toBe("retries failed requests");
     expect(p.blocks.map((b) => b.text)).toEqual(["The system retries failed requests indefinitely."]);
   });
 

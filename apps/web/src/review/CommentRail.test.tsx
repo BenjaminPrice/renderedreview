@@ -28,7 +28,11 @@ const placements: ThreadPlacement[] = [
   },
 ];
 
-function Page({ items = placements, originalLink }: { items?: ThreadPlacement[] } & Partial<CommentRailProps>) {
+function Page({
+  items = placements,
+  originalLink,
+  wordRanges,
+}: { items?: ThreadPlacement[] } & Partial<CommentRailProps>) {
   const docRef = useRef<HTMLElement>(null);
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   return (
@@ -42,6 +46,7 @@ function Page({ items = placements, originalLink }: { items?: ThreadPlacement[] 
           filters={filters}
           docContainerRef={docRef}
           originalLink={originalLink}
+          wordRanges={wordRanges}
         />
       }
     >
@@ -140,6 +145,7 @@ describe("threads and filters", () => {
       kind: "annotation" as const,
       sourceRange: { startLine: 3, startColumn: 12, endLine: 3, endColumn: 35 },
       textQuote: { exact: "retries failed requests" },
+      textPosition: { start: 26, end: 49 },
     };
     await renderPage([
       { thread: placed, blocks: [block(1)], range },
@@ -157,7 +163,12 @@ describe("threads and filters", () => {
   it("shows a thread re-anchored from an earlier revision at its new lines, marked moved", async () => {
     const moved = appThread([issueComment("Moved one")]);
     const sourceRange = { startLine: 5, startColumn: 12, endLine: 5, endColumn: 35 };
-    const range = { kind: "annotation" as const, sourceRange, textQuote: { exact: "retries failed requests" } };
+    const range = {
+      kind: "annotation" as const,
+      sourceRange,
+      textQuote: { exact: "retries failed requests" },
+      textPosition: { start: 40, end: 63 },
+    };
     const reanchor = {
       state: "moved" as const,
       evidence: "quote-context" as const,
@@ -257,6 +268,19 @@ describe("connector visibility", () => {
     // Pinned again: they come back.
     await userEvent.click(commentsButton());
     await vi.waitFor(() => expect(wires()?.querySelectorAll("path")).toHaveLength(2));
+  });
+
+  it("aligns a word-level anchor's connector with its words' line, starting in the gutter", async () => {
+    localStorage.setItem("rr-connectors", "on");
+    const rect = { left: 40, right: 100, top: 20, bottom: 36, width: 60, height: 16, x: 40, y: 20 };
+    const words = { getBoundingClientRect: () => rect } as Range;
+    await renderPage(undefined, { wordRanges: new Map([["current", [words]]]) });
+    await vi.waitFor(() => expect(wires()?.querySelectorAll("circle")).toHaveLength(2));
+    const [onWords, onBlock] = [...wires()!.querySelectorAll("circle")];
+    // Vertically at the words, but starting in the gutter: a wire never crosses the text column.
+    expect(onWords!.getAttribute("cy")).toBe("28");
+    expect(onWords!.getAttribute("cx")).toBe(onBlock!.getAttribute("cx"));
+    expect(Number(onWords!.getAttribute("cx"))).toBeLessThan(rect.left);
   });
 
   it("removes connectors when switched off", async () => {
