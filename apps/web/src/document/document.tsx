@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Loads, renders and marks up one PR document. The comment rail consumes `useDocument`'s
 // result and the article element (`containerRef`), and finds rendered blocks with `nodeElement`.
-import { blocksForLines, renderMarkdown, type RenderedMarkdown } from "@rendered-review/markdown-domain";
+import { blocksForLines, type RenderedMarkdown } from "@rendered-review/markdown-domain";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "@tanstack/react-router";
 import type { Element, Root } from "hast";
@@ -11,9 +11,11 @@ import { useContext, useMemo, type MouseEvent, type Ref } from "react";
 import { Fragment, jsx, jsxs } from "react/jsx-runtime";
 import { DiagramBlock, DiagramSourceContext, type DiagramSource } from "../diagram/DiagramBlock";
 import { DiagramRegistryContext } from "../diagram/registry";
-import { isMarkdownPath } from "../pr-url";
 import { blobQuery, fileAtCommitQuery, type PrIdentity } from "../github/queries";
 import { type ChangeKind, changedLines, type DocEntry, type LineChange, sourceUrl } from "./docs";
+import { renderJob } from "./render-job";
+
+export { inAppDocLink } from "./render-job";
 
 // ponytail: fixed size cap on the main thread; move parsing to a cancellable Web Worker and
 // set the threshold from browser benchmarks when large documents matter.
@@ -21,13 +23,6 @@ export const MAX_RENDER_CHARS = 1_000_000;
 
 const RENDER_CACHE_SIZE = 32;
 const renderCache = new Map<string, RenderedMarkdown | Error>();
-
-/** In-app route for a repository Markdown file; other links keep GitHub's default. */
-export function inAppDocLink(id: PrIdentity, path: string, suffix: string): string | undefined {
-  if (!isMarkdownPath(path)) return undefined;
-  const hash = suffix.includes("#") ? suffix.slice(suffix.indexOf("#")) : "";
-  return `/${id.host}/${id.owner}/${id.repo}/pull/${id.number}?${new URLSearchParams({ doc: path })}${hash}`;
-}
 
 /**
  * `renderMarkdown` memoized by blob and location, so UI state changes and revisits never
@@ -39,11 +34,7 @@ function renderBlob(id: PrIdentity, sha: string, entry: DocEntry, source: string
   let rendered = renderCache.get(key);
   if (!rendered) {
     try {
-      rendered = renderMarkdown(source, {
-        location: { host: id.host, owner: id.owner, repo: id.repo, commitOid: sha, path: entry.path },
-        resolveLink: (path, suffix) => inAppDocLink(id, path, suffix),
-        format: /\.mdx$/i.test(entry.path) ? "mdx" : "md",
-      });
+      rendered = renderJob({ source, pr: id, sha, path: entry.path });
     } catch (error) {
       rendered = error instanceof Error ? error : new Error(String(error));
     }
