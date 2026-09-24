@@ -37,6 +37,8 @@ type Shell = {
   openRail: () => void;
   connectors: boolean;
   setConnectors: (on: boolean) => void;
+  /** Registers work to finish before a pinned rail collapses (connector retraction). */
+  setBeforeCollapse: (fn: (() => Promise<void>) | null) => void;
 };
 
 const ShellContext = createContext<Shell | null>(null);
@@ -72,6 +74,7 @@ export function AppShell(props: AppShellProps) {
   const commentsButton = useRef<HTMLButtonElement>(null);
   const railRef = useRef<HTMLElement>(null);
   const railTitle = useRef<HTMLHeadingElement>(null);
+  const beforeCollapse = useRef<(() => Promise<void>) | null>(null);
   const mode = rail ?? "pinned";
 
   useEffect(() => {
@@ -101,8 +104,12 @@ export function AppShell(props: AppShellProps) {
   // The toolbar Comments button is the only pin control: pinned -> collapsed, otherwise -> pinned.
   function togglePinned() {
     const next = mode === "pinned" ? "collapsed" : "pinned";
-    setRail(next);
-    saveRail(next);
+    const apply = () => {
+      setRail(next);
+      saveRail(next);
+    };
+    if (next === "collapsed" && beforeCollapse.current) void beforeCollapse.current().then(apply);
+    else apply();
   }
 
   const shell: Shell = {
@@ -112,6 +119,9 @@ export function AppShell(props: AppShellProps) {
     setConnectors: (on) => {
       setConnectors(on);
       saveConnectors(on);
+    },
+    setBeforeCollapse: (fn) => {
+      beforeCollapse.current = fn;
     },
   };
 
