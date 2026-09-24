@@ -43,6 +43,7 @@
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.57.3",
+    "@rendered-review/control-plane": "workspace:*",
     "@testing-library/react": "^16.3.3",
     "@testing-library/user-event": "^14.6.7",
     "@types/react": "^19.3.0",

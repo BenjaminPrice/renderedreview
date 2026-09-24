@@ -96,6 +96,9 @@ importers:
       '@cloudflare/vite-plugin':
         specifier: ^1.57.3
         version: 1.57.3(@types/node@24.13.6)(vite@8.3.0(@types/node@24.13.6)(esbuild@0.28.1)(jiti@2.7.0))(wrangler@4.136.3(@cloudflare/workers-types@5.20260922.1)(@types/node@24.13.6))
+      '@rendered-review/control-plane':
+        specifier: workspace:*
+        version: link:../../packages/control-plane
       '@testing-library/react':
         specifier: ^16.3.3
         version: 16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
