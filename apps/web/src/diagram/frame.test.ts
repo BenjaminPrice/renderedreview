@@ -48,6 +48,12 @@ it.each([
   '/x.js"><script>alert(1)</script>',
   "/a/../x.css",
   "javascript:alert(1)",
+  "/a/../x.js",
+  "/./x.js",
+  "/a/./x.js",
+  "/a/..",
+  "/a/%2e%2e/x.js",
+  "/a/%2E%2E/x.js",
 ])("refuses script %s", (script) => {
   expect(frame(script).status).toBe(400);
 });

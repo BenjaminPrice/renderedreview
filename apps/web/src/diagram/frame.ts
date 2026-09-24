@@ -12,8 +12,18 @@ import { createNonce } from "../csp";
 
 export const MERMAID_FRAME_PATH = "/frames/mermaid";
 
-// Same-origin build asset or dev-server path; nothing that could break out of the attribute.
-const SCRIPT_PATH = /^\/(?!\/)[\w@.+/-]+\.js$/;
+// The script path comes from the request (`?script=`): the page passes the URL Vite assigned
+// Mermaid's browser build (a hashed `/assets/` file, or a dev-server path). It must be a plain
+// same-origin path: safe characters only (nothing that could break out of the attribute, no `%`
+// escapes) and no empty, `.` or `..` segments.
+const SAFE_SEGMENT = /^[\w@.+-]+$/;
+const isScriptPath = (path: string) =>
+  path.startsWith("/") &&
+  path.endsWith(".js") &&
+  path
+    .slice(1)
+    .split("/")
+    .every((segment) => SAFE_SEGMENT.test(segment) && segment !== "." && segment !== "..");
 
 // Runs in the frame. Renders are queued: Mermaid keeps global state while rendering.
 const BOOTSTRAP = `(() => {
@@ -45,7 +55,7 @@ const BOOTSTRAP = `(() => {
 
 export function mermaidFrameResponse(request: Request, nonce = createNonce()): Response {
   const script = new URL(request.url).searchParams.get("script") ?? "";
-  if (!SCRIPT_PATH.test(script)) return new Response("Bad renderer script", { status: 400 });
+  if (!isScriptPath(script)) return new Response("Bad renderer script", { status: 400 });
   const csp = [
     "sandbox allow-scripts",
     "default-src 'none'",
