@@ -126,9 +126,7 @@ it("keeps the text and explains a refusal", async () => {
 });
 
 it("asks GitHub for public-repository permission when publishing needs it", async () => {
-  mount(undefined, () =>
-    Response.json({ code: "needs-public-authorization", message: "Allow it" }, { status: 403 }),
-  );
+  mount(undefined, () => Response.json({ code: "needs-public-authorization", message: "Allow it" }, { status: 403 }));
   await userEvent.type(box(), "Hello");
   await userEvent.click(screen.getByRole("button", { name: "Comment" }));
   expect((await screen.findByRole("alert")).textContent).toMatch(/permission to comment on public repositories/);
