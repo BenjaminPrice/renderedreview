@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Guards the hosted environments in wrangler.jsonc: production declares every secret GitHub sign-in
-// needs (so `wrangler deploy` refuses while one is unset), preview stays public-only.
+// and commenting on public repositories need (so `wrangler deploy` refuses while one is unset),
+// preview stays public-only.
 import { authEnabled } from "@rendered-review/identity";
 import { loadConfig } from "@rendered-review/runtime";
 import { unstable_readConfig } from "wrangler";
@@ -18,6 +19,8 @@ const fakeSecrets: Record<string, string> = {
   GITHUB_APP_WEBHOOK_SECRET: "fake-webhook-secret",
   ENCRYPTION_KEY: btoa("k".repeat(32)),
   BETTER_AUTH_SECRET: "s".repeat(32),
+  GITHUB_OAUTH_CLIENT_ID: "Ov23.fake",
+  GITHUB_OAUTH_CLIENT_SECRET: "fake-oauth-secret",
 };
 
 /** Sign-in state of a Worker running with this environment's vars plus the given secret names set. */
@@ -28,7 +31,7 @@ function signInWith(env: string, secretNames: string[]) {
   return authEnabled(config, true);
 }
 
-it("requires exactly the GitHub sign-in secrets to deploy production", () => {
+it("requires exactly the GitHub sign-in and public-commenting secrets to deploy production", () => {
   const required = read("production").secrets?.required ?? [];
   expect([...required].sort()).toEqual(Object.keys(fakeSecrets).sort());
   // Community mode with ACCESS_POLICY=disabled: those secrets alone turn sign-in on.
