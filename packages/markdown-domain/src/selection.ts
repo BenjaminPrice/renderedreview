@@ -57,15 +57,16 @@ export interface SourceSelection {
 export type SelectionRejection = "empty" | "generated" | "frontmatter";
 
 export type SelectionResult =
-  | { ok: true; selection: SourceSelection }
-  | { ok: false; reason: SelectionRejection; message: string };
+  { ok: true; selection: SourceSelection } | { ok: false; reason: SelectionRejection; message: string };
 
 const CONTEXT = 32;
 const TABLE = new Set(["table", "thead", "tbody", "tfoot", "tr"]);
 const CELLS = new Set(["tableCell", "yamlKey", "yamlValue"]);
 // Phrasing elements in raw HTML are inline, wherever they are nested.
 const PHRASING = new Set(
-  "a abbr b bdi bdo br cite code data del dfn em i img ins kbd mark q s samp small span strong sub sup time u var".split(" "),
+  "a abbr b bdi bdo br cite code data del dfn em i img ins kbd mark q s samp small span strong sub sup time u var".split(
+    " ",
+  ),
 );
 const REF = /&(?:#(\d{1,7})|#[xX]([0-9a-fA-F]{1,6})|[A-Za-z][A-Za-z0-9]{1,31});/y;
 const PUNCT = /[!-/:-@[-`{-~]/;
@@ -255,7 +256,8 @@ function childOf(doc: RenderedMarkdown, id: number, parent: number | null): Sour
   return n;
 }
 
-const inFrontmatter = (doc: RenderedMarkdown, id: number) => ancestors(doc, id).some((a) => doc.nodes[a]!.type === "yaml");
+const inFrontmatter = (doc: RenderedMarkdown, id: number) =>
+  ancestors(doc, id).some((a) => doc.nodes[a]!.type === "yaml");
 
 /**
  * Convert a rendered selection `[start, end)` into the source it claims. `source` is the raw blob
@@ -302,7 +304,9 @@ export function selectionToSource(
     if (inFrontmatter(doc, sb.id) !== inFrontmatter(doc, eb.id)) return reject("frontmatter");
     const lca = common(doc, sb.id, eb.id);
     const [x, y] =
-      lca === sb.id || lca === eb.id ? [doc.nodes[lca]!, doc.nodes[lca]!] : [childOf(doc, sb.id, lca), childOf(doc, eb.id, lca)];
+      lca === sb.id || lca === eb.id
+        ? [doc.nodes[lca]!, doc.nodes[lca]!]
+        : [childOf(doc, sb.id, lca), childOf(doc, eb.id, lca)];
     from = x.range.start.offset <= y.range.start.offset ? x.range.start : y.range.start;
     to = x.range.end.offset >= y.range.end.offset ? x.range.end : y.range.end;
     nodeType = lca === null ? "root" : doc.nodes[lca]!.type;
@@ -368,4 +372,46 @@ function context(ix: Index, k: number, g: number, dir: -1 | 1): string {
   }
   const text = normalizeText(out);
   return dir < 0 ? text.slice(-CONTEXT) : text.slice(0, CONTEXT);
+}
+
+/** A highlighted run of rendered text, `[start, end)`. */
+export interface RenderedRun {
+  start: RenderedPoint;
+  end: RenderedPoint;
+}
+
+/**
+ * The rendered text a source range claims, as runs in document order: every document character
+ * whose source span lies inside `range` (raw offsets, `end` exclusive). Generated labels and
+ * unclaimed characters split runs. Re-highlights a stored claim exactly as it was selected.
+ */
+export function sourceToRendered(
+  doc: RenderedMarkdown,
+  source: string,
+  range: { start: number; end: number },
+): RenderedRun[] {
+  const ix = indexOf(doc);
+  const runs: RenderedRun[] = [];
+  let run: RenderedRun | null = null;
+  const point = (owner: number, g: number) => ({ id: owner, offset: g - ix.extent[owner]![0] });
+  for (const seg of ix.segments) {
+    const kind = kindOf(doc, ix, seg);
+    if (kind === "gap") continue;
+    // ponytail: scans every segment per call; index segments by source offset if many claims get slow.
+    const bound =
+      seg.position?.start.offset !== undefined ? seg.position : seg.owner !== null && doc.nodes[seg.owner]!.range;
+    if (kind === "chrome" || !bound || bound.end.offset! <= range.start || bound.start.offset! >= range.end) {
+      run = null;
+      continue;
+    }
+    const spans = spansOf(doc, ix, source, seg);
+    for (let i = 0; i < seg.text.length; i++) {
+      const [s, e] = [spans[i * 2]!, spans[i * 2 + 1]!];
+      if (s < e && s >= range.start && e <= range.end) {
+        if (!run) runs.push((run = { start: point(seg.owner!, seg.at + i), end: point(seg.owner!, seg.at + i) }));
+        run.end = point(seg.owner!, seg.at + i + 1);
+      } else run = null;
+    }
+  }
+  return runs;
 }

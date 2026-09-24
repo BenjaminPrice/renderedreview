@@ -3,7 +3,7 @@ import type { Element, Root } from "hast";
 import { toString } from "hast-util-to-string";
 import { describe, expect, test } from "vitest";
 import { renderMarkdown, type RenderOptions } from "./render.js";
-import { type RenderedPoint, selectionToSource, type SelectionResult } from "./selection.js";
+import { type RenderedPoint, selectionToSource, type SelectionResult, sourceToRendered } from "./selection.js";
 
 /**
  * A rendered point at the start or end of the `nth` occurrence of `needle`, relative to the
@@ -111,7 +111,10 @@ describe("blocks map inside their own source", () => {
   test("code and diagram fences map to lines inside the fence", () => {
     const md = "Intro\n\n```ts\nconst a = 1;\nlet b;\n```\n\n```mermaid\ngraph TD\n  A-->B\n```\n";
     const s = ok(select(md, "let b"));
-    expect(s).toMatchObject({ nodeType: "code", sourceRange: { startLine: 5, startColumn: 1, endLine: 5, endColumn: 6 } });
+    expect(s).toMatchObject({
+      nodeType: "code",
+      sourceRange: { startLine: 5, startColumn: 1, endLine: 5, endColumn: 6 },
+    });
     expect(claimed(md, select(md, "A-->B"))).toBe("A-->B");
     // "t" also appears in the info string; the content starts after the opening fence.
     expect(ok(select("```ts\nt\n```\n", "t")).sourceRange.startLine).toBe(2);
@@ -238,5 +241,36 @@ describe("selections across blocks widen to whole blocks or are rejected", () =>
   test("into a footnote: covers the source between the reference and the definition", () => {
     const md = "Text[^n] here.\n\nMiddle.\n\n[^n]: The note.\n";
     expect(claimed(md, select(md, "here", "The note"))).toBe(md.trimEnd());
+  });
+});
+
+describe("source ranges map back to rendered runs", () => {
+  test("a claim within one text node comes back as the same span", () => {
+    const md = "Hello brave new world.\n";
+    const doc = renderMarkdown(md);
+    const start = at(doc.tree, "brave", "start");
+    const end = at(doc.tree, "brave", "end");
+    const s = ok(selectionToSource(doc, md, start, end));
+    expect(sourceToRendered(doc, md, s.textPosition)).toEqual([{ start, end }]);
+  });
+
+  test("runs are relative to the element owning each end, and skip generated labels", () => {
+    const md = "Use **bold** text\n\n> [!NOTE]\n> Body\n";
+    const doc = renderMarkdown(md);
+    const [p, strong] = [0, 1];
+    expect(doc.nodes[strong]!.type).toBe("strong");
+    expect(sourceToRendered(doc, md, { start: 4, end: 17 })).toEqual([
+      { start: { id: strong, offset: 0 }, end: { id: p, offset: 13 } },
+    ]);
+    // The whole alert: only its body is highlighted, not the generated "Note" title.
+    const alert = doc.nodes.find((n) => n.tagName === "div")!;
+    expect(sourceToRendered(doc, md, { start: alert.range.start.offset, end: alert.range.end.offset })).toEqual([
+      { start: { id: alert.id + 1, offset: 0 }, end: { id: alert.id + 1, offset: 4 } },
+    ]);
+  });
+
+  test("markup-only ranges highlight nothing", () => {
+    const md = "Use **bold** text\n";
+    expect(sourceToRendered(renderMarkdown(md), md, { start: 4, end: 6 })).toEqual([]);
   });
 });
