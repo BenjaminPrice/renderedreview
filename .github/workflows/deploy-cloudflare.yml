@@ -42,6 +42,12 @@ jobs:
           devbox-version: 0.17.2
           enable-cache: true
       - run: devbox run -- pnpm install --frozen-lockfile
+      - name: Check D1 database IDs
+        run: |
+          if grep -q '00000000-0000-0000-0000-000000000000' apps/web/wrangler.jsonc; then
+            echo "::error file=apps/web/wrangler.jsonc::Placeholder D1 database_id found. Run wrangler d1 create and commit the real IDs (see docs/deploy-cloudflare.md)."
+            exit 1
+          fi
       - run: devbox run -- pnpm --filter @rendered-review/web build:workers
       - name: Apply D1 migrations
         if: hashFiles('packages/control-plane/migrations/*.sql') != ''
