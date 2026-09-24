@@ -12,6 +12,7 @@ const github = {
   GITHUB_OAUTH_CLIENT_ID: "oauth-client",
   GITHUB_OAUTH_CLIENT_SECRET: "oauth-client-secret-value",
   ENCRYPTION_KEY: key,
+  BETTER_AUTH_SECRET: "better-auth-secret-value-at-least-32-chars",
 };
 const hosted: Env = {
   HOSTING_MODE: "hosted",
@@ -120,6 +121,24 @@ describe("loadConfig", () => {
     ]);
   });
 
+  it("requires a session secret for GitHub App sign-in, separate from the encryption key", () => {
+    expect(problems({ ...hosted, BETTER_AUTH_SECRET: undefined })).toEqual([
+      "BETTER_AUTH_SECRET required when GitHub App credentials are set: at least 32 random characters (openssl rand -base64 32)",
+    ]);
+    expect(problems({ ...hosted, BETTER_AUTH_SECRET: "short" })).toEqual([
+      "BETTER_AUTH_SECRET must be at least 32 characters (openssl rand -base64 32)",
+    ]);
+    expect(loadConfig(hosted).authSecret).toBe("better-auth-secret-value-at-least-32-chars");
+  });
+
+  it("accepts a previous encryption key for rotation", () => {
+    const previous = btoa("p".repeat(32));
+    expect(loadConfig({ ...hosted, ENCRYPTION_KEY_PREVIOUS: previous }).previousEncryptionKey).toBe(previous);
+    expect(problems({ ...hosted, ENCRYPTION_KEY_PREVIOUS: "short" })).toEqual([
+      "ENCRYPTION_KEY_PREVIOUS must be 32 random bytes, base64-encoded",
+    ]);
+  });
+
   it("does not require DATABASE_URL when the runtime binds the database", () => {
     const env = { ...hosted, DATABASE_URL: undefined };
     expect(loadConfig(env, { databaseBinding: true }).databaseUrl).toBeUndefined();
@@ -160,6 +179,7 @@ describe("redactConfig", () => {
       "db-password-value",
       "billing-api-key-value",
       "billing-webhook-secret-value",
+      "better-auth-secret-value-at-least-32-chars",
       "public-read-token-value",
     ]) {
       expect(dump).not.toContain(secret);
