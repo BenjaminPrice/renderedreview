@@ -7,5 +7,10 @@
   "exports": "./src/index.ts",
   "scripts": {
     "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@rendered-review/github-action": "workspace:*",
+    "@rendered-review/github-integration": "workspace:*",
+    "@rendered-review/markdown-domain": "workspace:*"
   }
 }
