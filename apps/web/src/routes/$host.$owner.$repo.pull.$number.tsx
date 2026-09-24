@@ -6,7 +6,7 @@ import {
   type PullRequest,
   RateLimitError,
 } from "@rendered-review/github-integration";
-import { blocksForLines, type RenderedMarkdown } from "@rendered-review/markdown-domain";
+import { blocksForLines, type RenderedMarkdown, type SourceSelection } from "@rendered-review/markdown-domain";
 import { placeThreads, projectReview, reviewers, type ThreadPlacement } from "@rendered-review/review-domain";
 import { queryOptions, useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link, notFound, stripSearchParams, useLocation } from "@tanstack/react-router";
@@ -22,6 +22,7 @@ import {
   PrOverview,
   prState,
 } from "../document/Overview";
+import { PendingComment, SelectionPopover } from "../document/SelectionPopover";
 import { Sidebar } from "../document/Sidebar";
 import { ExternalLink } from "../ui/ExternalLink";
 import { isPrivateRepoUnsupported, isSignInRequired, preferProxy, rateLimit } from "../github/client";
@@ -152,6 +153,8 @@ function ReviewPage({ pr, id, files }: { pr: PullRequest; id: PrIdentity; files:
   }, [review.data, entry, view, doc.rendered, doc.source]);
   const unresolved = useMemo(() => new Map(Object.entries(review.data?.unresolvedByPath ?? {})), [review.data]);
   const [filters, setFilters] = useState<ReadonlySet<ThreadState>>(DEFAULT_FILTERS);
+  // The selection a comment is being composed on, for the document it was made in.
+  const [pending, setPending] = useState<{ path: string; selection: SourceSelection } | null>(null);
 
   const navigate = Route.useNavigate();
   const setActive = (threadId: string | null) => {
@@ -293,14 +296,19 @@ function ReviewPage({ pr, id, files }: { pr: PullRequest; id: PrIdentity; files:
           <DocsWithComments threads={review.data.threads} docs={changed} />
         ) : (
           entry && (
-            <CommentRail
-              placements={placements}
-              repository={repository}
-              filters={filters}
-              docContainerRef={docColumn}
-              activeThreadId={active?.id ?? null}
-              onActiveThreadChange={setActive}
-            />
+            <>
+              {pending?.path === entry.path && (
+                <PendingComment selection={pending.selection} onCancel={() => setPending(null)} />
+              )}
+              <CommentRail
+                placements={placements}
+                repository={repository}
+                filters={filters}
+                docContainerRef={docColumn}
+                activeThreadId={active?.id ?? null}
+                onActiveThreadChange={setActive}
+              />
+            </>
           )
         )
       }
@@ -344,7 +352,15 @@ function ReviewPage({ pr, id, files }: { pr: PullRequest; id: PrIdentity; files:
               <RawDocument source={doc.source} changes={doc.changes} link={link} />
             </>
           ) : doc.rendered ? (
-            <RenderedDocument rendered={doc.rendered} changes={doc.changes} containerRef={setArticle} />
+            <>
+              <RenderedDocument rendered={doc.rendered} changes={doc.changes} containerRef={setArticle} />
+              <SelectionPopover
+                article={article}
+                rendered={doc.rendered}
+                source={doc.source}
+                onCompose={(selection) => setPending({ path: entry.path, selection })}
+              />
+            </>
           ) : (
             <DocMessage title="This document is too large to render">
               It has {doc.source.length.toLocaleString()} characters; the limit is {MAX_RENDER_CHARS.toLocaleString()}.{" "}
