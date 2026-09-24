@@ -47,7 +47,8 @@ beforeEach(() => {
   vi.stubGlobal("fetch", async (input: RequestInfo | URL) => {
     const url = String(input instanceof Request ? input.url : input);
     requested.push(url);
-    const body = responses[url];
+    // Signed in, the authenticated endpoint answers what GitHub would.
+    const body = responses[url.replace("/api/github/user/github.com/", "https://api.github.com/")];
     return body === undefined
       ? new Response('{"message":"Not Found"}', { status: 404 })
       : new Response(body, { headers: { "content-type": "application/json" } });
@@ -342,6 +343,24 @@ it("never asks GraphQL for thread resolution anonymously", async () => {
   renderPage(`?doc=${encodeURIComponent(INDEX)}`);
   await threadCard(/GitHub line comment · L30/);
   expect(requested.filter((u) => u.includes("graphql"))).toEqual([]);
+});
+
+it("signed in, reads through the authenticated endpoint and shows real thread resolution", async () => {
+  suggestionOnHead();
+  responses["/api/auth/viewer"] = '{"login":"octocat","avatarUrl":null}';
+  const thread = (nodeId: string, id: number, isResolved: boolean) => ({ nodeId, isResolved, commentIds: [id] });
+  responses[`${API}/pulls/45377/review-threads`] = JSON.stringify([
+    thread("PRRT_suggestion", SUGGESTION, false),
+    thread("PRRT_linter", LINTER, true),
+  ]);
+  renderPage(`?doc=${encodeURIComponent(INDEX)}`);
+  await threadCard(/GitHub line comment · L30/);
+  const filters = within(rail()).getByRole("group", { name: "Filter comments" });
+  expect(within(filters).getByRole("button", { name: "Resolved 1" })).toBeTruthy();
+  expect(within(rail()).getAllByText("Unresolved").length).toBeGreaterThan(0);
+  const github = requested.filter((u) => u !== "/api/auth/viewer");
+  expect(github.length).toBeGreaterThan(0);
+  expect(github.every((u) => u.startsWith("/api/github/user/github.com/"))).toBe(true);
 });
 
 it("counts threads per doc in the sidebar and the doc's threads on the Comments button", async () => {

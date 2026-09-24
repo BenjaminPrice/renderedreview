@@ -8,6 +8,16 @@ type Viewer = { login: string; avatarUrl: string | null };
 const post = (path: string, body: object) =>
   fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 
+/** Starts GitHub sign-in, returning to the whole current URL (fragment included): same document and thread. */
+export async function signIn(navigate = (url: string) => location.assign(url)) {
+  const response = await post("/api/auth/sign-in/social", {
+    provider: "github",
+    callbackURL: location.pathname + location.search + location.hash,
+  });
+  const { url } = (await response.json()) as { url?: string };
+  if (url) navigate(url);
+}
+
 export function ViewerSlot({ navigate = (url: string) => location.assign(url) }: { navigate?: (url: string) => void }) {
   // undefined: loading or sign-in unavailable; null: signed out.
   const [viewer, setViewer] = useState<Viewer | null | undefined>(undefined);
@@ -18,24 +28,17 @@ export function ViewerSlot({ navigate = (url: string) => location.assign(url) }:
       .then(setViewer, () => setViewer(undefined));
   }, []);
 
-  async function signIn() {
-    // The whole current URL, fragment included, so sign-in lands back on the same document and thread.
-    const response = await post("/api/auth/sign-in/social", {
-      provider: "github",
-      callbackURL: location.pathname + location.search + location.hash,
-    });
-    const { url } = (await response.json()) as { url?: string };
-    if (url) navigate(url);
-  }
-
   async function signOut() {
-    if ((await post("/api/auth/sign-out", {})).ok) setViewer(null);
+    if (!(await post("/api/auth/sign-out", {})).ok) return;
+    setViewer(null);
+    // Reload, dropping everything read with the user's access (queries and the in-memory cache).
+    navigate(location.href);
   }
 
   if (viewer === undefined) return null;
   if (viewer === null) {
     return (
-      <button type="button" className="rr-btn" onClick={signIn}>
+      <button type="button" className="rr-btn" onClick={() => signIn(navigate)}>
         Sign in with GitHub
       </button>
     );

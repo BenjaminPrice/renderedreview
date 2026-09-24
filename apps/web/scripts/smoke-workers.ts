@@ -46,6 +46,14 @@ try {
   const auth = await get("/api/auth/viewer");
   assert.equal(auth.status, 404);
   console.log("ok: /api/auth is off without GitHub App credentials");
+  const userRead = await fetch(
+    `http://127.0.0.1:${port}/api/github/user/github.com/repos/octocat/hello-world/pulls/1`,
+    {
+      headers: { "x-requested-with": "rendered-review" },
+    },
+  );
+  assert.equal(userRead.status, 404);
+  console.log("ok: authenticated GitHub reads are off without sign-in");
 
   const sw = await get("/sw.js");
   assert.equal(sw.status, 200);

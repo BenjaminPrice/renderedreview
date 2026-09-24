@@ -3,6 +3,7 @@
 // anonymous rate limit). Forwards only allowlisted read-only REST paths, anonymously or with the
 // operator's public read token, and never serves a private repository. Never an open proxy. Web Request/Response/fetch only, so it runs on Node and Workers alike.
 import type { AppConfig } from "@rendered-review/runtime";
+import { forRepository } from "./broker";
 
 export const PROXY_PREFIX = "/api/github/public/";
 
@@ -13,8 +14,9 @@ export const allowedHosts = (config: AppConfig) => [...new Set(["github.com", ne
 export const proxyFirstHosts = (config: AppConfig) =>
   config.github.publicReadToken ? [new URL(config.github.url).host] : [];
 
-const REPO = String.raw`(?:repos/(?!\.\.?/)[\w.-]{1,100}/(?!\.\.?/)[\w.-]{1,100}|repositories/\d{1,12})`;
-const REPO_PREFIX = new RegExp(`^${REPO}`);
+export const REPO_SEGMENT = String.raw`(?!\.\.?/)[\w.-]{1,100}`;
+const REPO = String.raw`(?:repos/${REPO_SEGMENT}/${REPO_SEGMENT}|repositories/\d{1,12})`;
+export const REPO_PREFIX = new RegExp(`^${REPO}`);
 const OID = "[0-9a-f]{40}(?:[0-9a-f]{24})?";
 const MUTABLE = new RegExp(
   String.raw`^${REPO}/(?:pulls/\d{1,10}(?:/(?:files|comments|reviews))?|issues/\d{1,10}/comments)$`,
@@ -22,7 +24,7 @@ const MUTABLE = new RegExp(
 // Trees and blobs are only proxied by full OID, so the content behind a URL can never change.
 const IMMUTABLE = new RegExp(String.raw`^${REPO}/git/(?:trees|blobs)/${OID}$`);
 const QUERY: Record<string, RegExp> = { per_page: /^\d{1,3}$/, page: /^\d{1,6}$/, recursive: /^1$/ };
-const ACCEPT = new Set(["application/vnd.github+json", "application/vnd.github.raw+json"]);
+export const ACCEPT = new Set(["application/vnd.github+json", "application/vnd.github.raw+json"]);
 const FORWARD_RESPONSE = [
   "content-type",
   "etag",
@@ -46,8 +48,28 @@ export function classifyPath(path: string, query: URLSearchParams): "immutable" 
   return undefined;
 }
 
-const reject = (status: number, message: string) =>
-  Response.json({ message }, { status, headers: { "cache-control": "no-store" } });
+export const reject = (status: number, message: string, code?: string) =>
+  Response.json({ message, ...(code && { code }) }, { status, headers: { "cache-control": "no-store" } });
+
+/** Splits `<prefix><host>/<path>` and checks the host; a rejection `Response` otherwise. */
+export function parseProxyPath(url: URL, prefix: string, hosts: string[]): { host: string; path: string } | Response {
+  if (!url.pathname.startsWith(prefix)) return reject(404, "Not found");
+  const rest = url.pathname.slice(prefix.length);
+  const slash = rest.indexOf("/");
+  const host = rest.slice(0, slash);
+  if (slash < 0 || !hosts.includes(host)) return reject(403, "GitHub host not allowed");
+  return { host, path: rest.slice(slash + 1) };
+}
+
+/** The allowlisted upstream response headers. */
+export function forwardHeaders(upstream: Response, extra: Record<string, string>): Headers {
+  const out = new Headers(extra);
+  for (const name of FORWARD_RESPONSE) {
+    const value = upstream.headers.get(name);
+    if (value !== null) out.set(name, value);
+  }
+  return out;
+}
 
 const VISIBILITY_TTL_MS = 5 * 60_000;
 // ponytail: per-process map cleared when full; a shared cache if many instances hammer the lookup.
@@ -55,26 +77,28 @@ const visibility = new Map<string, { public: boolean; until: number }>();
 
 /**
  * A token may read private repositories, so token-backed reads first confirm the repository is
- * public. Lookup failures count as not public and are not cached.
+ * public. `repo` is the path's repository prefix. A failed lookup returns GitHub's response (or a
+ * 502 when unreachable) and is not cached.
  */
-async function isPublicRepo(
+export async function repoVisibility(
   host: string,
   repo: string,
   headers: Record<string, string>,
   fetchFn: typeof fetch,
-): Promise<boolean> {
+): Promise<"public" | "private" | Response> {
   const key = `${host}/${repo.toLowerCase()}`;
   const hit = visibility.get(key);
-  if (hit && hit.until > Date.now()) return hit.public;
+  if (hit && hit.until > Date.now()) return hit.public ? "public" : "private";
   const res = await fetchFn(`${apiBase(host)}/${repo}`, {
     headers: { ...headers, Accept: "application/vnd.github+json" },
   }).catch(() => undefined);
-  if (res?.status !== 200) return false;
+  if (!res) return reject(502, "GitHub unreachable");
+  if (res.status !== 200) return res;
   const body = (await res.json().catch(() => undefined)) as { private?: unknown; visibility?: unknown } | undefined;
   const isPublic = body?.private === false && (body.visibility ?? "public") === "public";
   if (visibility.size >= 10_000) visibility.clear();
   visibility.set(key, { public: isPublic, until: Date.now() + VISIBILITY_TTL_MS });
-  return isPublic;
+  return isPublic ? "public" : "private";
 }
 
 export async function proxyPublicGitHub(
@@ -92,12 +116,9 @@ export async function proxyPublicGitHub(
 ): Promise<Response> {
   if (request.method !== "GET") return reject(405, "Method not allowed");
   const url = new URL(request.url);
-  if (!url.pathname.startsWith(PROXY_PREFIX)) return reject(404, "Not found");
-  const rest = url.pathname.slice(PROXY_PREFIX.length);
-  const slash = rest.indexOf("/");
-  const host = rest.slice(0, slash);
-  const path = rest.slice(slash + 1);
-  if (slash < 0 || !allowedHosts.includes(host)) return reject(403, "GitHub host not allowed");
+  const target = parseProxyPath(url, PROXY_PREFIX, allowedHosts);
+  if (target instanceof Response) return target;
+  const { host, path } = target;
   const kind = classifyPath(path, url.searchParams);
   if (!kind) return reject(403, "Path not allowed");
 
@@ -107,21 +128,19 @@ export async function proxyPublicGitHub(
     "X-GitHub-Api-Version": "2022-11-28",
     "User-Agent": "rendered-review",
   };
-  if (readToken?.host === host) {
-    headers.Authorization = `Bearer ${readToken.token}`;
+  // No user here: the operator token (public repositories only) or anonymous.
+  const credential = await forRepository({ host, owner: "", repo: "", operation: "read" }, { readToken });
+  if (credential.kind !== "anonymous") {
+    headers.Authorization = `Bearer ${credential.token}`;
     const repo = REPO_PREFIX.exec(path)![0];
-    if (!(await isPublicRepo(host, repo, headers, fetchFn))) return reject(404, "Not found");
+    if ((await repoVisibility(host, repo, headers, fetchFn)) !== "public") return reject(404, "Not found");
   }
   const etag = request.headers.get("if-none-match");
   if (etag) headers["If-None-Match"] = etag;
 
   // Renamed repositories answer with a redirect to `/repositories/<id>/...` on the same API host.
   const upstream = await fetchFn(`${apiBase(host)}/${path}${url.search}`, { headers });
-  const out = new Headers({ vary: "Accept, If-None-Match" });
-  for (const name of FORWARD_RESPONSE) {
-    const value = upstream.headers.get(name);
-    if (value !== null) out.set(name, value);
-  }
+  const out = forwardHeaders(upstream, { vary: "Accept, If-None-Match" });
   out.set(
     "cache-control",
     upstream.status !== 200 && upstream.status !== 304

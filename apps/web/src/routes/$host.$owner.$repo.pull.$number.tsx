@@ -15,7 +15,7 @@ import { MAX_RENDER_CHARS, nodeElement, RawDocument, RenderedDocument, useDocume
 import { allDocs, changedDocs, selectedPath, sourceUrl } from "../document/docs";
 import { Sidebar } from "../document/Sidebar";
 import { ExternalLink } from "../ui/ExternalLink";
-import { preferProxy, rateLimit } from "../github/client";
+import { isPrivateRepoUnsupported, isSignInRequired, preferProxy, rateLimit } from "../github/client";
 import { allowedHosts, proxyFirstHosts } from "../github/proxy";
 import {
   changedFilesQuery,
@@ -25,7 +25,9 @@ import {
   pullRequestQuery,
   reviewCommentsQuery,
   reviewsQuery,
+  reviewThreadsQuery,
   treeQuery,
+  viewerQuery,
 } from "../github/queries";
 import {
   CommentRail,
@@ -39,6 +41,7 @@ import {
   type ThreadState,
 } from "../review";
 import { AppShell } from "../ui/AppShell";
+import { signIn } from "../ui/Viewer";
 import { parsePrParams, validatePrSearch } from "../pr-url";
 
 // Never exposes the read token itself, only which host it serves.
@@ -85,14 +88,18 @@ export const Route = createFileRoute("/$host/$owner/$repo/pull/$number")({
 
 function PullRequestPage() {
   const params = Route.useParams();
-  const pr = useQuery(pullRequestQuery(params));
-  const identity = pr.data && prIdentity(params.host, pr.data);
+  // Signed in, every read uses the viewer's own GitHub access; wait to know which.
+  const viewer = useQuery(viewerQuery);
+  const access = viewer.data?.signedIn ? "user" : "public";
+  const pr = useQuery({ ...pullRequestQuery(params, access), enabled: viewer.isSuccess });
+  const identity = pr.data && prIdentity(params.host, pr.data, access);
   // Placeholder identity while the PR loads; the query stays disabled until the real one exists.
   const files = useQuery({ ...changedFilesQuery(identity ?? ({} as PrIdentity)), enabled: !!identity });
 
   // Data already loaded stays on screen when a refetch fails (e.g. rate-limited).
   const error = pr.error ?? files.error;
-  if ((!pr.data || !files.data) && error) return <ErrorState error={error} />;
+  if ((!pr.data || !files.data) && error)
+    return <ErrorState error={error} offerSignIn={viewer.data?.signInEnabled && !viewer.data.signedIn} />;
   if (!pr.data || !identity || !files.data) return <Message title="Loading…" />;
   return <ReviewPage pr={pr.data} id={identity} files={files.data} />;
 }
@@ -297,23 +304,26 @@ function ReviewPage({ pr, id, files }: { pr: PullRequest; id: PrIdentity; files:
 
 /**
  * GitHub-native review content for the PR. Thread resolution needs GraphQL, which GitHub refuses
- * anonymously, so it stays unknown until signed-in access exists.
+ * anonymously: known when signed in, unknown otherwise (or when that read fails).
  */
 function useReview(id: PrIdentity) {
   const comments = useQuery(reviewCommentsQuery(id));
   const reviews = useQuery(reviewsQuery(id));
   const issueComments = useQuery(issueCommentsQuery(id));
+  const threads = useQuery(reviewThreadsQuery(id));
+  const threadsSettled = id.access !== "user" || !threads.isPending;
   const data = useMemo(
     () =>
-      comments.data && reviews.data && issueComments.data
+      comments.data && reviews.data && issueComments.data && threadsSettled
         ? projectReview({
             repository: { host: id.host, owner: id.owner, name: id.repo },
             reviewComments: comments.data,
+            reviewThreads: threads.data,
             reviews: reviews.data,
             issueComments: issueComments.data,
           })
         : undefined,
-    [id, comments.data, reviews.data, issueComments.data],
+    [id, comments.data, reviews.data, issueComments.data, threads.data, threadsSettled],
   );
   return { data, error: comments.error ?? reviews.error ?? issueComments.error };
 }
@@ -427,14 +437,43 @@ function RateLimitBanner() {
   );
 }
 
-function ErrorState({ error }: { error: Error }) {
+function SignInButton() {
+  return (
+    <button type="button" className="rr-btn" onClick={() => void signIn()}>
+      Sign in with GitHub
+    </button>
+  );
+}
+
+function ErrorState({ error, offerSignIn }: { error: Error; offerSignIn?: boolean }) {
+  if (isSignInRequired(error)) {
+    return (
+      <Message title="Sign in again" action={<SignInButton />}>
+        Your GitHub sign-in has expired or was revoked.
+      </Message>
+    );
+  }
+  // Seam for private repository support: needs the GitHub App installed and a plan that covers it.
+  if (isPrivateRepoUnsupported(error)) {
+    return (
+      <Message title="Private repositories aren't supported yet">
+        Rendered Review can only show pull requests in public repositories for now.
+      </Message>
+    );
+  }
+  // Signed in, the viewer's own 5,000/hour limit replaces the shared anonymous one.
+  const action = offerSignIn ? <SignInButton /> : undefined;
   if (error instanceof RateLimitError) {
-    return <Message title="GitHub rate limit reached">Try again after {error.resetAt.toLocaleTimeString()}.</Message>;
+    return (
+      <Message title="GitHub rate limit reached" action={action}>
+        Try again after {error.resetAt.toLocaleTimeString()}.
+      </Message>
+    );
   }
   // Anonymous requests cannot tell a private repository from a missing one: GitHub answers 404.
   if (error instanceof NotFoundError || error instanceof ForbiddenError) {
     return (
-      <Message title="Pull request unavailable">
+      <Message title="Pull request unavailable" action={action}>
         This pull request does not exist or is in a private repository. Sign-in for private repositories is coming
         later.
       </Message>
@@ -444,12 +483,13 @@ function ErrorState({ error }: { error: Error }) {
 }
 
 /** Whole-page state (loading, errors, not found), inside the app shell so home stays one click away. */
-function Message({ title, children }: { title: string; children?: React.ReactNode }) {
+function Message({ title, children, action }: { title: string; children?: React.ReactNode; action?: React.ReactNode }) {
   return (
     <AppShell>
       <div className="rr-message">
         <h1>{title}</h1>
         {children && <p>{children}</p>}
+        {action}
       </div>
     </AppShell>
   );

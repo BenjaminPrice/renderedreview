@@ -1,7 +1,17 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { ForbiddenError, NetworkError, NotFoundError, RateLimitError } from "@rendered-review/github-integration";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fallbackReason, preferProxy, proxiedFetch, withPublicGitHub } from "./client";
+import {
+  browserCache,
+  fallbackReason,
+  isPrivateRepoUnsupported,
+  isSignInRequired,
+  preferProxy,
+  proxiedFetch,
+  userReviewThreads,
+  withGitHub,
+  withPublicGitHub,
+} from "./client";
 
 describe("fallbackReason", () => {
   it("falls back on network/CORS failures and rate limits only", () => {
@@ -127,5 +137,61 @@ describe("withPublicGitHub", () => {
     const { urls } = stubFetch(() => Response.json({ message: "Not Found" }, { status: 404 }));
     expect(await getTree("missing.example.com")).toBeInstanceOf(NotFoundError);
     expect(urls()).toHaveLength(1);
+  });
+});
+
+describe("withGitHub signed in", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("reads through the authenticated endpoint only, marked as same-origin script", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>(async () => Response.json(TREE));
+    vi.stubGlobal("fetch", fetch);
+    await withGitHub("user", "github.com", (c) => c.getTree("a", "b", OID));
+    expect(fetch.mock.calls.map((c) => String(c[0]))).toEqual([
+      `/api/github/user/github.com/repos/a/b/git/trees/${OID}`,
+    ]);
+    expect(new Headers(fetch.mock.calls[0]![1]?.headers).get("x-requested-with")).toBe("rendered-review");
+  });
+
+  it("keeps signed-out reads on the public path", async () => {
+    const fetch = vi.fn(async () => Response.json(TREE));
+    vi.stubGlobal("fetch", fetch);
+    await withGitHub("public", "anon.example.com", (c) => c.getTree("a", "b", OID));
+    expect(fetch.mock.calls.map((c) => String((c as unknown[])[0]))).toEqual([
+      `https://anon.example.com/api/v3/repos/a/b/git/trees/${OID}`,
+    ]);
+  });
+
+  it("caches authenticated responses as private (memory only), even for public repositories", async () => {
+    vi.stubGlobal("fetch", async () => Response.json(TREE, { headers: { etag: '"t"' } }));
+    const set = vi.spyOn(browserCache, "set");
+    await withGitHub("user", "github.com", (c) => c.getTree("a", "private-cache", OID));
+    expect(set).toHaveBeenCalledWith("responses", expect.any(String), expect.anything(), { private: true });
+    set.mockRestore();
+  });
+
+  it("fetches review threads from the fixed-query endpoint", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>(async () => Response.json([{ nodeId: "T" }]));
+    vi.stubGlobal("fetch", fetch);
+    expect(await userReviewThreads("github.com", "a", "b", 3)).toEqual([{ nodeId: "T" }]);
+    expect(String(fetch.mock.calls[0]![0])).toBe("/api/github/user/github.com/repos/a/b/pulls/3/review-threads");
+    expect(new Headers(fetch.mock.calls[0]![1]?.headers).get("x-requested-with")).toBe("rendered-review");
+  });
+
+  it("recognises sign-in-again and private-repository answers", async () => {
+    vi.stubGlobal("fetch", async (input: RequestInfo | URL) =>
+      String(input).includes("/secret/")
+        ? Response.json(
+            { message: "Private repositories aren't supported yet", code: "private-repo-unsupported" },
+            { status: 403 },
+          )
+        : Response.json({ message: "Sign in with GitHub again", code: "reauth" }, { status: 401 }),
+    );
+    const secret = await withGitHub("user", "github.com", (c) => c.getPullRequest("a", "secret", 1)).catch((e) => e);
+    const expired = await withGitHub("user", "github.com", (c) => c.getPullRequest("a", "b", 1)).catch((e) => e);
+    const threads = await userReviewThreads("github.com", "a", "b", 1).catch((e) => e);
+    expect([isPrivateRepoUnsupported(secret), isSignInRequired(secret)]).toEqual([true, false]);
+    expect([isPrivateRepoUnsupported(expired), isSignInRequired(expired)]).toEqual([false, true]);
+    expect(isSignInRequired(threads)).toBe(true);
   });
 });

@@ -190,6 +190,52 @@ describe("pull request page states", () => {
   });
 });
 
+describe("signed-in and sign-in states", () => {
+  const heading = (name: string | RegExp) => screen.findByRole("heading", { level: 1, name });
+  const USER = "/api/github/user/github.com/repos/mdn/content";
+  const signedIn = (user: (url: string) => Reply | undefined) => (url: string) =>
+    url === "/api/auth/viewer" ? json('{"login":"octocat","avatarUrl":null}') : user(url);
+
+  it("says private repositories are not supported yet, without rendering their content", async () => {
+    const requested: string[] = [];
+    stubGitHub(
+      signedIn((url) => {
+        requested.push(url);
+        return json(
+          JSON.stringify({ message: "Private repositories aren't supported yet", code: "private-repo-unsupported" }),
+          { status: 403 },
+        );
+      }),
+    );
+    renderApp("/github.com/mdn/content/pull/45377");
+    expect(await heading("Private repositories aren't supported yet")).toBeTruthy();
+    expect(requested).toEqual([`${USER}/pulls/45377`]);
+  });
+
+  it("asks the user to sign in again when their GitHub session has expired", async () => {
+    stubGitHub(
+      signedIn(() => json(JSON.stringify({ message: "Sign in with GitHub again", code: "reauth" }), { status: 401 })),
+    );
+    renderApp("/github.com/mdn/content/pull/45377");
+    const title = await heading("Sign in again");
+    expect(within(title.parentElement!).getByRole("button", { name: "Sign in with GitHub" })).toBeTruthy();
+  });
+
+  it("offers sign-in on an anonymous not-found when sign-in is available", async () => {
+    stubGitHub((url) => (url === "/api/auth/viewer" ? json("null") : undefined));
+    renderApp("/github.com/mdn/content/pull/999998");
+    const title = await heading("Pull request unavailable");
+    expect(within(title.parentElement!).getByRole("button", { name: "Sign in with GitHub" })).toBeTruthy();
+  });
+
+  it("does not offer sign-in when this deployment has none", async () => {
+    stubGitHub(() => undefined);
+    renderApp("/github.com/mdn/content/pull/999997");
+    const title = await heading("Pull request unavailable");
+    expect(within(title.parentElement!).queryByRole("button")).toBeNull();
+  });
+});
+
 describe("top-bar account", () => {
   const viewer = (body: string) => (url: string) => (url === "/api/auth/viewer" ? json(body) : undefined);
 
@@ -203,8 +249,11 @@ describe("top-bar account", () => {
     const files = JSON.parse(fixture("files.json")) as { filename: string }[];
     const responses: Record<string, string> = {
       "/api/auth/viewer": '{"login":"octocat","avatarUrl":"https://avatars.githubusercontent.com/u/583231?v=4"}',
-      [`${API}/pulls/45377`]: fixture("pull.json"),
-      [`${API}/pulls/45377/files?per_page=100`]: JSON.stringify(files.filter((f) => !f.filename.endsWith(".md"))),
+      // Signed in, reads go through the authenticated endpoint.
+      "/api/github/user/github.com/repos/mdn/content/pulls/45377": fixture("pull.json"),
+      "/api/github/user/github.com/repos/mdn/content/pulls/45377/files?per_page=100": JSON.stringify(
+        files.filter((f) => !f.filename.endsWith(".md")),
+      ),
     };
     stubGitHub((url) => (responses[url] === undefined ? undefined : json(responses[url])));
     renderApp("/github.com/mdn/content/pull/45377");
