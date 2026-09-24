@@ -357,6 +357,46 @@ export function placeThreads(
 }
 
 /**
+ * The threads written on one earlier revision of a document, for showing it as it was:
+ * annotations made on its commit or on its blob, and review comments first posted on its commit,
+ * whose GitHub lines become their original lines. Others are left out.
+ */
+export function historicalThreads(
+  threads: NativeThread[],
+  revision: { commitOid: string; blobOid?: string },
+): NativeThread[] {
+  const original = (thread: NativeThread): NativeAnchor | undefined => {
+    const root = thread.comments[0]!;
+    if (!("originalCommitOid" in root) || root.originalCommitOid !== revision.commitOid) return undefined;
+    if (root.subjectType === "file") return { type: "file" };
+    // ponytail: LEFT-side original lines refer to the base of that diff; left out until needed.
+    if (root.originalLine === null || (root.side ?? "RIGHT") !== "RIGHT") return undefined;
+    const sameSide = (root.startSide ?? "RIGHT") === "RIGHT";
+    const startLine = (sameSide && root.originalStartLine) || root.originalLine;
+    return {
+      type: "current",
+      kind: "github-line",
+      side: "RIGHT",
+      startLine,
+      endLine: root.originalLine,
+      commitOid: revision.commitOid,
+    };
+  };
+  return threads.flatMap((thread) => {
+    const a = thread.anchor;
+    if (a.type === "annotation") {
+      const { commitOid, blobOid } = a.annotation.target;
+      if (commitOid !== revision.commitOid && blobOid !== revision.blobOid) return [];
+      const fallback = original(thread);
+      const { fallback: _, ...rest } = a;
+      return [{ ...thread, anchor: { ...rest, ...(fallback && { fallback }) } }];
+    }
+    const anchor = original(thread);
+    return anchor ? [{ ...thread, anchor }] : [];
+  });
+}
+
+/**
  * Body to show for a thread comment. The quote and permalink repeat what the highlight shows, so
  * they are hidden, but only when the thread's anchor was verified against the document (`verified`,
  * i.e. its placement has a `range`) and the comment's own validated annotation names that same target.
