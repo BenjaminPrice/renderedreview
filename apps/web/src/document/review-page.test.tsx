@@ -121,6 +121,18 @@ it("binds the selected doc to the URL and marks changed sections of a modified d
   expect(screen.getByRole("note", { name: "Changed-section legend" })).toBeTruthy();
 });
 
+it("scrolls the document back to the top when another doc is opened", async () => {
+  renderPage();
+  await screen.findByRole("article", { name: "Rendered document" });
+  const scroller = document.querySelector<HTMLElement>(".rr-scroll")!;
+  scroller.scrollTop = 500;
+  expect(scroller.scrollTop).toBe(500);
+
+  await userEvent.click(fileLink(/status\/index\.md, modified/));
+  await screen.findByRole("heading", { name: /HTTP response status codes/ });
+  expect(scroller.scrollTop).toBe(0);
+});
+
 it("switches to raw source with GitHub line links, and back, without refetching", async () => {
   renderPage(`?doc=${encodeURIComponent(INDEX)}`);
   await screen.findByRole("article", { name: "Rendered document" });
