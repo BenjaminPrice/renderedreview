@@ -2,11 +2,7 @@
 // Replying to and resolving threads. Native review threads use GitHub's review reply API and
 // GraphQL resolution; application threads (`app:<root comment id>`) are PR conversation comments
 // whose annotation names the thread (`threadId`) and the comment answered (`replyTo`).
-import {
-  composeCommentBody,
-  extractAnnotation,
-  type RenderedReviewAnnotationV1,
-} from "@rendered-review/annotation-domain";
+import { composeCommentBody, type RenderedReviewAnnotationV1 } from "@rendered-review/annotation-domain";
 import type { NativeThread } from "@rendered-review/review-domain";
 import { useMutation } from "@tanstack/react-query";
 import { commentMutation, replyMutation, resolveMutation } from "../github/mutations";
@@ -30,12 +26,12 @@ type Event = { motivation: "replying" } | { motivation: "resolving"; resolution:
 /** Conversation comment body for a reply to, or resolution of, an application thread: same target as its root. */
 function appThreadBody(thread: NativeThread, text: string, event: Event): string {
   const root = thread.comments[0]!;
-  const extracted = extractAnnotation(root.body);
-  if (extracted.status !== "ok") throw new Error("This thread's metadata can't be read, so it can't be answered here.");
-  // `resolution` is part of the annotation format for resolving events.
-  const annotation: RenderedReviewAnnotationV1 & { resolution?: "resolved" | "reopened" } = {
+  // Application threads are anchored by their root's validated annotation.
+  if (thread.anchor.type !== "annotation")
+    throw new Error("This thread's metadata can't be read, so it can't be answered here.");
+  const annotation: RenderedReviewAnnotationV1 = {
     version: 1,
-    target: extracted.annotation.target,
+    target: thread.anchor.annotation.target,
     ...event,
     ...(event.motivation === "replying" && { replyTo: String(thread.comments.at(-1)!.id) }),
     threadId: String(root.id),

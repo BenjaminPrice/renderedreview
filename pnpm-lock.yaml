@@ -257,6 +257,9 @@ importers:
 
   packages/review-domain:
     dependencies:
+      '@rendered-review/annotation-domain':
+        specifier: workspace:*
+        version: link:../annotation-domain
       '@rendered-review/github-action':
         specifier: workspace:*
         version: link:../github-action

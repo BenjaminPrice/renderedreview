@@ -2,17 +2,13 @@
 // @vitest-environment happy-dom
 // Replying to and resolving threads through the write boundary: what is sent for native and
 // application threads, and what the reviewer is told.
-import {
-  composeCommentBody,
-  extractAnnotation,
-  type RenderedReviewAnnotationV1,
-} from "@rendered-review/annotation-domain";
+import { extractAnnotation } from "@rendered-review/annotation-domain";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderHook } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { PrIdentity } from "../github/queries";
-import { comment, HEAD, lineAnchor, thread } from "./fixtures";
+import { annotation, appThread, comment, HEAD, issueComment, lineAnchor, thread } from "./fixtures";
 import { useThreadActions } from "./thread-actions";
 
 vi.mock("../ui/Viewer", () => ({ authorizePublicComments: vi.fn(async () => {}) }));
@@ -30,36 +26,9 @@ const id: PrIdentity = {
 };
 const WRITE = "/api/github/write/github.com/acme/docs/pulls/7";
 
-const rootAnnotation: RenderedReviewAnnotationV1 = {
-  version: 1,
-  target: {
-    githubHost: "github.com",
-    repositoryId: 42,
-    repository: "acme/docs",
-    pullRequest: 7,
-    path: "docs/guide.md",
-    commitOid: HEAD,
-    blobOid: "c".repeat(40),
-    selectors: [
-      { type: "TextQuoteSelector", exact: "full jitter", prefix: "", suffix: "" },
-      { type: "TextPositionSelector", start: 10, end: 21 },
-      { type: "MarkdownSourceRangeSelector", startLine: 3, startColumn: 1, endLine: 3, endColumn: 12 },
-    ],
-  },
-  motivation: "commenting",
-  createdBy: "rendered-review",
-};
-
-/** An application thread: a root conversation comment carrying an annotation, and one reply. */
-function appThread(resolution: "resolved" | "unresolved" = "unresolved") {
-  const root = comment({
-    id: 1001,
-    body: composeCommentBody({ annotation: rootAnnotation, comment: "Why jitter?", location: "conversation" }),
-    htmlUrl: "https://github.com/acme/docs/pull/7#issuecomment-1001",
-  });
-  const reply = comment({ id: 1002, body: "Because." });
-  return thread("app:1001", lineAnchor(3), resolution, [root, reply]);
-}
+/** An application thread: a root conversation comment and one reply. */
+const app = (resolution: "resolved" | "unresolved" = "unresolved") =>
+  appThread([issueComment("Why jitter?", { id: 1001 }), issueComment("Because.", { id: 1002 })], { resolution });
 
 function setup(response: () => Response = () => Response.json({}, { status: 201 })) {
   const fetch = vi.fn<(url: string, init: RequestInit) => Promise<Response>>(async () => response());
@@ -78,7 +47,7 @@ function setup(response: () => Response = () => Response.json({}, { status: 201 
 const decode = (body: unknown) => {
   const extracted = extractAnnotation(body as string);
   if (extracted.status !== "ok") throw new Error(`no annotation: ${extracted.status}`);
-  return extracted.annotation as RenderedReviewAnnotationV1 & { resolution?: string };
+  return extracted.annotation;
 };
 
 afterEach(() => {
@@ -99,20 +68,20 @@ describe("replies", () => {
 
   it("replies to an application thread with a conversation comment linked to its root and parent", async () => {
     const { actions, sent } = setup();
-    await actions().reply(appThread(), "Still unclear.");
+    await actions().reply(app(), "Still unclear.");
     const [request] = sent();
     expect(request!.url).toBe(`${WRITE}/comment`);
     expect(request!.body).toMatchObject({ representation: "conversation", expectedHeadOid: HEAD });
     expect(request!.body.body).toContain("Still unclear.");
     // Readable on GitHub: the quote and the document link, as for the root.
-    expect(request!.body.body).toContain("> full jitter");
+    expect(request!.body.body).toContain("> retries failed requests");
     expect(request!.body.body).toContain("Document: [`docs/guide.md`]");
-    const annotation = decode(request!.body.body);
-    expect(annotation).toEqual({
-      ...rootAnnotation,
+    expect(decode(request!.body.body)).toEqual({
+      ...annotation(),
       motivation: "replying",
       replyTo: "1002",
       threadId: "1001",
+      createdBy: "rendered-review",
     });
   });
 
@@ -126,9 +95,9 @@ describe("replies", () => {
     expect(announce).not.toHaveBeenCalled();
   });
 
-  it("refuses to reply to an application thread whose root metadata can't be read", async () => {
+  it("refuses to reply to an application thread without its root annotation", async () => {
     const { actions, sent } = setup();
-    const t = thread("app:9", lineAnchor(3), "unresolved", [comment({ id: 9, body: "no marker" })]);
+    const t = appThread(undefined, { anchor: lineAnchor(3) });
     await expect(actions().reply(t, "Hi")).rejects.toThrow(/metadata/);
     expect(sent()).toEqual([]);
   });
@@ -148,19 +117,19 @@ describe("resolution", () => {
 
   it("resolves and reopens an application thread with a visible conversation comment", async () => {
     const { actions, sent } = setup();
-    await actions().setResolved(appThread("unresolved"), true);
-    await actions().setResolved(appThread("resolved"), false);
+    const open = app("unresolved");
+    await actions().setResolved(open, true);
+    await actions().setResolved(app("resolved"), false);
     const [resolve, reopen] = sent();
     expect(resolve!.url).toBe(`${WRITE}/comment`);
     expect(resolve!.body).toMatchObject({ representation: "conversation", expectedHeadOid: HEAD });
-    expect(resolve!.body.body).toContain(
-      "Resolved [this thread](https://github.com/acme/docs/pull/7#issuecomment-1001).",
-    );
+    expect(resolve!.body.body).toContain(`Resolved [this thread](${open.comments[0]!.htmlUrl}).`);
     expect(decode(resolve!.body.body)).toEqual({
-      ...rootAnnotation,
+      ...annotation(),
       motivation: "resolving",
       threadId: "1001",
       resolution: "resolved",
+      createdBy: "rendered-review",
     });
     expect(reopen!.body.body).toContain("Reopened [this thread]");
     expect(decode(reopen!.body.body)).toMatchObject({ motivation: "resolving", resolution: "reopened" });

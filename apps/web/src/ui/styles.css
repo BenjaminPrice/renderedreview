@@ -682,6 +682,22 @@ samp {
 .rr-t-error {
   margin-top: 8px;
 }
+.rr-t-loc.rr-t-why {
+  white-space: normal;
+}
+/* Resolve/reopen events of an application thread: small rows, not comments. */
+.rr-t-events {
+  margin: 0;
+  padding: 4px 8px 4px 12px;
+  list-style: none;
+  font-size: 11.5px;
+  color: var(--rr-text-muted);
+}
+.rr-t-events li {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
 
 /* Comment Markdown */
 .rr-md > :first-child {
