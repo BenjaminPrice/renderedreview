@@ -57,12 +57,17 @@ describe("classifyComment: references to another pull request are damaged", () =
   it.each<[string, RenderedReviewAnnotationV1]>([
     ["another pull request", target({ pullRequest: 8 })],
     ["another repository id", target({ repositoryId: 43 })],
-    ["another repository name", target({ repository: "evil/docs" })],
+    ["another repository id with the same name", target({ repositoryId: 43, repository: "acme/docs" })],
     ["another host", target({ githubHost: "github.example.com" })],
   ])("%s", (_name, a) => {
     const result = classifyComment(issueComment(body(a)), context);
     expect(result).toMatchObject({ state: "damaged", reason: expect.any(String) });
     expect(result.annotation).toBeUndefined();
+  });
+
+  it("accepts a renamed or transferred repository: the id is its identity, the name is only for reading", () => {
+    const a = target({ repository: "old-owner/old-name" });
+    expect(classifyComment(issueComment(body(a)), context)).toMatchObject({ state: "valid", annotation: a });
   });
 
   it("compares host and repository name case-insensitively", () => {

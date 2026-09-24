@@ -43,10 +43,8 @@ const PERMALINK_LINE = /^Document: \[`.+`\]\(https:\/\/\S+\/blob\/[0-9a-f]{40,64
 function mismatch(a: RenderedReviewAnnotationV1, context: CommentContext, path?: string): string | undefined {
   const t = a.target;
   if (t.githubHost.toLowerCase() !== context.host.toLowerCase()) return "The metadata names another GitHub host";
+  // The ID is the repository's identity; the name is only for reading and changes on rename or transfer.
   if (t.repositoryId !== context.repositoryId) return "The metadata names another repository";
-  // ponytail: a renamed repository reads as damaged; compare the ID only if renames matter.
-  if (t.repository.toLowerCase() !== `${context.owner}/${context.name}`.toLowerCase())
-    return "The metadata names another repository";
   if (t.pullRequest !== context.pullRequest) return "The metadata names another pull request";
   if (path !== undefined && t.path !== path) return "The metadata names another file than the comment";
 }
