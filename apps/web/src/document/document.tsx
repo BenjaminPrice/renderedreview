@@ -231,7 +231,8 @@ export function RenderedDocument({
     [blobOid, changes, host, owner, repo, sha, path],
   );
   return (
-    <article ref={containerRef} className="rr-markdown" aria-label="Rendered document" onClick={onClick}>
+    // Focusable, so keyboard readers can scroll it and select text in it (see SelectionPopover).
+    <article ref={containerRef} className="rr-markdown" aria-label="Rendered document" tabIndex={0} onClick={onClick}>
       <DiagramSourceContext value={source}>{content}</DiagramSourceContext>
     </article>
   );
