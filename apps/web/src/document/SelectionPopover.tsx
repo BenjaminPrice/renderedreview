@@ -18,7 +18,7 @@ const editable = (el: EventTarget | null) =>
 /**
  * Shown for a non-empty selection inside `article` after the mouse or keyboard finishes it.
  * Cross-block selections preview the whole blocks they widen to; selections that cannot be
- * commented on say why. C composes a comment (like the button), Escape dismisses.
+ * commented on say why. C composes a comment and S a suggestion (like the buttons), Escape dismisses.
  */
 export function SelectionPopover({
   article,
@@ -29,7 +29,8 @@ export function SelectionPopover({
   article: HTMLElement | null;
   rendered: RenderedMarkdown;
   source: string;
-  onCompose: (selection: SourceSelection) => void;
+  /** `suggest`: asked to suggest a change rather than comment. */
+  onCompose: (selection: SourceSelection, suggest?: true) => void;
 }) {
   const [current, setCurrent] = useState<{ result: SelectionResult; range: Range; rect: DOMRect } | null>(null);
   const previewId = useId();
@@ -53,17 +54,18 @@ export function SelectionPopover({
   // A new document or render drops a stale selection.
   useEffect(() => setCurrent(null), [rendered]);
 
-  const compose = (selection: SourceSelection) => {
+  const compose = (selection: SourceSelection, suggest?: true) => {
     setCurrent(null);
-    onCompose(selection);
+    if (suggest) onCompose(selection, suggest);
+    else onCompose(selection);
   };
   const onKey = useEffectEvent((event: KeyboardEvent) => {
     if (!current) return;
     if (event.key === "Escape") setCurrent(null);
     else if (event.ctrlKey || event.metaKey || event.altKey || editable(event.target)) return;
-    else if (event.key.toLowerCase() === "c" && current.result.ok) {
+    else if (/^[cs]$/i.test(event.key) && current.result.ok) {
       event.preventDefault();
-      compose(current.result.selection);
+      compose(current.result.selection, event.key.toLowerCase() === "s" || undefined);
     }
   });
   const onScroll = useEffectEvent(() => {
@@ -111,8 +113,7 @@ export function SelectionPopover({
               type="button"
               className="rr-btn rr-btn-sm rr-btn-ghost"
               aria-keyshortcuts="S"
-              aria-disabled="true"
-              title="Suggestions are not available yet"
+              onClick={() => compose(result.selection, true)}
             >
               Suggest <kbd>S</kbd>
             </button>

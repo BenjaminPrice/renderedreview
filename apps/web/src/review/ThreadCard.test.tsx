@@ -3,7 +3,8 @@
 import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it } from "vitest";
-import { appThread, comment, issueComment, lineAnchor, OLD, repository, thread } from "./fixtures";
+import { composeDraftBody, prepareAnnotation } from "./compose";
+import { appThread, comment, HEAD, issueComment, lineAnchor, OLD, repository, thread } from "./fixtures";
 import { expectNewTab } from "../test-utils";
 import { ThreadCard } from "./ThreadCard";
 
@@ -79,6 +80,48 @@ describe("suggestions", () => {
     const apply = within(change).getByRole("link", { name: "Apply on GitHub (opens in new tab)" });
     expectNewTab(apply);
     expect(apply.getAttribute("href")).toBe(c.htmlUrl);
+    expect(screen.queryByRole("button", { name: /apply/i })).toBeNull();
+  });
+
+  it("shows a Rendered Review proposed change outside the diff with no way to apply it", () => {
+    const prepared = prepareAnnotation(
+      {
+        host: "github.com",
+        repositoryId: 1,
+        repository: "acme/docs",
+        pullRequest: 2,
+        path: "docs/guide.md",
+        commitOid: HEAD,
+        blobOid: HEAD,
+      },
+      {
+        exact: "three",
+        prefix: "",
+        suffix: "",
+        textPosition: { start: 0, end: 5 },
+        sourceRange: { startLine: 3, startColumn: 1, endLine: 3, endColumn: 6 },
+        nodeType: "paragraph",
+        headingPath: [],
+        blockIds: [1],
+        expanded: false,
+      },
+    );
+    if (!prepared.ok) throw new Error(prepared.message);
+    const body = composeDraftBody(
+      prepared.annotation,
+      "Shout it.",
+      { kind: "review-file", reason: "" },
+      {
+        original: "three",
+        replacement: "THREE",
+      },
+    );
+    card(thread("t1", { type: "file" }, "unknown", [comment({ body })]));
+    const change = screen.getByRole("group", { name: "Proposed change" });
+    expect(within(change).getByText(/three$/).textContent).toBe("Removed: three");
+    expect(within(change).getByText(/THREE$/).textContent).toBe("Added: THREE");
+    expect(screen.getByText(/GitHub can't apply it/).textContent).toMatch(/Apply manually\.$/);
+    expect(screen.queryByRole("link", { name: /apply/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /apply/i })).toBeNull();
   });
 });
