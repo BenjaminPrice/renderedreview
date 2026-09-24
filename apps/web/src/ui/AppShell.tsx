@@ -22,11 +22,15 @@ const ICONS = {
   moon: "M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7z",
   system: "M2 3h12v8H2zM5.5 14h5M8 11v3",
   x: "M4 4l8 8M12 4l-8 8",
+  pr: "M4 2a1.5 1.5 0 1 1 0 3a1.5 1.5 0 1 1 0-3M4 11a1.5 1.5 0 1 1 0 3a1.5 1.5 0 1 1 0-3M12 11a1.5 1.5 0 1 1 0 3a1.5 1.5 0 1 1 0-3M4 5v6M12 11V6.5a2 2 0 0 0-2-2H7.5M9 3 7.5 4.5 9 6",
+  file: "M4 1.5h5l3 3v10H4zM9 1.5v3h3",
+  repo: "M3.5 13V3a1 1 0 0 1 1-1h8v9.5h-8a1 1 0 0 0-1 1.5zM3.5 13a1 1 0 0 0 1 1h8",
+  jump: "M2.5 8h11M10 4.5 13.5 8 10 11.5",
 };
 
-export function Icon({ name }: { name: keyof typeof ICONS }) {
+export function Icon({ name, className = "" }: { name: keyof typeof ICONS; className?: string }) {
   return (
-    <svg className="rr-icon" viewBox="0 0 16 16" aria-hidden="true">
+    <svg className={`rr-icon ${className}`.trim()} viewBox="0 0 16 16" aria-hidden="true">
       <path d={ICONS[name]} />
     </svg>
   );
@@ -61,6 +65,8 @@ export type AppShellProps = {
   toolbar?: ReactNode;
   toolbarEnd?: ReactNode;
   commentCount?: number;
+  /** Rail title in place of "Comments" and the comment count. */
+  railTitle?: ReactNode;
   /** Rail header content under the title (connector switch, filters). */
   railHeader?: ReactNode;
   /** Comment rail. Omitted: no rail and no Comments button. */
@@ -187,8 +193,12 @@ export function AppShell(props: AppShellProps) {
                   <aside ref={railRef} className="rr-rail" id={RAIL_ID} aria-labelledby={`${RAIL_ID}-title`}>
                     <div className="rr-rail-head">
                       <h2 ref={railTitle} className="rr-rail-title" id={`${RAIL_ID}-title`} tabIndex={-1}>
-                        Comments
-                        {props.commentCount !== undefined && <span className="rr-count">{props.commentCount}</span>}
+                        {props.railTitle ?? (
+                          <>
+                            Comments
+                            {props.commentCount !== undefined && <span className="rr-count">{props.commentCount}</span>}
+                          </>
+                        )}
                         <span className="rr-spacer" />
                         {mode === "slide" && (
                           <button

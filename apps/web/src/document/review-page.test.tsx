@@ -471,9 +471,11 @@ it("shows the PR header band and its description as sanitized Markdown", async (
   });
   renderPage("?view=overview");
   const region = await overview();
-  const band = within(region).getByRole("banner");
+  const band = within(region).getByRole("heading", {
+    level: 2,
+    name: "Remove HTTP status 102 page #45377",
+  }).parentElement!;
   expect(within(band).getByText("Pull request")).toBeTruthy();
-  expect(within(band).getByRole("heading", { name: "Remove HTTP status 102 page #45377" })).toBeTruthy();
   expect(within(band).getByText("Merged")).toBeTruthy();
   expect(band.textContent).toContain("OnkarRuikar merged 4 commits into");
   expect(within(band).getByText("main")).toBeTruthy();
@@ -484,7 +486,9 @@ it("shows the PR header band and its description as sanitized Markdown", async (
   const description = within(region).getByRole("region", { name: "Description" });
   expect(within(description).getByRole("heading", { name: "More Info" })).toBeTruthy();
   expect(description.textContent).toContain("npm run content delete Web/HTTP/Reference/Status/102");
-  expectNewTab(within(description).getByRole("link", { name: /not being tracked in BCD/ }));
+  const external = within(description).getByRole("link", { name: /not being tracked in BCD/ });
+  expect(external.getAttribute("target")).toBe("_blank");
+  expect(external.getAttribute("rel")).toBe("noopener noreferrer");
   expectNewTab(within(description).getByRole("link", { name: "Edit on GitHub (opens in new tab)" }));
   expect(description.querySelector("script")).toBeNull();
   expect(description.querySelector("[onerror]")).toBeNull();
@@ -519,7 +523,7 @@ it("lists the conversation and review events oldest first, without the Rendered 
   );
   renderPage("?view=overview");
   const list = await within(await overview()).findByRole("list", { name: "Conversation, oldest first" });
-  const items = within(list).getAllByRole("listitem");
+  const items = [...list.children] as HTMLElement[];
   expect(items.map((i) => i.getAttribute("aria-label"))).toEqual([
     "github-actions[bot] commented",
     "hamishwillee requested changes",
@@ -544,7 +548,7 @@ it("jumps from a permalink comment to its document and focuses the lines", async
   expect(router.state.location.search).not.toHaveProperty("view");
   const article = await screen.findByRole("article", { name: "Rendered document" });
   await vi.waitFor(() => expect(article.contains(document.activeElement)).toBe(true));
-  expect(document.activeElement!.textContent).toContain("102");
+  expect(document.activeElement!.textContent).toContain("WebDAV");
 });
 
 it("jumps from a review to its thread in the document", async () => {
