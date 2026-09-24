@@ -6,7 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "@tanstack/react-router";
 import type { Element, Root } from "hast";
 import { toJsxRuntime } from "hast-util-to-jsx-runtime";
-import { useMemo, type Ref } from "react";
+import { useMemo, type MouseEvent, type Ref } from "react";
 import { Fragment, jsx, jsxs } from "react/jsx-runtime";
 import { isMarkdownPath } from "../pr-url";
 import { blobQuery, type PrIdentity, treeQuery } from "../github/queries";
@@ -132,25 +132,25 @@ export function RenderedDocument({
     () => toJsxRuntime(withMarks(rendered.tree, changeMarks(rendered, changes)), { Fragment, jsx, jsxs }),
     [rendered, changes],
   );
-  const router = useRouter();
+  const onClick = useInAppLinks();
   return (
-    <article
-      ref={containerRef}
-      className="rr-markdown"
-      aria-label="Rendered document"
-      onClick={(event) => {
-        // Links to other documents in this PR navigate in-app instead of reloading the page.
-        const link = (event.target as HTMLElement).closest("a");
-        const href = link?.getAttribute("href");
-        if (!link || !href || href.startsWith("#") || link.origin !== window.location.origin) return;
-        if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-        event.preventDefault();
-        void router.navigate({ href: link.pathname + link.search + link.hash });
-      }}
-    >
+    <article ref={containerRef} className="rr-markdown" aria-label="Rendered document" onClick={onClick}>
       {content}
     </article>
   );
+}
+
+/** Click handler for rendered Markdown: links to other documents in this PR navigate in-app instead of reloading. */
+export function useInAppLinks() {
+  const router = useRouter();
+  return (event: MouseEvent) => {
+    const link = (event.target as HTMLElement).closest("a");
+    const href = link?.getAttribute("href");
+    if (!link || !href || href.startsWith("#") || link.origin !== window.location.origin) return;
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    void router.navigate({ href: link.pathname + link.search + link.hash });
+  };
 }
 
 export function RawDocument({

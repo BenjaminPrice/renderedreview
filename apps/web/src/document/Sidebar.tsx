@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { useLocation, useNavigate, useRouter, useSearch } from "@tanstack/react-router";
-import type { KeyboardEvent } from "react";
+import type { ReviewerState } from "@rendered-review/review-domain";
+import type { KeyboardEvent, MouseEvent } from "react";
 import { Icon } from "../ui/AppShell";
 import { ExternalLink } from "../ui/ExternalLink";
 import { type DocEntry, STATUS_LETTER } from "./docs";
+import type { PrState } from "./Overview";
+import { initials } from "../review/ThreadCard";
 
 const ROUTE = "/$host/$owner/$repo/pull/$number";
 const STATUS_LABEL = {
@@ -30,6 +33,76 @@ export interface SidebarProps {
   unresolved?: ReadonlyMap<string, number>;
   /** Whether thread resolution is known; anonymous reads cannot see it, so counts include resolved threads. */
   resolutionKnown?: boolean;
+  /** The pull request block above the documents; it opens the Overview. */
+  pr: PrBlockProps;
+}
+
+export interface PrBlockProps {
+  number: number;
+  state: PrState;
+  /** The Overview is shown. */
+  selected: boolean;
+  /** Timeline items; undefined while loading. */
+  comments?: number;
+  reviewers?: ReviewerState[];
+}
+
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+/** Client-side navigation for plain clicks on a plain anchor; modified clicks keep the browser's behaviour. */
+function useAnchorNavigation() {
+  const router = useRouter();
+  return (event: MouseEvent, link: HTMLAnchorElement | null) => {
+    if (!link || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    void router.navigate({ href: link.getAttribute("href")! });
+  };
+}
+
+function PrBlock({ number, state, selected, comments, reviewers = [] }: PrBlockProps) {
+  const router = useRouter();
+  const search = useSearch({ from: ROUTE });
+  const pathname = useLocation({ select: (l) => l.pathname });
+  const go = useAnchorNavigation();
+  const href =
+    pathname + router.options.stringifySearch({ ...search, view: "overview", doc: undefined, thread: undefined });
+  const approvals = reviewers.filter((r) => r.state === "APPROVED").length;
+  const changes = reviewers.filter((r) => r.state === "CHANGES_REQUESTED").length;
+  const verdicts = [approvals && plural(approvals, "approval"), changes && plural(changes, "change request")].filter(
+    Boolean,
+  );
+  return (
+    <div className="rr-sidebar-pr">
+      <a
+        href={href}
+        className="rr-pr-entry"
+        aria-current={selected ? "page" : undefined}
+        onClick={(event) => go(event, event.currentTarget)}
+      >
+        <Icon name="pr" className={`rr-pr-icon rr-pr-${state}`} />
+        <span className="rr-pr-entry-text">
+          <span className="rr-pr-entry-title">Pull request #{number}</span>
+          <span className="rr-pr-entry-sub">
+            Overview{comments !== undefined && ` · ${plural(comments, "comment")}`}
+          </span>
+          {verdicts.length > 0 && <span className="rr-pr-entry-sub">{verdicts.join(" · ")}</span>}
+          {reviewers.length > 0 && (
+            <span
+              className="rr-pr-avatars"
+              role="img"
+              aria-label={`Reviewers: ${reviewers.map((r) => r.author.login).join(", ")}`}
+            >
+              {reviewers.map((r) => (
+                <span key={r.author.login} className="rr-avatar" title={r.author.login}>
+                  {initials(r.author.login)}
+                </span>
+              ))}
+            </span>
+          )}
+        </span>
+      </a>
+    </div>
+  );
 }
 
 export function Sidebar(props: SidebarProps) {
@@ -39,6 +112,8 @@ export function Sidebar(props: SidebarProps) {
 
   return (
     <>
+      <PrBlock {...props.pr} />
+      <div className="rr-side-label">Documents</div>
       <div className="rr-sidebar-head">
         <div className="rr-seg rr-seg-fill" role="group" aria-label="Document scope">
           <button type="button" aria-pressed={props.mode === "changed"} onClick={() => setMode("changed")}>
@@ -97,25 +172,22 @@ function FileList(props: SidebarProps & { list: DocEntry[] }) {
   const router = useRouter();
   const search = useSearch({ from: ROUTE });
   const pathname = useLocation({ select: (l) => l.pathname });
+  const go = useAnchorNavigation();
   const focusable = props.list.some((d) => d.path === props.selected) ? props.selected : props.list[0]?.path;
   // ponytail: renders every entry (mdn/content: 15k in ~0.6s); virtualize if larger repositories lag.
   return (
     <ul
       className="rr-filelist"
       onKeyDown={onListKey}
-      onClick={(event) => {
-        // Client-side navigation for plain clicks; modified clicks keep the browser's behaviour.
-        const link = (event.target as Element).closest<HTMLAnchorElement>("a.rr-file");
-        if (!link || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-        event.preventDefault();
-        void router.navigate({ href: link.getAttribute("href")! });
-      }}
+      onClick={(event) => go(event, (event.target as Element).closest<HTMLAnchorElement>("a.rr-file"))}
     >
       {props.list.map((doc) => (
         <FileItem
           key={doc.path}
           doc={doc}
-          href={pathname + router.options.stringifySearch({ ...search, doc: doc.path, thread: undefined })}
+          href={
+            pathname + router.options.stringifySearch({ ...search, doc: doc.path, view: undefined, thread: undefined })
+          }
           tabbable={doc.path === focusable}
           {...props}
         />

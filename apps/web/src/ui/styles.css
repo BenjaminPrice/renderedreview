@@ -836,29 +836,6 @@ samp {
   color: var(--rr-added-fg);
 }
 
-/* Conversation and review summaries */
-.rr-panel {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 8px;
-}
-.rr-panel-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0;
-  font-size: var(--rr-text-sm);
-  font-weight: 600;
-}
-.rr-inferred {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 0 0 6px;
-  font-size: var(--rr-text-xs);
-}
-
 /* Connectors: drawn in the document column, above the rail, below the sticky rail header. */
 .rr-wires {
   position: absolute;
@@ -1166,20 +1143,6 @@ samp {
 }
 
 /* Document toolbar */
-.rr-doc-path {
-  /* Takes the free space ahead of the shell's spacer so the legend sits by the Comments button. */
-  flex: 1000 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font: 12.5px var(--rr-font-mono);
-  color: var(--rr-text-muted);
-}
-.rr-doc-path b {
-  color: var(--rr-text);
-  font-weight: 600;
-}
 .rr-legend {
   display: inline-flex;
   gap: 10px;
@@ -1526,4 +1489,439 @@ samp {
 .rr-body:not(:has(> .rr-sidebar)),
 .rr-canvas:not(:has(> .rr-rail)) {
   grid-template-columns: minmax(0, 1fr);
+}
+
+/* =====================================================================
+   PR Overview: sidebar block, breadcrumbs, header band, description, timeline, rail summary
+   ===================================================================== */
+.rr-sidebar-pr {
+  padding: 10px 8px;
+  border-bottom: 1px solid var(--rr-border);
+}
+.rr-pr-entry {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 9px 10px 9px 12px;
+  border-radius: var(--rr-radius);
+  color: var(--rr-text);
+}
+.rr-pr-entry:hover {
+  background: var(--rr-surface-hover);
+  text-decoration: none;
+}
+.rr-pr-entry[aria-current="page"] {
+  background: var(--rr-accent-subtle);
+}
+.rr-pr-entry[aria-current="page"]::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--rr-accent);
+}
+.rr-pr-icon {
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+}
+.rr-pr-open {
+  color: var(--rr-added-fg);
+}
+.rr-pr-merged {
+  color: var(--rr-renamed-fg);
+}
+.rr-pr-closed {
+  color: var(--rr-deleted-fg);
+}
+.rr-pr-draft {
+  color: var(--rr-text-muted);
+}
+.rr-pr-entry-text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  line-height: 1.3;
+}
+.rr-pr-entry-title {
+  font-weight: 600;
+  font-size: var(--rr-text-sm);
+}
+.rr-pr-entry-sub {
+  margin-top: 2px;
+  font-size: var(--rr-text-xs);
+  color: var(--rr-text-muted);
+}
+.rr-pr-avatars {
+  display: flex;
+  margin-top: 7px;
+}
+.rr-pr-avatars .rr-avatar {
+  width: 22px;
+  height: 22px;
+  margin-right: -2px;
+  font-size: 8.5px;
+  box-shadow: 0 0 0 2px var(--rr-surface-sunken);
+}
+.rr-pr-entry[aria-current="page"] .rr-pr-avatars .rr-avatar {
+  box-shadow: 0 0 0 2px var(--rr-accent-subtle);
+}
+.rr-side-label {
+  padding: 12px 20px 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--rr-text-muted);
+}
+
+.rr-crumbs {
+  /* Takes the free space ahead of the shell's spacer so the legend sits by the Comments button. */
+  flex: 1000 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: var(--rr-text-sm);
+  color: var(--rr-text-muted);
+}
+.rr-crumbs:not(.rr-crumbs-doc) {
+  flex: 0 1 auto;
+}
+.rr-crumbs a {
+  color: var(--rr-text-muted);
+}
+.rr-crumbs a:hover {
+  color: var(--rr-accent-text);
+}
+.rr-crumbs .rr-icon {
+  width: 14px;
+  height: 14px;
+}
+.rr-crumb-pr {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.rr-crumb-here {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 9px;
+  border-radius: 999px;
+  background: var(--rr-accent-subtle);
+  color: var(--rr-accent-text);
+  font-weight: 600;
+}
+.rr-crumb-file {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  font: 12.5px var(--rr-font-mono);
+  color: var(--rr-text);
+}
+.rr-crumb-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rr-crumb-file b {
+  font-weight: 600;
+}
+
+/* The Overview spans the document column; its band is full width, its body reading width. */
+.rr-doc:has(> .rr-overview) {
+  max-width: none;
+  padding: 0 0 160px;
+  font: var(--rr-text-ui) / 1.5 var(--rr-font-ui);
+}
+.rr-pr-band {
+  padding: 26px max(var(--rr-gutter), calc((100% - var(--rr-measure)) / 2)) 18px;
+  background: var(--rr-surface-sunken);
+  border-bottom: 1px solid var(--rr-border);
+}
+.rr-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+  font: 600 11px/1 var(--rr-font-ui);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--rr-text-muted);
+}
+.rr-eyebrow .rr-icon {
+  width: 14px;
+  height: 14px;
+}
+.rr-ov-title {
+  margin: 0 0 12px;
+  font: 700 28px/1.25 var(--rr-font-ui);
+  letter-spacing: -0.015em;
+}
+.rr-ov-title .rr-pr-num {
+  color: var(--rr-text-muted);
+  font-weight: 400;
+}
+.rr-pr-facts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+  font-size: var(--rr-text-sm);
+  color: var(--rr-text-muted);
+}
+.rr-pr-facts b {
+  color: var(--rr-text);
+  font-weight: 600;
+}
+.rr-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 11px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.rr-pill .rr-icon {
+  width: 14px;
+  height: 14px;
+}
+.rr-branch {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: var(--rr-radius-sm);
+  background: var(--rr-accent-subtle);
+  color: var(--rr-accent-text);
+  font: 12px var(--rr-font-mono);
+}
+.rr-label {
+  padding: 1px 8px;
+  border: 1px solid var(--rr-border);
+  border-radius: 999px;
+  font-size: var(--rr-text-xs);
+  font-weight: 500;
+  color: var(--rr-text);
+}
+.rr-overview-body {
+  max-width: calc(var(--rr-measure) + 2 * var(--rr-gutter));
+  margin: 0 auto;
+  padding: 24px var(--rr-gutter) 0;
+}
+.rr-muted {
+  color: var(--rr-text-muted);
+}
+.rr-desc {
+  margin: 0 0 28px;
+  border: 1px solid var(--rr-border);
+  border-radius: var(--rr-radius-lg);
+  background: var(--rr-surface);
+}
+.rr-desc-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 8px 8px 14px;
+  border-bottom: 1px solid var(--rr-border-muted);
+  border-radius: var(--rr-radius-lg) var(--rr-radius-lg) 0 0;
+  background: var(--rr-surface-sunken);
+  font-size: var(--rr-text-sm);
+}
+.rr-desc-head h3 {
+  margin: 0;
+  font-size: inherit;
+}
+.rr-desc-body {
+  padding: 16px 20px 6px;
+}
+.rr-desc-body > .rr-muted {
+  margin: 0 0 10px;
+}
+.rr-desc-md {
+  font: var(--rr-text-doc) / var(--rr-leading-doc) var(--rr-font-doc);
+}
+.rr-conv-h {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 14px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--rr-border-muted);
+  font-size: 20px;
+}
+
+/* GitHub-like timeline: a line through the avatars, comment cards and review event rows. */
+.rr-tl {
+  position: relative;
+  margin: 0;
+  padding: 0 0 4px;
+  list-style: none;
+}
+.rr-tl::before {
+  content: "";
+  position: absolute;
+  left: 19px;
+  top: 8px;
+  bottom: 0;
+  width: 2px;
+  background: var(--rr-border);
+}
+.rr-tl-item {
+  position: relative;
+  margin: 0 0 18px;
+  padding-left: 56px;
+  border-radius: var(--rr-radius-lg);
+}
+.rr-tl-item:focus-visible {
+  outline: 2px solid var(--rr-focus);
+  outline-offset: 4px;
+}
+.rr-tl-av {
+  position: absolute;
+  left: 4px;
+  top: 0;
+  width: 32px;
+  height: 32px;
+  box-shadow: 0 0 0 4px var(--rr-bg);
+}
+.rr-avatar-xs {
+  width: 20px;
+  height: 20px;
+  font-size: 8.5px;
+}
+.rr-tl-card {
+  border: 1px solid var(--rr-border);
+  border-radius: var(--rr-radius-lg);
+  background: var(--rr-surface);
+}
+.rr-tl-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 4px 6px 4px 12px;
+  border-bottom: 1px solid var(--rr-border);
+  border-radius: var(--rr-radius-lg) var(--rr-radius-lg) 0 0;
+  background: var(--rr-surface-sunken);
+  font-size: var(--rr-text-sm);
+  color: var(--rr-text-muted);
+}
+.rr-tl-head b,
+.rr-ev-row b {
+  color: var(--rr-text);
+}
+.rr-tl-body {
+  padding: 10px 14px;
+}
+.rr-tl-meta {
+  margin: 8px 0 0;
+  font-size: var(--rr-text-xs);
+  color: var(--rr-text-muted);
+}
+.rr-jump {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.rr-jump .rr-icon {
+  width: 14px;
+  height: 14px;
+}
+.rr-ev-icon {
+  position: absolute;
+  left: 6px;
+  top: 0;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--rr-border-strong);
+  border-radius: 50%;
+  background: var(--rr-surface-sunken);
+  color: var(--rr-text-muted);
+  box-shadow: 0 0 0 4px var(--rr-bg);
+}
+.rr-ev-icon .rr-icon {
+  width: 14px;
+  height: 14px;
+}
+.rr-ev-added {
+  border-color: currentColor;
+  background: var(--rr-added-bg);
+  color: var(--rr-added-fg);
+}
+.rr-ev-del {
+  border-color: currentColor;
+  background: var(--rr-deleted-bg);
+  color: var(--rr-deleted-fg);
+}
+.rr-ev-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  min-height: 28px;
+  font-size: var(--rr-text-sm);
+  color: var(--rr-text-muted);
+}
+.rr-ev-row time {
+  font-size: var(--rr-text-xs);
+}
+.rr-ev-body {
+  margin-top: 6px;
+  padding: 8px 12px;
+  border: 1px solid var(--rr-border);
+  border-radius: var(--rr-radius-lg);
+  background: var(--rr-surface);
+}
+.rr-ev-body .rr-tl-meta:first-child {
+  margin-top: 0;
+}
+
+/* Rail on Overview: documents with comments. */
+.rr-docsum {
+  margin: 0;
+  padding: 8px;
+  list-style: none;
+}
+.rr-docsum .rr-file {
+  align-items: flex-start;
+}
+.rr-docsum-path {
+  display: block;
+}
+.rr-docsum-note {
+  margin: 4px 16px 16px;
+  font-size: var(--rr-text-xs);
+  color: var(--rr-text-muted);
+}
+.rr-conv-note {
+  margin: 8px 0 0;
+  font-size: var(--rr-text-xs);
+  color: var(--rr-text-muted);
+}
+
+/* A Jump link's target lines flash once. */
+[data-rr-flash] {
+  animation: rr-flash 1.2s ease-out;
+}
+@keyframes rr-flash {
+  from {
+    background: var(--rr-accent-subtle);
+  }
 }

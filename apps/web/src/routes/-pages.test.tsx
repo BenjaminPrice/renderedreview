@@ -175,7 +175,7 @@ describe("pull request page states", () => {
     expect(screen.getByText(`GitHub rate limit reached — showing cached data; retry after ${time}.`)).toBeTruthy();
   });
 
-  it("says when no Markdown changed, linking to the changes on GitHub", async () => {
+  it("opens the Overview when no Markdown changed, linking to the changes on GitHub", async () => {
     const files = JSON.parse(fixture("files.json")) as { filename: string }[];
     const responses: Record<string, string> = {
       [`${API}/pulls/45377`]: fixture("pull.json"),
@@ -183,8 +183,10 @@ describe("pull request page states", () => {
     };
     stubGitHub((url) => (responses[url] === undefined ? undefined : json(responses[url])));
     renderApp("/github.com/mdn/content/pull/45377");
-    expect(await screen.findByRole("heading", { name: "No Markdown changed in this pull request" })).toBeTruthy();
-    const link = screen.getByRole("link", { name: "review the changes on GitHub (opens in new tab)" });
+    expect(await screen.findByRole("region", { name: "Pull request overview" })).toBeTruthy();
+    const sidebar = screen.getByRole("navigation", { name: "Documents" });
+    expect(within(sidebar).getByText("No Markdown changed in this pull request.")).toBeTruthy();
+    const link = within(sidebar).getByRole("link", { name: "view on GitHub (opens in new tab)" });
     expectNewTab(link);
     expect(link.getAttribute("href")).toBe("https://github.com/mdn/content/pull/45377/files");
   });
@@ -257,7 +259,7 @@ describe("top-bar account", () => {
     };
     stubGitHub((url) => (responses[url] === undefined ? undefined : json(responses[url])));
     renderApp("/github.com/mdn/content/pull/45377");
-    expect(await screen.findByRole("heading", { name: "No Markdown changed in this pull request" })).toBeTruthy();
+    expect(await screen.findByRole("region", { name: "Pull request overview" })).toBeTruthy();
     expect(await within(screen.getByRole("banner")).findByText("octocat")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Sign out" })).toBeTruthy();
   });

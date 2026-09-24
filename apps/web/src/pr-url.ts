@@ -11,6 +11,8 @@ export interface PrParams {
 
 export interface PrSearch {
   files: "changed" | "all";
+  /** `overview`: the pull request's description and conversation instead of a document. */
+  view?: "overview";
   /** Selected document path. */
   doc?: string;
   /** Selected comment or thread locator: a numeric comment ID or a node ID. Numbers stay numbers so the URL reads `thread=123`. */
@@ -45,11 +47,17 @@ export function parsePrParams(raw: {
 
 /** Search input is all optional (`SearchSchemaInput` tells the router), so links may omit it. */
 export function validatePrSearch(
-  search: { files?: PrSearch["files"]; doc?: string; thread?: string | number } & SearchSchemaInput,
+  search: {
+    files?: PrSearch["files"];
+    view?: PrSearch["view"];
+    doc?: string;
+    thread?: string | number;
+  } & SearchSchemaInput,
 ): PrSearch {
   const { thread } = search;
   return {
     files: search.files === "all" ? "all" : "changed",
+    ...(search.view === "overview" && { view: "overview" as const }),
     ...(typeof search.doc === "string" && search.doc && { doc: search.doc }),
     ...(((typeof thread === "string" && thread) || (typeof thread === "number" && Number.isSafeInteger(thread))) && {
       thread,

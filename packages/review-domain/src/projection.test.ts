@@ -9,7 +9,9 @@ import {
   isIntegrationNotice,
   placeThreads,
   projectReview,
+  reviewers,
   reviewSummaries,
+  timeline,
   unresolvedByPath,
   type RepositoryRef,
 } from "./projection.js";
@@ -225,7 +227,7 @@ describe("inferLocations", () => {
 });
 
 describe("reviews and counts", () => {
-  const review = (state: Review["state"], body: string): Review => ({
+  const review = (state: Review["state"], body: string, o: Partial<Review> = {}): Review => ({
     id: ++seq,
     nodeId: "R",
     state,
@@ -233,6 +235,7 @@ describe("reviews and counts", () => {
     commitOid: HEAD,
     submittedAt: state === "PENDING" ? null : "2026-01-01T00:00:00Z",
     author: user("alice"),
+    ...o,
     authorAssociation: "MEMBER",
     htmlUrl: "",
   });
@@ -263,5 +266,53 @@ describe("reviews and counts", () => {
     expect(p.summaries).toHaveLength(1);
     expect(p.conversation.map((e) => e.comment.body)).toEqual(["hello"]);
     expect(p.unresolvedByPath).toEqual({ "doc.md": 1 });
+    expect(p.timeline.map((i) => i.kind)).toEqual(["comment", "review"]);
+  });
+
+  it("builds a time-ordered timeline of comments and review events, with each review's threads", () => {
+    const at = (m: number) => `2026-01-01T00:0${m}:00Z`;
+    const approved = review("APPROVED", "", { submittedAt: at(3) });
+    const changes = review("CHANGES_REQUESTED", "Fix the cap", { submittedAt: at(1) });
+    const lineOnly = review("COMMENTED", "", { submittedAt: at(2) });
+    const summary = review("COMMENTED", "See threads", { submittedAt: at(4) });
+    const pending = review("PENDING", "draft");
+    const hello = { ...ic("hello"), createdAt: at(0) };
+    const later = { ...ic("later"), createdAt: at(5) };
+    const threads = groupThreads([rc({ reviewId: changes.id }), rc({ reviewId: lineOnly.id })]);
+    const items = timeline(
+      conversation([later, hello], repo),
+      [approved, changes, lineOnly, summary, pending],
+      threads,
+    );
+    expect(items.map((i) => (i.kind === "comment" ? i.entry.comment.body : i.review.state))).toEqual([
+      "hello",
+      "CHANGES_REQUESTED",
+      "APPROVED",
+      "COMMENTED",
+      "later",
+    ]);
+    const first = items[1]!;
+    expect(first.kind === "review" && first.threads.map((t) => t.comments[0]!.reviewId)).toEqual([changes.id]);
+  });
+
+  it("lists each reviewer's latest verdict, excluding the author", () => {
+    const at = (m: number) => `2026-01-01T00:0${m}:00Z`;
+    const states = reviewers(
+      [
+        review("CHANGES_REQUESTED", "", { author: user("bob"), submittedAt: at(1) }),
+        review("COMMENTED", "", { author: user("bob"), submittedAt: at(2) }),
+        review("APPROVED", "", { author: user("carol"), submittedAt: at(1) }),
+        review("DISMISSED", "", { author: user("carol"), submittedAt: at(2) }),
+        review("COMMENTED", "", { author: user("dave"), submittedAt: at(1) }),
+        review("COMMENTED", "", { author: user("alice"), submittedAt: at(1) }),
+        review("PENDING", "", { author: user("erin") }),
+      ],
+      "alice",
+    );
+    expect(states.map((r) => [r.author.login, r.state])).toEqual([
+      ["bob", "CHANGES_REQUESTED"],
+      ["carol", "COMMENTED"],
+      ["dave", "COMMENTED"],
+    ]);
   });
 });

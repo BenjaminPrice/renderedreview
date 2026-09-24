@@ -5,7 +5,7 @@
 // App-created comments (bodies carrying annotation metadata) are treated as ordinary native
 // comments here; annotation parsing hooks in on `NativeThread.comments` / `ConversationEntry`.
 import { ACTIONS_BOT, MARKER } from "@rendered-review/github-action";
-import type { IssueComment, Review, ReviewComment, ReviewThread } from "@rendered-review/github-integration";
+import type { Actor, IssueComment, Review, ReviewComment, ReviewThread } from "@rendered-review/github-integration";
 import { blocksForLines, type RenderedMarkdown, type SourceNode } from "@rendered-review/markdown-domain";
 
 /** `unknown` when no GraphQL thread data is available (e.g. anonymous public access). */
@@ -80,15 +80,29 @@ export interface ReviewProjection {
   conversation: ConversationEntry[];
   /** Threads not known to be resolved, per path. Unknown resolution counts as open. */
   unresolvedByPath: Record<string, number>;
+  /** The PR conversation and review events, oldest first. */
+  timeline: TimelineItem[];
+}
+
+export type TimelineItem =
+  | { kind: "comment"; at: string; entry: ConversationEntry }
+  /** `threads`: review threads started in this review. */
+  | { kind: "review"; at: string; review: Review; threads: NativeThread[] };
+
+export interface ReviewerState {
+  author: Actor;
+  state: "APPROVED" | "CHANGES_REQUESTED" | "COMMENTED";
 }
 
 export function projectReview(input: ProjectionInput): ReviewProjection {
   const threads = groupThreads(input.reviewComments, input.reviewThreads);
+  const entries = conversation(input.issueComments, input.repository, input.integrationBots);
   return {
     threads,
     summaries: reviewSummaries(input.reviews),
-    conversation: conversation(input.issueComments, input.repository, input.integrationBots),
+    conversation: entries,
     unresolvedByPath: unresolvedByPath(threads),
+    timeline: timeline(entries, input.reviews, threads),
   };
 }
 
@@ -228,4 +242,40 @@ export function unresolvedByPath(threads: NativeThread[]): Record<string, number
   const counts: Record<string, number> = {};
   for (const t of threads) if (t.resolution !== "resolved") counts[t.path] = (counts[t.path] ?? 0) + 1;
   return counts;
+}
+
+/**
+ * Conversation comments and review events, oldest first (comments first on ties). A review
+ * shows when it has a body or a verdict; a bodiless "commented" review only carries line
+ * comments, and those are read in their documents.
+ */
+export function timeline(entries: ConversationEntry[], reviews: Review[], threads: NativeThread[]): TimelineItem[] {
+  const items: TimelineItem[] = entries.map((entry) => ({ kind: "comment", at: entry.comment.createdAt, entry }));
+  for (const review of reviews) {
+    if (!review.submittedAt || (review.state === "COMMENTED" && !review.body.trim())) continue;
+    const own = threads.filter((t) => t.comments[0]!.reviewId === review.id);
+    items.push({ kind: "review", at: review.submittedAt, review, threads: own });
+  }
+  const rank = (i: TimelineItem) => (i.kind === "comment" ? 0 : 1);
+  return items.sort((a, b) => a.at.localeCompare(b.at) || rank(a) - rank(b));
+}
+
+/**
+ * Each reviewer's current verdict, like GitHub's reviewer list: the latest approval or change
+ * request stands until a later one (a dismissal reverts to commented). The PR author is left out.
+ */
+export function reviewers(reviews: Review[], authorLogin?: string): ReviewerState[] {
+  const byLogin = new Map<string, ReviewerState>();
+  const submitted = reviews.filter((r) => r.submittedAt && r.author && r.author.login !== authorLogin);
+  for (const r of submitted.sort((a, b) => a.submittedAt!.localeCompare(b.submittedAt!))) {
+    const prev = byLogin.get(r.author!.login)?.state;
+    const state =
+      r.state === "APPROVED" || r.state === "CHANGES_REQUESTED"
+        ? r.state
+        : r.state === "DISMISSED"
+          ? "COMMENTED"
+          : (prev ?? "COMMENTED");
+    byLogin.set(r.author!.login, { author: r.author!, state });
+  }
+  return [...byLogin.values()];
 }

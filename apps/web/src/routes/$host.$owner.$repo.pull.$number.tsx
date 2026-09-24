@@ -6,13 +6,22 @@ import {
   type PullRequest,
   RateLimitError,
 } from "@rendered-review/github-integration";
-import { placeThreads, projectReview, type ThreadPlacement } from "@rendered-review/review-domain";
+import { blocksForLines, type RenderedMarkdown } from "@rendered-review/markdown-domain";
+import { placeThreads, projectReview, reviewers, type ThreadPlacement } from "@rendered-review/review-domain";
 import { queryOptions, useQuery } from "@tanstack/react-query";
-import { createFileRoute, notFound, stripSearchParams } from "@tanstack/react-router";
+import { createFileRoute, Link, notFound, stripSearchParams, useLocation } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
 import { useEffect, useEffectEvent, useMemo, useState, useSyncExternalStore } from "react";
 import { MAX_RENDER_CHARS, nodeElement, RawDocument, RenderedDocument, useDocument } from "../document/document";
 import { allDocs, changedDocs, selectedPath, sourceUrl } from "../document/docs";
+import {
+  DocsWithComments,
+  docsWithComments,
+  DocumentCrumbs,
+  OverviewCrumbs,
+  PrOverview,
+  prState,
+} from "../document/Overview";
 import { Sidebar } from "../document/Sidebar";
 import { ExternalLink } from "../ui/ExternalLink";
 import { isPrivateRepoUnsupported, isSignInRequired, preferProxy, rateLimit } from "../github/client";
@@ -31,11 +40,9 @@ import {
 } from "../github/queries";
 import {
   CommentRail,
-  ConversationPanel,
   DEFAULT_FILTERS,
   filterCounts,
   RailHeader,
-  ReviewSummaries,
   threadDomId,
   threadState,
   type ThreadState,
@@ -107,7 +114,11 @@ function PullRequestPage() {
 function ReviewPage({ pr, id, files }: { pr: PullRequest; id: PrIdentity; files: ChangedFile[] }) {
   const search = Route.useSearch();
   const { docs: changed, otherCount } = useMemo(() => changedDocs(files), [files]);
-  const path = selectedPath(search.doc, changed);
+  const review = useReview(id);
+  // Overview: asked for, a `thread` link to a conversation comment, or nothing else to show.
+  const threadIsComment = review.data?.conversation.some((e) => String(e.comment.id) === String(search.thread));
+  const overview = search.view === "overview" || !!threadIsComment || (!search.doc && !changed.length);
+  const path = overview ? undefined : selectedPath(search.doc, changed);
   const changedEntry = changed.find((d) => d.path === path);
   const tree = useQuery({
     ...treeQuery(id, id.headSha),
@@ -122,7 +133,6 @@ function ReviewPage({ pr, id, files }: { pr: PullRequest; id: PrIdentity; files:
   // The rail draws markers and connectors in the positioned document column around it.
   const docColumn = useMemo(() => ({ current: article?.parentElement ?? null }), [article]);
 
-  const review = useReview(id);
   const repository = useMemo(() => ({ host: id.host, owner: id.owner, name: id.repo }), [id]);
   const placements = useMemo(() => {
     if (!review.data || !entry) return [];
@@ -152,8 +162,9 @@ function ReviewPage({ pr, id, files }: { pr: PullRequest; id: PrIdentity; files:
     if (!search.thread) document.querySelector(".rr-scroll")?.scrollTo(0, 0);
   });
   useEffect(() => scrollTop(), [path]);
+  useLineTarget(article, doc.rendered);
 
-  const dir = entry ? entry.path.slice(0, entry.path.lastIndexOf("/") + 1) : "";
+  const { state } = prState(pr);
   const link = entry && { ...id, sha: doc.sha, path: entry.path };
 
   return (
@@ -176,43 +187,55 @@ function ReviewPage({ pr, id, files }: { pr: PullRequest; id: PrIdentity; files:
           resolutionKnown={review.data?.threads.every((t) => t.resolution !== "unknown")}
           otherCount={otherCount}
           filesUrl={`${pr.htmlUrl}/files`}
+          pr={{
+            number: pr.number,
+            state,
+            selected: overview,
+            comments: review.data?.timeline.length,
+            reviewers: review.raw && reviewers(review.raw, pr.author?.login),
+          }}
         />
       }
       toolbar={
-        entry && (
+        overview ? (
           <>
-            <div className="rr-seg" role="group" aria-label="View">
-              <button type="button" aria-pressed={view === "rendered"} onClick={() => setView("rendered")}>
-                Rendered
-              </button>
-              <button type="button" aria-pressed={view === "raw"} onClick={() => setView("raw")}>
-                Raw
-              </button>
-            </div>
-            <span className="rr-seg">
-              <span className="rr-seg-static">
-                <span className="rr-sr-only">Revision: </span>
-                {entry.status === "deleted" ? "Base" : "Current"} · <code>{doc.sha.slice(0, 7)}</code>
-              </span>
-            </span>
-            <span className="rr-doc-path" title={entry.path}>
-              <span className="rr-sr-only">File: </span>
-              {dir}
-              <b>{entry.path.slice(dir.length)}</b>
-            </span>
-            {doc.changes.length > 0 && (
-              <span className="rr-legend" role="note" aria-label="Changed-section legend">
-                <span>
-                  <i className="rr-legend-added" />
-                  Added
-                </span>
-                <span>
-                  <i className="rr-legend-modified" />
-                  Modified
-                </span>
-              </span>
-            )}
+            <OverviewCrumbs id={id} state={state} />
+            <ExternalLink className="rr-btn rr-btn-sm rr-btn-ghost" href={pr.htmlUrl}>
+              Open in GitHub
+            </ExternalLink>
           </>
+        ) : (
+          entry && (
+            <>
+              <div className="rr-seg" role="group" aria-label="View">
+                <button type="button" aria-pressed={view === "rendered"} onClick={() => setView("rendered")}>
+                  Rendered
+                </button>
+                <button type="button" aria-pressed={view === "raw"} onClick={() => setView("raw")}>
+                  Raw
+                </button>
+              </div>
+              <span className="rr-seg">
+                <span className="rr-seg-static">
+                  <span className="rr-sr-only">Revision: </span>
+                  {entry.status === "deleted" ? "Base" : "Current"} · <code>{doc.sha.slice(0, 7)}</code>
+                </span>
+              </span>
+              <DocumentCrumbs id={id} path={entry.path} />
+              {doc.changes.length > 0 && (
+                <span className="rr-legend" role="note" aria-label="Changed-section legend">
+                  <span>
+                    <i className="rr-legend-added" />
+                    Added
+                  </span>
+                  <span>
+                    <i className="rr-legend-modified" />
+                    Modified
+                  </span>
+                </span>
+              )}
+            </>
+          )
         )
       }
       toolbarEnd={
@@ -223,48 +246,67 @@ function ReviewPage({ pr, id, files }: { pr: PullRequest; id: PrIdentity; files:
         )
       }
       commentCount={review.data && entry ? placements.length : undefined}
+      railTitle={
+        overview ? (
+          <>
+            Documents with comments
+            {review.data && <span className="rr-count">{docsWithComments(review.data.threads)}</span>}
+          </>
+        ) : undefined
+      }
       railHeader={
         review.data &&
         entry && (
-          <RailHeader
-            counts={filterCounts(placements.map((p) => p.thread))}
-            filters={filters}
-            onFiltersChange={setFilters}
-          />
+          <>
+            <RailHeader
+              counts={filterCounts(placements.map((p) => p.thread))}
+              filters={filters}
+              onFiltersChange={setFilters}
+            />
+            <p className="rr-conv-note">
+              PR conversation ({review.data.timeline.length}) is in{" "}
+              <Link
+                from={Route.fullPath}
+                search={(s) => ({ ...s, view: "overview" as const, doc: undefined, thread: undefined })}
+              >
+                Overview
+              </Link>
+              .
+            </p>
+          </>
         )
       }
       rail={
         review.error ? (
           <p className="rr-rail-empty">Could not load comments: {review.error.message}</p>
-        ) : !review.data ? (
+        ) : !review.data || (entry && doc.source === undefined && !doc.error) ? (
+          // Wait for the document too: cards placed before it renders would move (and lose focus) once it does.
           <p className="rr-rail-empty">Loading comments…</p>
+        ) : overview ? (
+          <DocsWithComments threads={review.data.threads} docs={changed} />
         ) : (
-          <>
-            {entry && (
-              <CommentRail
-                placements={placements}
-                repository={repository}
-                filters={filters}
-                docContainerRef={docColumn}
-                activeThreadId={active?.id ?? null}
-                onActiveThreadChange={setActive}
-              />
-            )}
-            {/* Pull-request-level content has no anchor in a document; it follows the document's threads. */}
-            <div className="rr-rail-group">
-              <ReviewSummaries reviews={review.data.summaries} />
-              <ConversationPanel entries={review.data.conversation} repository={repository} />
-            </div>
-          </>
+          entry && (
+            <CommentRail
+              placements={placements}
+              repository={repository}
+              filters={filters}
+              docContainerRef={docColumn}
+              activeThreadId={active?.id ?? null}
+              onActiveThreadChange={setActive}
+            />
+          )
         )
       }
     >
       <RateLimitBanner />
-      {!path ? (
-        <DocMessage title="No Markdown changed in this pull request">
-          Browse the repository&apos;s documents under All docs, or{" "}
-          <ExternalLink href={`${pr.htmlUrl}/files`}>review the changes on GitHub</ExternalLink>.
-        </DocMessage>
+      {overview || !path ? (
+        <PrOverview
+          pr={pr}
+          id={id}
+          timeline={review.data?.timeline}
+          timelineError={review.error}
+          focusCommentId={threadIsComment ? search.thread : undefined}
+        />
       ) : !entry ? (
         tree.isPending && !tree.error ? (
           <DocMessage title="Loading…" />
@@ -325,7 +367,32 @@ function useReview(id: PrIdentity) {
         : undefined,
     [id, comments.data, reviews.data, issueComments.data, threads.data, threadsSettled],
   );
-  return { data, error: comments.error ?? reviews.error ?? issueComments.error };
+  return { data, raw: reviews.data, error: comments.error ?? reviews.error ?? issueComments.error };
+}
+
+/**
+ * A `#L12` or `#L12-L20` hash (a Jump link from the conversation) scrolls to the first rendered
+ * block of those lines, focuses it and flashes it.
+ */
+function useLineTarget(article: HTMLElement | null, rendered: RenderedMarkdown | undefined) {
+  const hash = useLocation({ select: (l) => l.hash });
+  useEffect(() => {
+    const m = /^#?L(\d+)(?:-L(\d+))?$/.exec(hash);
+    if (!article || !rendered || !m) return;
+    const start = Number(m[1]);
+    const block = blocksForLines(rendered, start, Number(m[2] ?? start))[0];
+    const el = block && nodeElement(article, block.id);
+    if (!el) return;
+    if (!el.hasAttribute("tabindex")) el.tabIndex = -1;
+    el.scrollIntoView({ block: "center" });
+    el.focus({ preventScroll: true });
+    el.dataset.rrFlash = "";
+    const done = () => {
+      delete el.dataset.rrFlash;
+    };
+    el.addEventListener("animationend", done, { once: true });
+    return done;
+  }, [article, rendered, hash]);
 }
 
 /**
@@ -385,13 +452,7 @@ function useAnchors(
 }
 
 function PrTitle({ pr, id, docCount }: { pr: PullRequest; id: PrIdentity; docCount: number }) {
-  const [state, label] = pr.merged
-    ? ["merged", "Merged"]
-    : pr.state === "closed"
-      ? ["closed", "Closed"]
-      : pr.draft
-        ? ["draft", "Draft"]
-        : ["open", "Open"];
+  const { state, label } = prState(pr);
   const verb = pr.merged ? "merged into" : pr.state === "open" ? "wants to merge into" : "proposed merging into";
   return (
     <>

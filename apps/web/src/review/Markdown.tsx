@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Comment bodies as sanitized GitHub Flavored Markdown, rendered to React elements (never HTML strings).
-import { renderMarkdown } from "@rendered-review/markdown-domain";
+import { renderMarkdown, type ResourceOptions } from "@rendered-review/markdown-domain";
 import type { Element, Nodes } from "hast";
 import { toString } from "hast-util-to-string";
 import { toJsxRuntime } from "hast-util-to-jsx-runtime";
@@ -30,11 +30,22 @@ const isSuggestion = (pre?: Element) => {
   return code?.type === "element" && String(code.properties.className ?? "").includes("language-suggestion");
 };
 
-export function Markdown({ source, suggestion }: { source: string; suggestion?: Suggestion }) {
+export function Markdown({
+  source,
+  suggestion,
+  options,
+  className = "rr-md",
+}: {
+  source: string;
+  suggestion?: Suggestion;
+  /** Where relative links and images resolve (memoize it); without it they are dropped. */
+  options?: ResourceOptions;
+  className?: string;
+}) {
   const original = suggestion?.original?.join("\n");
   const href = suggestion?.href;
   const content = useMemo(() => {
-    const { tree } = renderMarkdown(source);
+    const { tree } = renderMarkdown(source, options);
     strip(tree);
     return toJsxRuntime(tree, {
       Fragment,
@@ -55,8 +66,8 @@ export function Markdown({ source, suggestion }: { source: string; suggestion?: 
         table: ({ children }) => <CommentTable>{children}</CommentTable>,
       },
     });
-  }, [source, original, href]);
-  return <div className="rr-md">{content}</div>;
+  }, [source, original, href, options]);
+  return <div className={className}>{content}</div>;
 }
 
 function ProposedChange({ original, proposed, href }: { original: string[] | null; proposed: string; href: string }) {
