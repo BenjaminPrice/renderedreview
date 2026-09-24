@@ -61,9 +61,9 @@ describe("placement state and original revision", () => {
   });
 
   it("names the revision a thread was written on when it is not shown as it was", () => {
-    expect(originalRevision({ thread: thread("unknown", { ...line("outdated", 1, 1), commitOid: OLD }), blocks: [] })).toBe(
-      OLD,
-    );
+    expect(
+      originalRevision({ thread: thread("unknown", { ...line("outdated", 1, 1), commitOid: OLD }), blocks: [] }),
+    ).toBe(OLD);
     // The fixture annotation was written on HEAD.
     for (const state of ["outdated", "historical-only", "ambiguous", "moved"] as const)
       expect(originalRevision(reanchored(state))).toBe(HEAD);

@@ -42,6 +42,25 @@ describe("location labels", () => {
     expect(original.getAttribute("href")).toBe(`https://github.com/acme/docs/blob/${OLD}/docs/guide.md#L3-L5`);
   });
 
+  it("opens the original revision in the app when given one, keeping GitHub as a secondary link", async () => {
+    const onClick = vi.fn((e: { preventDefault: () => void }) => e.preventDefault());
+    const href = `/github.com/acme/docs/pull/7?doc=docs%2Fguide.md&rev=${OLD}&thread=1`;
+    render(
+      <ThreadCard
+        thread={thread("t1", lineAnchor(3, 5, "outdated", OLD))}
+        repository={repository}
+        original={{ href, onClick }}
+      />,
+    );
+    const original = screen.getByRole("link", { name: "View in original" });
+    expect(original.getAttribute("href")).toBe(href);
+    expect(original.getAttribute("target")).toBeNull();
+    await userEvent.click(original);
+    expect(onClick).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("link", { name: /View in original \(opens in new tab\)/ })).toBeNull();
+    expectNewTab(screen.getByRole("link", { name: "View on GitHub (opens in new tab)" }));
+  });
+
   it("links every thread to GitHub", () => {
     const root = comment();
     card(thread("t1", lineAnchor(3), "unknown", [root]));
@@ -332,6 +351,16 @@ describe("application threads", () => {
     const el = render(<ThreadCard thread={appThread()} repository={repository} unplaced reason={REANCHOR} />).container;
     expect(el.querySelector("blockquote")?.textContent?.trim()).toBe("retries failed requests");
     expect(screen.getByText(`Selected text · L3 · ${REANCHOR}`)).toBeTruthy();
+  });
+
+  it("marks a thread whose words are only in an earlier revision as historical", () => {
+    const reason = "The quoted text is only in an earlier revision";
+    const el = render(<ThreadCard thread={appThread()} repository={repository} reason={reason} historical />).container
+      .firstElementChild as HTMLElement;
+    const card = screen.getByRole("region", { name: "Selected text · L3, by alice, historical" });
+    expect(card).toBe(el);
+    expect(el.dataset.state).toBe("historical");
+    expect(within(card).getByText("Historical")).toBeTruthy();
   });
 
   it("marks a thread re-anchored to moved text at its new lines, keeping the original quote visible", () => {
