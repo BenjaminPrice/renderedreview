@@ -144,6 +144,8 @@ it("keeps unsent text when the Overview is left and opened again", async () => {
 it("offers sign-in instead of a box to signed-out readers", async () => {
   mount({ signInEnabled: true, signedIn: false });
   expect(screen.queryByRole("textbox")).toBeNull();
+  // No placeholder "?" avatar for a guest.
+  expect(document.querySelector(".rr-avatar")).toBeNull();
   await userEvent.click(screen.getByRole("button", { name: "Sign in to comment" }));
   expect(signIn).toHaveBeenCalled();
 });

@@ -70,3 +70,19 @@ it("keeps an unsent conversation comment across reloads on public repositories o
   await new Promise((r) => setTimeout(r, 20));
   expect(reloadedSecret.result.current[0]).toBe("");
 });
+
+it("never carries an unsent conversation comment over to another pull request", async () => {
+  const cache = openBrowserCache();
+  const b = renderHook(() => useUnsentComment({ ...scope, number: 8, private: false }, cache));
+  act(() => b.result.current[1]("For B"));
+  const view = renderHook((number: number) => useUnsentComment({ ...scope, number, private: false }, cache), {
+    initialProps: 7,
+  });
+  await new Promise((r) => setTimeout(r, 20));
+  act(() => view.result.current[1]("For A"));
+  view.rerender(8);
+  expect(view.result.current[0]).not.toBe("For A");
+  await waitFor(() => expect(view.result.current[0]).toBe("For B"));
+  view.rerender(9);
+  expect(view.result.current[0]).toBe("");
+});
