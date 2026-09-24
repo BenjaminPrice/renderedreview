@@ -101,6 +101,9 @@ interface Index {
   segments: Segment[];
   /** Rendered text extent [from, to) of each stamped element. */
   extent: [number, number][];
+  /** Per segment, the furthest source end up to it and the nearest source start from it on; see `sourceToRendered`. */
+  reach?: number[];
+  floor?: number[];
 }
 
 const indexes = new WeakMap<RenderedMarkdown, Index>();
@@ -133,6 +136,18 @@ function indexOf(doc: RenderedMarkdown): Index {
   index = { segments, extent };
   indexes.set(doc, index);
   return index;
+}
+
+/** The first of `0..n` for which the monotone `test` holds, or `n`. */
+function firstIndex(n: number, test: (i: number) => boolean): number {
+  let lo = 0;
+  let hi = n;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (test(mid)) hi = mid;
+    else lo = mid + 1;
+  }
+  return lo;
 }
 
 /** Index of the last segment starting at or before `offset`. */
@@ -421,6 +436,9 @@ function context(ix: Index, k: number, g: number, dir: -1 | 1): string {
   return dir < 0 ? text.slice(-CONTEXT) : text.slice(0, CONTEXT);
 }
 
+/** @internal For tests that check `sourceToRendered` against a full scan; not part of the package API. */
+export const internals = { indexOf, kindOf, spansOf };
+
 /** A highlighted run of rendered text, `[start, end)`. */
 export interface RenderedRun {
   start: RenderedPoint;
@@ -438,16 +456,34 @@ export function sourceToRendered(
   range: { start: number; end: number },
 ): RenderedRun[] {
   const ix = indexOf(doc);
+  const segs = ix.segments;
   const runs: RenderedRun[] = [];
   let run: RenderedRun | null = null;
   const point = (owner: number, g: number) => ({ id: owner, offset: g - ix.extent[owner]![0] });
-  for (const seg of ix.segments) {
+  // The source a segment's characters can claim; null for segments that never claim any.
+  const bound = (seg: Segment) => {
     const kind = kindOf(doc, ix, seg);
-    if (kind === "gap") continue;
-    // ponytail: scans every segment per call; index segments by source offset if many claims get slow.
-    const bound =
-      seg.position?.start.offset !== undefined ? seg.position : seg.owner !== null && doc.nodes[seg.owner]!.range;
-    if (kind === "chrome" || !bound || bound.end.offset! <= range.start || bound.start.offset! >= range.end) {
+    if (kind !== "text") return null;
+    return seg.position?.start.offset !== undefined ? seg.position : seg.owner !== null && doc.nodes[seg.owner]!.range;
+  };
+  if (!ix.reach || !ix.floor) {
+    const bounds = segs.map(bound);
+    const reach = (ix.reach = bounds.map((b) => (b ? b.end.offset! : -Infinity)));
+    const floor = (ix.floor = bounds.map((b) => (b ? b.start.offset! : Infinity)));
+    for (let k = 1; k < segs.length; k++) reach[k] = Math.max(reach[k]!, reach[k - 1]!);
+    for (let k = segs.length - 2; k >= 0; k--) floor[k] = Math.min(floor[k]!, floor[k + 1]!);
+  }
+  // Segments before the first that reaches past `range.start`, or from the first that starts at or
+  // after `range.end`, claim nothing, so only the segments between are examined: the neighbourhood
+  // of the range, as rendered order follows source order (footnotes, rendered last, widen it).
+  const [reach, floor] = [ix.reach, ix.floor];
+  let k = firstIndex(segs.length, (i) => reach[i]! > range.start);
+  const end = firstIndex(segs.length, (i) => floor[i]! >= range.end);
+  for (; k < end; k++) {
+    const seg = segs[k]!;
+    if (kindOf(doc, ix, seg) === "gap") continue;
+    const b = bound(seg);
+    if (!b || b.end.offset! <= range.start || b.start.offset! >= range.end) {
       run = null;
       continue;
     }

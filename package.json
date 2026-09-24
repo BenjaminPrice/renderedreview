@@ -7,7 +7,7 @@
     "dev": "pnpm --filter @rendered-review/web dev",
     "build": "pnpm -r --if-present build",
     "test": "vitest run",
-    "bench": "vitest bench --run",
+    "bench": "vitest bench --run --reporter=verbose",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit && pnpm -r typecheck",
     "format": "prettier --write .",

@@ -1,10 +1,19 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import type { Element, Root } from "hast";
 import { toString } from "hast-util-to-string";
+import { visit } from "unist-util-visit";
 import { describe, expect, test } from "vitest";
-import { renderMarkdown, type RenderOptions } from "./render.js";
+import adr from "./fixtures/adr-0007-use-postgres.md?raw";
+import alerts from "./fixtures/alerts.md?raw";
+import frontmatterDocs from "./fixtures/frontmatter-docs.md?raw";
+import frontmatterNested from "./fixtures/frontmatter-nested.md?raw";
+import mdxDocusaurus from "./fixtures/mdx-docusaurus.mdx?raw";
+import rfd from "./fixtures/rfd-0042-rendered-review.md?raw";
+import { renderMarkdown, type RenderedMarkdown, type RenderOptions } from "./render.js";
 import {
   documentText,
+  internals,
+  type RenderedRun,
   type RenderedPoint,
   renderedText,
   selectionToSource,
@@ -282,6 +291,91 @@ describe("source ranges map back to rendered runs", () => {
   });
 });
 
+describe("sourceToRendered examines only the segments a range can touch", () => {
+  /** The straightforward full scan: every segment, in document order. */
+  function reference(doc: RenderedMarkdown, source: string, range: { start: number; end: number }): RenderedRun[] {
+    const { indexOf, kindOf, spansOf } = internals;
+    const ix = indexOf(doc);
+    const runs: RenderedRun[] = [];
+    let run: RenderedRun | null = null;
+    const point = (owner: number, g: number) => ({ id: owner, offset: g - ix.extent[owner]![0] });
+    for (const seg of ix.segments) {
+      const kind = kindOf(doc, ix, seg);
+      if (kind === "gap") continue;
+      const bound =
+        seg.position?.start.offset !== undefined ? seg.position : seg.owner !== null && doc.nodes[seg.owner]!.range;
+      if (kind === "chrome" || !bound || bound.end.offset! <= range.start || bound.start.offset! >= range.end) {
+        run = null;
+        continue;
+      }
+      const spans = spansOf(doc, ix, source, seg);
+      for (let i = 0; i < seg.text.length; i++) {
+        const [s, e] = [spans[i * 2]!, spans[i * 2 + 1]!];
+        if (s < e && s >= range.start && e <= range.end) {
+          if (!run) runs.push((run = { start: point(seg.owner!, seg.at + i), end: point(seg.owner!, seg.at + i) }));
+          run.end = point(seg.owner!, seg.at + i + 1);
+        } else run = null;
+      }
+    }
+    return runs;
+  }
+
+  const crlf = (s: string) => s.replace(/\r?\n/g, "\r\n");
+  const fixtures: [string, string, RenderOptions?][] = [
+    ["RFD (tables, footnotes, code)", rfd],
+    ["RFD with CRLF line endings", crlf(rfd)],
+    ["ADR", adr],
+    ["alerts", alerts],
+    ["front matter", frontmatterDocs],
+    ["nested front matter", frontmatterNested],
+    ["MDX", mdxDocusaurus, { format: "mdx" }],
+    [
+      "footnotes and a task list",
+      "Text[^n] and more[^m].\n\n- [ ] Do ~~it~~ now\n\n[^n]: The note.\n\n[^m]: Another *note*.\n",
+    ],
+  ];
+
+  test.each(fixtures)("gives the full scan's runs for every kind of range: %s", (_name, source, options = {}) => {
+    const doc = renderMarkdown(source, options);
+    // Seeded, so a failure reproduces.
+    let seed = 42;
+    const random = (n: number) => {
+      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+      return seed % n;
+    };
+    const n = source.length;
+    const ranges: [number, number][] = [
+      [0, n],
+      [0, 0],
+      [n, n],
+    ];
+    for (let i = 0; i < 300; i++) {
+      const a = random(n + 1);
+      ranges.push([a, Math.min(n, a + random(i % 3 ? 40 : n))]);
+    }
+    for (let i = 0; i < 50; i++) ranges.push([random(n + 1), random(n + 1)].sort((x, y) => x - y) as [number, number]);
+    for (let i = 0; i < 50; i++) {
+      const a = random(n + 1);
+      ranges.push([a, a]);
+    }
+    // Around and across generated or out-of-order content: footnotes, alert markers, front matter, JSX.
+    for (const marker of /\[\^|\[!|^---|<[A-Z]/gm[Symbol.matchAll](source)) {
+      const at = marker.index;
+      for (const [a, b] of [
+        [at - 20, at + 20],
+        [at, n],
+        [0, at + 5],
+        [at - 200, at + 200],
+      ])
+        ranges.push([Math.max(0, a!), Math.min(n, b!)]);
+    }
+    for (const [start, end] of ranges)
+      expect(sourceToRendered(doc, source, { start, end }), `${start}..${end}`).toEqual(
+        reference(doc, source, { start, end }),
+      );
+  });
+});
+
 describe("documentText finds rendered text and claims it like a selection", () => {
   const find = (source: string, needle: string, nth = 0, options: RenderOptions = {}) => {
     const t = documentText(renderMarkdown(source, options), source);
@@ -315,6 +409,28 @@ describe("documentText finds rendered text and claims it like a selection", () =
     expect(text).not.toContain("\r");
     expect(src.slice(ok(result).textPosition.start, ok(result).textPosition.end)).toBe("one\r\nline");
     expect(ok(result).exact).toBe("one\nline");
+  });
+
+  test("a claim reads the same amount of the document however long the document is", () => {
+    // Work is counted as reads of text node positions, which every segment examined makes.
+    const work = (paragraphs: number) => {
+      const src = Array.from({ length: paragraphs }, (_, i) => `Paragraph ${i} is here.\n\n`).join("");
+      const doc = renderMarkdown(src);
+      let reads = 0;
+      visit(doc.tree, "text", (node) => {
+        if (node.position)
+          node.position = new Proxy(node.position, {
+            get: (target, key) => (key === "start" && reads++, Reflect.get(target, key)),
+          });
+      });
+      const t = documentText(doc, src);
+      ok(t.select(0, 1)); // the per-document index is built once, up front
+      reads = 0;
+      const at = t.text.indexOf(`Paragraph ${paragraphs / 2} is`);
+      ok(t.select(at, at + 12));
+      return reads;
+    };
+    expect(work(1000)).toBe(work(10));
   });
 
   test("decomposed Unicode is searched in NFC", () => {
