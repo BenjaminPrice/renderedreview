@@ -63,6 +63,10 @@ export type SelectionResult =
 const CONTEXT = 32;
 const TABLE = new Set(["table", "thead", "tbody", "tfoot", "tr"]);
 const CELLS = new Set(["tableCell", "yamlKey", "yamlValue"]);
+// Phrasing elements in raw HTML are inline, wherever they are nested.
+const PHRASING = new Set(
+  "a abbr b bdi bdo br cite code data del dfn em i img ins kbd mark q s samp small span strong sub sup time u var".split(" "),
+);
 const REF = /&(?:#(\d{1,7})|#[xX]([0-9a-fA-F]{1,6})|[A-Za-z][A-Za-z0-9]{1,31});/y;
 const PUNCT = /[!-/:-@[-`{-~]/;
 
@@ -235,9 +239,12 @@ function common(doc: RenderedMarkdown, a: number, b: number): number | null {
   return ancestors(doc, b).find((id) => chain.has(id)) ?? null;
 }
 
+const blockish = (doc: RenderedMarkdown, n: SourceNode) =>
+  isBlock(doc, n) && !(n.type === "html" && n.parentId !== null && PHRASING.has(n.tagName));
+
 function blockOf(doc: RenderedMarkdown, id: number): SourceNode {
   let n = doc.nodes[id]!;
-  while (!isBlock(doc, n) && n.parentId !== null) n = doc.nodes[n.parentId]!;
+  while (!blockish(doc, n) && n.parentId !== null) n = doc.nodes[n.parentId]!;
   return n;
 }
 
@@ -288,7 +295,7 @@ export function selectionToSource(
     from = advance(source, first.base!, Math.min(s, e));
     to = advance(source, from, Math.max(s, e));
     let n = doc.nodes[common(doc, first.owner!, last.owner!)!]!;
-    while (!isBlock(doc, n) && !CELLS.has(n.type) && n.parentId !== null) n = doc.nodes[n.parentId]!;
+    while (!blockish(doc, n) && !CELLS.has(n.type) && n.parentId !== null) n = doc.nodes[n.parentId]!;
     nodeType = n.type;
     blockIds = [sb.id];
   } else {

@@ -106,3 +106,77 @@ describe("inline selections map to the tightest source span", () => {
     expect(ok(select(md, "three")).sourceRange).toEqual({ startLine: 2, startColumn: 6, endLine: 2, endColumn: 11 });
   });
 });
+
+describe("blocks map inside their own source", () => {
+  test("code and diagram fences map to lines inside the fence", () => {
+    const md = "Intro\n\n```ts\nconst a = 1;\nlet b;\n```\n\n```mermaid\ngraph TD\n  A-->B\n```\n";
+    const s = ok(select(md, "let b"));
+    expect(s).toMatchObject({ nodeType: "code", sourceRange: { startLine: 5, startColumn: 1, endLine: 5, endColumn: 6 } });
+    expect(claimed(md, select(md, "A-->B"))).toBe("A-->B");
+    // "t" also appears in the info string; the content starts after the opening fence.
+    expect(ok(select("```ts\nt\n```\n", "t")).sourceRange.startLine).toBe(2);
+  });
+
+  test("an indented fence in a CRLF list", () => {
+    const md = "- x\r\n\r\n  ```\r\n  k\r\n   l\r\n  ```\r\n";
+    expect(ok(select(md, "l")).sourceRange).toEqual({ startLine: 5, startColumn: 4, endLine: 5, endColumn: 5 });
+  });
+
+  test("table cells map to cell source; cells of one row stay precise", () => {
+    const md = "| a | b |\n|---|---|\n| cell one | two |\n";
+    const s = ok(select(md, "one"));
+    expect(s.nodeType).toBe("tableCell");
+    expect(claimed(md, select(md, "one"))).toBe("one");
+    const row = select(md, "one", "two");
+    expect(claimed(md, row)).toBe("one | two");
+    expect(ok(row)).toMatchObject({ nodeType: "tableRow", expanded: false });
+  });
+
+  test("task list items, without the checkbox", () => {
+    const md = "- [ ] write tests\n- [x] ship\n";
+    expect(claimed(md, select(md, "write"))).toBe("write");
+    expect(ok(select(md, "write")).nodeType).toBe("listItem");
+  });
+
+  test("footnotes: definitions map to their source, references to their label", () => {
+    const md = "Text[^n] here.\n\n[^n]: The note.\n";
+    const s = ok(select(md, "The note."));
+    expect(claimed(md, select(md, "The note."))).toBe("The note.");
+    expect(s.sourceRange.startLine).toBe(3);
+    // The rendered number is not in the source: the whole reference is claimed.
+    expect(claimed(md, select(md, "1"))).toBe("[^n]");
+  });
+
+  test("front matter values and keys", () => {
+    const md = '---\ntitle: "Hello world"\ntags: [a, b]\n---\n\nBody\n';
+    expect(claimed(md, select(md, "world"))).toBe("world");
+    expect(ok(select(md, "world"))).toMatchObject({ nodeType: "yamlValue", sourceRange: { startLine: 2 } });
+    expect(claimed(md, select(md, "tags"))).toBe("tags");
+  });
+
+  test("alerts: body text maps, the generated title does not", () => {
+    const md = "> [!NOTE]\n> Useful info here.\n";
+    expect(ok(select(md, "info")).sourceRange).toMatchObject({ startLine: 2, startColumn: 10 });
+    // Starting in the title moves the start to the first document character.
+    const s = ok(select(md, "Note", "Useful"));
+    expect(s.exact).toBe("Useful");
+    expect(claimed(md, select(md, "Note", "Useful"))).toBe("Useful");
+    expect(select(md, "Note")).toMatchObject({ ok: false, reason: "generated" });
+  });
+
+  test("inert MDX maps to its exact source; labels are left out of the quote", () => {
+    const md = '<Note title="x">\n\nHello *there*\n\n</Note>\n\nText {1+1} after\n';
+    const mdx = { format: "mdx" } as const;
+    expect(claimed(md, select(md, "1+1", "1+1", mdx))).toBe("1+1");
+    const s = ok(select(md, "Text", "after", mdx));
+    expect(s.exact).toBe("Text {1+1} after");
+    expect(claimed(md, select(md, "Text", "after", mdx))).toBe("Text {1+1} after");
+    expect(claimed(md, select(md, "there", "there", mdx))).toBe("there");
+    expect(claimed(md, select(md, "title", "title", mdx))).toBe("title");
+  });
+
+  test("raw HTML text", () => {
+    const md = "<div>raw &amp; <b>bold</b></div>\n";
+    expect(claimed(md, select(md, "& bold"))).toBe("&amp; <b>bold");
+  });
+});
