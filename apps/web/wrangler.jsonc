@@ -16,7 +16,9 @@
 // Hosted environments serve public pull requests only (HOSTING_MODE=community, ACCESS_POLICY=disabled).
 // Production also offers GitHub sign-in, which in this mode needs the GitHub App, encryption and
 // session secrets listed in its `secrets.required` (setup: docs/deploy-cloudflare.md, "Enable GitHub
-// sign-in"). Preview has no sign-in and no secrets. Switching to HOSTING_MODE=hosted (private
+// sign-in"). Preview has no sign-in and no secrets. The optional OAuth App for commenting on public
+// repositories (GITHUB_OAUTH_CLIENT_ID, GITHUB_OAUTH_CLIENT_SECRET) joins `secrets.required` once its
+// secrets are set (docs/deploy-cloudflare.md, "Enable commenting on public repositories"). Switching to HOSTING_MODE=hosted (private
 // repositories) additionally needs GITHUB_OAUTH_CLIENT_ID, GITHUB_OAUTH_CLIENT_SECRET, BILLING_API_KEY
 // and BILLING_WEBHOOK_SECRET (plus the BILLING_PROVIDER var); add them to `secrets.required` then.
 {

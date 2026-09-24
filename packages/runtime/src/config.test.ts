@@ -67,6 +67,15 @@ describe("loadConfig", () => {
     expect(config.billing).toBeUndefined();
   });
 
+  it("accepts optional OAuth App credentials in community mode, and redacts the secret", () => {
+    const base = { HOSTING_MODE: "community", ACCESS_POLICY: "disabled", DATABASE_URL: "sqlite::memory:" };
+    const app = { ...github, GITHUB_OAUTH_CLIENT_ID: undefined, GITHUB_OAUTH_CLIENT_SECRET: undefined };
+    expect(loadConfig({ ...base, ...app }).github.oauth).toBeUndefined();
+    const config = loadConfig({ ...base, ...github });
+    expect(config.github.oauth).toEqual({ clientId: "oauth-client", clientSecret: "oauth-client-secret-value" });
+    expect(redactConfig(config)).not.toContain("oauth-client-secret-value");
+  });
+
   it("accepts an optional public read token in every hosting mode", () => {
     const token = { GITHUB_PUBLIC_READ_TOKEN: " github_pat_x " };
     expect(loadConfig({ HOSTING_MODE: "community", ACCESS_POLICY: "disabled", ...token }).github.publicReadToken).toBe(
