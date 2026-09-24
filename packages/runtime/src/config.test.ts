@@ -156,9 +156,8 @@ describe("loadConfig", () => {
   });
 
   it("takes the GitHub App private key from a file the runtime read", () => {
-    const { GITHUB_APP_PRIVATE_KEY: _, ...withoutKey } = hosted;
     const pem = "-----BEGIN RSA PRIVATE KEY-----\nfile-key-value\n-----END RSA PRIVATE KEY-----\n";
-    const env = { ...withoutKey, GITHUB_APP_PRIVATE_KEY_FILE: "github-app.pem" };
+    const env = { ...hosted, GITHUB_APP_PRIVATE_KEY: undefined, GITHUB_APP_PRIVATE_KEY_FILE: "github-app.pem" };
     const config = loadConfig(env, { githubAppPrivateKeyFile: pem });
     expect(config.github.app?.privateKey).toBe(pem.trim());
     expect(redactConfig(config)).not.toContain("file-key-value");
