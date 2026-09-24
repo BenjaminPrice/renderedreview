@@ -1,0 +1,50 @@
+[
+  {
+    "id": 5710360190,
+    "node_id": "IC_kwDOEaEoos8AAAABVF0ufg",
+    "user": {
+      "login": "github-actions[bot]",
+      "id": 41898282,
+      "node_id": "MDM6Qm90NDE4OTgyODI=",
+      "type": "Bot",
+      "site_admin": false
+    },
+    "body": "<!-- build_hash: d94ae8858b7ee09a4804e4648e413566 date: 2026-09-18T02:16:41.762Z -->\n\n<details><summary><b>Preview URLs</b> (12 pages)</summary>\n\n- [`/en-US/doc",
+    "created_at": "2026-09-17T06:58:51Z",
+    "updated_at": "2026-09-18T02:16:42Z",
+    "html_url": "https://github.com/mdn/content/pull/45752#issuecomment-5710360190",
+    "author_association": "CONTRIBUTOR"
+  },
+  {
+    "id": 5724032355,
+    "node_id": "IC_kwDOEaEoos8AAAABVS3NYw",
+    "user": {
+      "login": "github-actions[bot]",
+      "id": 41898282,
+      "node_id": "MDM6Qm90NDE4OTgyODI=",
+      "type": "Bot",
+      "site_admin": false
+    },
+    "body": "This pull request has merge conflicts that must be resolved before it can be merged.",
+    "created_at": "2026-09-18T02:10:08Z",
+    "updated_at": "2026-09-18T02:10:08Z",
+    "html_url": "https://github.com/mdn/content/pull/45752#issuecomment-5724032355",
+    "author_association": "CONTRIBUTOR"
+  },
+  {
+    "id": 5736688070,
+    "node_id": "IC_kwDOEaEoos8AAAABVe7pxg",
+    "user": {
+      "login": "Josh-Cena",
+      "id": 55398995,
+      "node_id": "MDQ6VXNlcjU1Mzk4OTk1",
+      "type": "User",
+      "site_admin": false
+    },
+    "body": "This PR contains many important HTML correctness fixes so I'll only wait until the end of next Monday to merge it.",
+    "created_at": "2026-09-18T21:58:04Z",
+    "updated_at": "2026-09-18T21:58:04Z",
+    "html_url": "https://github.com/mdn/content/pull/45752#issuecomment-5736688070",
+    "author_association": "MEMBER"
+  }
+]
