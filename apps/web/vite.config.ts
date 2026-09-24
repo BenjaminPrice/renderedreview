@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { createHash } from "node:crypto";
+import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { cloudflare } from "@cloudflare/vite-plugin";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
@@ -9,8 +10,8 @@ import { build, defineConfig, type Plugin } from "vite";
 
 // Not precached: diagram renderer scripts (Mermaid's browser build and the `*-frame.ts` bundles,
 // up to a megabyte each) run only in the renderer frames, and are fetched only when a document
-// has such a diagram.
-const ON_DEMAND = /(^|\/)(mermaid\.min|[\w-]+-frame)-[^/]+\.js$/;
+// has such a diagram. The render Worker is fetched only for large documents.
+const ON_DEMAND = /(^|\/)(mermaid\.min|[\w-]+-frame|render-worker)-[^/]+\.js$/;
 
 // Builds src/sw/sw.ts into /sw.js with the client build's file list inlined. Start allows
 // only one client entry, so the worker is a separate nested build. Its version is a hash
@@ -52,6 +53,17 @@ function serviceWorker(): Plugin {
 
 export default defineConfig(({ mode }) => ({
   server: { port: 3000 },
+  resolve: {
+    alias: [
+      {
+        // Its "browser" build decodes entities through `document`, which the render Worker lacks;
+        // the portable build (a lookup table) works everywhere.
+        find: /^decode-named-character-reference$/,
+        replacement: "decode-named-character-reference",
+        customResolver: (source, importer) => (importer ? createRequire(importer).resolve(source) : null),
+      },
+    ],
+  },
   // React's plugin must come after Start's plugin.
   plugins: [
     // `--mode workers`: the Cloudflare plugin runs the server in workerd (dev and preview) and

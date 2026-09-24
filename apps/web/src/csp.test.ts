@@ -21,6 +21,8 @@ test("github.com policy blocks inline scripts and unapproved origins", () => {
     "https://github.com",
     "https://*.githubusercontent.com",
   ]);
+  // Same-origin Workers only (the render Worker and the service worker); never blob: or data:.
+  expect(csp["worker-src"]).toEqual(["'self'"]);
   expect(csp["object-src"]).toEqual(["'none'"]);
   expect(csp["base-uri"]).toEqual(["'none'"]);
   expect(csp["frame-ancestors"]).toEqual(["'none'"]);

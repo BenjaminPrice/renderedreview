@@ -15,6 +15,7 @@ export async function checkCsp(url: string): Promise<void> {
   for (const directive of ["object-src 'none'", "base-uri 'none'", "frame-ancestors 'none'"]) {
     assert.ok(csp.includes(directive), `CSP lacks ${directive}: ${csp}`);
   }
+  assert.match(csp, /(^|;\s*)worker-src 'self'\s*(;|$)/, `CSP should allow only same-origin Workers: ${csp}`);
   // Links out (GitHub, external images) must not reveal which PR the reader was viewing.
   assert.equal(page.headers.get("referrer-policy"), "no-referrer");
   const scripts = (await page.text()).match(/<script\b[^>]*>/g) ?? [];

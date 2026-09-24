@@ -5,6 +5,7 @@ import { spawn } from "node:child_process";
 import assert from "node:assert/strict";
 import { once } from "node:events";
 import { checkCsp } from "./check-csp.ts";
+import { checkRenderWorker } from "./check-render-worker.ts";
 
 const entry = new URL("../.output/server/index.mjs", import.meta.url);
 const port = String(3100 + Math.floor(Math.random() * 800));
@@ -36,6 +37,7 @@ try {
   console.log(`ok: /health answered on PORT=${port}`);
 
   await checkCsp(`http://127.0.0.1:${port}/`);
+  await checkRenderWorker(new URL("../.output/public/assets/", import.meta.url));
 
   // Not-found page states carry a 404 status, not 200.
   for (const path of ["/github.com/o/r/pull/not-a-number", "/gitlab.example.com/o/r/pull/1"]) {
