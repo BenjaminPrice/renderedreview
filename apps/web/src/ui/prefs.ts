@@ -71,7 +71,9 @@ export const readConnectors = (s?: Store | null) => read(CONNECTORS, s) === "on"
 export const saveConnectors = (on: boolean, s?: Store | null) => write(CONNECTORS, on ? "on" : "off", s);
 
 /** The guest sign-in suggestion stays hidden for a week after it is dismissed. */
-export const guestNoticeDismissed = (s?: Store | null, now = Date.now()) =>
-  Number(read(GUEST_NOTICE, s)) > now - GUEST_NOTICE_MS;
+export function guestNoticeDismissed(s?: Store | null, now = Date.now()) {
+  const at = read(GUEST_NOTICE, s);
+  return at !== null && Number(at) > now - GUEST_NOTICE_MS;
+}
 
 export const dismissGuestNotice = (s?: Store | null, now = Date.now()) => write(GUEST_NOTICE, String(now), s);
