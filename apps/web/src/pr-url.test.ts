@@ -72,9 +72,10 @@ describe("validatePrSearch", () => {
       doc: "docs/a.md",
       thread: "PRRT_x",
     }));
+  it("keeps the overview view", () => expect(validatePrSearch({ view: "overview" }).view).toBe("overview"));
   it("keeps numeric thread ids", () => expect(validatePrSearch({ thread: 42 }).thread).toBe(42));
   it("drops invalid values", () =>
-    expect(validatePrSearch({ files: "bogus", doc: 5, thread: "" })).toEqual({ files: "changed" }));
+    expect(validatePrSearch({ files: "bogus", doc: 5, thread: "", view: "raw" })).toEqual({ files: "changed" }));
 });
 
 it("detects Markdown paths", () => {
