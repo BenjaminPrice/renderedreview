@@ -6,6 +6,8 @@ import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { PublishError } from "../github/mutations";
+import { expectNewTab } from "../test-utils";
 import { Composer } from "./Composer";
 
 afterEach(() => {
@@ -133,6 +135,35 @@ describe("publishing now", () => {
     expect(onCommentNow).toHaveBeenCalledWith("Which jitter?");
     expect((await screen.findByRole("alert")).textContent).toBe("The pull request changed since this page loaded.");
     expect(textarea()).toHaveProperty("value", "Which jitter?");
+  });
+});
+
+describe("an organization restricting the OAuth App", () => {
+  it("explains it and links to where approval is requested, keeping the text and Add to review", async () => {
+    const { onCommentNow, onAddToReview } = mount();
+    const refusal = new PublishError(403, {
+      code: "oauth-org-restricted",
+      message: "The Call-for-Code organization restricts third-party apps",
+      org: "Call-for-Code",
+      approvalUrl: "https://github.com/settings/connections/applications/Ov23abc",
+    });
+    onCommentNow.mockRejectedValueOnce(new Error(refusal.message, { cause: refusal }));
+    await userEvent.type(textarea(), "Good find!");
+    await userEvent.click(screen.getByRole("button", { name: "Comment now" }));
+
+    const alert = await screen.findByRole("alert");
+    expect(within(alert).getByText("The Call-for-Code organization restricts third-party apps.").tagName).toBe(
+      "STRONG",
+    );
+    expect(alert.textContent).toContain(
+      "An organization owner needs to approve Rendered Review, or install the Rendered Review GitHub App on the repository.",
+    );
+    const link = within(alert).getByRole("link", { name: /Request approval/ });
+    expect(link.getAttribute("href")).toBe("https://github.com/settings/connections/applications/Ov23abc");
+    expectNewTab(link);
+    expect(textarea()).toHaveProperty("value", "Good find!");
+    await userEvent.click(screen.getByRole("button", { name: "Add to review" }));
+    expect(onAddToReview).toHaveBeenCalledWith("Good find!");
   });
 });
 

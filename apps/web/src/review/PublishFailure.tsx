@@ -1,0 +1,17 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// A refused publish, as shown in the composer, reply box and review dialog.
+import type { PublishError } from "../github/mutations";
+import { ExternalLink } from "../ui/ExternalLink";
+
+/** `error.message` is already for the reviewer; `cause` is the refusal, when it needs more than text. */
+export function PublishFailure({ error }: { error: { message: string; cause?: unknown } }) {
+  const refusal = error.cause as Partial<PublishError> | undefined;
+  if (refusal?.code !== "oauth-org-restricted") return error.message;
+  return (
+    <>
+      <strong>{refusal.org ? `The ${refusal.org} organization` : "This organization"} restricts third-party apps.</strong>{" "}
+      An organization owner needs to approve Rendered Review, or install the Rendered Review GitHub App on the
+      repository. <ExternalLink href={refusal.approvalUrl}>Request approval</ExternalLink>
+    </>
+  );
+}
