@@ -108,10 +108,11 @@ export function renderFrontmatter(source: string, node: Yaml): RenderedFrontmatt
 }
 
 function position(source: string, start: number, end: number): Position {
-  return { start: point(source, start), end: point(source, end) };
+  return { start: pointAt(source, start), end: pointAt(source, end) };
 }
 
-function point(source: string, offset: number): Point {
+/** The source point at a 0-based offset. */
+export function pointAt(source: string, offset: number): Point {
   const before = source.slice(0, offset);
   return { line: before.split("\n").length, column: offset - before.lastIndexOf("\n"), offset };
 }

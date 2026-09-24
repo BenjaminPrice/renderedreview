@@ -285,7 +285,7 @@ describe("GitHub alerts", () => {
 
   test("the marker is case-insensitive and may stand alone or before a hard break", () => {
     const doc = renderMarkdown(alerts);
-    const callouts = doc.nodes.filter((n) => n.tagName === "div").map((n) => n.text);
+    const callouts = doc.nodes.filter((n) => n.tagName === "div").map((n) => n.text.replace(/\n/g, ""));
     expect(callouts).toEqual([
       "NoteUseful information that users should know.",
       "TipHelpful advice for doing things better.",
@@ -311,7 +311,8 @@ describe("GitHub alerts", () => {
 
   test("the callout maps to the blockquote's range; its first paragraph starts after the marker", () => {
     const doc = renderMarkdown("> [!NOTE]\n> Body\n\n> [!TIP]\n>\n> Tip body\n");
-    const at = (l: number) => blocksForLines(doc, l, l).map((n) => `${n.type}:${n.tagName}:${n.text}`);
+    const at = (l: number) =>
+      blocksForLines(doc, l, l).map((n) => `${n.type}:${n.tagName}:${n.text.replace(/\n/g, "")}`);
     expect(at(1)).toEqual(["blockquote:div:NoteBody"]);
     expect(at(2)).toEqual(["paragraph:p:Body"]);
     expect(at(4)).toEqual(["blockquote:div:TipTip body"]);

@@ -11,6 +11,7 @@ import remarkRehype from "remark-rehype";
 import { unified } from "unified";
 import type { Position } from "unist";
 import { visit } from "unist-util-visit";
+import { extractAlerts, renderAlerts } from "./alerts.js";
 import { renderFrontmatter } from "./frontmatter.js";
 import { normalizeText } from "./normalize.js";
 import { resolveResources, type ResourceOptions } from "./resources.js";
@@ -18,9 +19,11 @@ import { resolveResources, type ResourceOptions } from "./resources.js";
 /*
  * Source-map representation
  * -------------------------
- * Pipeline: remark-parse + remark-gfm + remark-frontmatter (YAML) -> remark-rehype -> rehype-raw -> rehype-sanitize (GitHub
- * allowlist) -> resource resolution (./resources.ts) -> front matter (./frontmatter.ts, text
- * nodes only, prepended after sanitization so it can carry its own class) -> stamping. Stamping runs after sanitization, so authored HTML can never supply or
+ * Pipeline: remark-parse + remark-gfm + remark-frontmatter (YAML) -> GitHub alert markers removed
+ * (./alerts.ts) -> remark-rehype -> rehype-raw -> rehype-sanitize (GitHub allowlist) -> resource
+ * resolution (./resources.ts) -> alert callout markup (./alerts.ts) -> front matter
+ * (./frontmatter.ts, text nodes only) -> stamping. Generated markup is added after sanitization
+ * so it can carry its own classes. Stamping runs last, so authored HTML can never supply or
  * forge the markers, and the sanitizer (which keeps `position`) cannot strip them.
  *
  * - Each element with a source position gets `data-rr-id="<n>"`; `nodes[n]` holds its range,
@@ -116,6 +119,7 @@ const key = (p: Position) => `${p.start.offset}:${p.end.offset}`;
  */
 export function renderMarkdown(source: string, options: ResourceOptions = {}): RenderedMarkdown {
   const mdast = markdownParser.runSync(markdownParser.parse(source)) as MdastRoot;
+  const alerts = extractAlerts(mdast, source);
 
   const mdastTypes = new Map<string, { type: string; lang?: string }>();
   visit(mdast, (node) => {
@@ -127,6 +131,7 @@ export function renderMarkdown(source: string, options: ResourceOptions = {}): R
 
   const tree = toSafeHast.runSync(structuredClone(mdast)) as HastRoot;
   resolveResources(tree, options);
+  renderAlerts(tree, alerts);
   const first = mdast.children[0];
   if (first?.type === "yaml") {
     const front = renderFrontmatter(source, first);
