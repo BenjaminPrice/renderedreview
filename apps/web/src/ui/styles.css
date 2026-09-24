@@ -1155,6 +1155,9 @@ samp {
 .rr-markdown blockquote > [data-rr-change]::before {
   left: -49px;
 }
+.rr-markdown .rr-frontmatter > [data-rr-change]::before {
+  left: -43px; /* -28px less the block's border and padding */
+}
 
 /* Rendered Markdown typography */
 .rr-markdown {
@@ -1277,6 +1280,52 @@ samp {
 .rr-markdown a {
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+
+/* YAML front matter: muted keys beside their values, like the document metadata row */
+.rr-markdown dl.rr-frontmatter {
+  display: grid;
+  grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
+  gap: 4px 16px;
+  margin: 0 0 24px;
+  padding: 10px 14px;
+  border: 1px solid var(--rr-border-muted);
+  border-radius: var(--rr-radius-lg);
+  background: var(--rr-surface-sunken);
+  font: var(--rr-text-sm) / 1.5 var(--rr-font-ui);
+}
+.rr-markdown .rr-frontmatter > div {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+}
+.rr-markdown .rr-frontmatter dt {
+  color: var(--rr-text-muted);
+}
+.rr-markdown .rr-frontmatter dd {
+  margin: 0;
+}
+.rr-markdown .rr-frontmatter ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.rr-markdown .rr-frontmatter li {
+  margin: 0;
+  padding: 0 8px;
+  border: 1px solid var(--rr-border);
+  border-radius: 999px;
+  background: var(--rr-surface);
+  font-size: var(--rr-text-xs);
+}
+.rr-markdown .rr-frontmatter code {
+  padding: 0;
+  border: 0;
+  background: none;
+  white-space: pre-wrap;
 }
 
 /* Raw Markdown with GitHub line links */
