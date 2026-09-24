@@ -80,7 +80,7 @@ function renderPage() {
 }
 
 /** Select `word` inside the first text node containing `context`, and ask to comment on it. */
-async function commentOn(context: string, word: string) {
+async function commentOn(context: string, word: string, action: "Comment" | "Suggest" = "Comment") {
   const article = await screen.findByRole("article", { name: "Rendered document" });
   await vi.waitFor(() => expect(article.textContent).toContain(context));
   const walker = document.createTreeWalker(article, NodeFilter.SHOW_TEXT);
@@ -91,7 +91,7 @@ async function commentOn(context: string, word: string) {
   document.getSelection()!.setBaseAndExtent(text!, from, text!, from + word.length);
   article.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
   const actions = await screen.findByRole("toolbar", { name: "Selection actions" });
-  await userEvent.click(within(actions).getByRole("button", { name: /Comment/ }));
+  await userEvent.click(within(actions).getByRole("button", { name: new RegExp(action) }));
   return { article, composer: await screen.findByRole("region", { name: "New comment" }) };
 }
 
@@ -411,4 +411,86 @@ it("signed out, thread cards offer sign-in instead of reply and resolve", async 
   const card = await suggestionCard();
   expect(within(card).getByRole("button", { name: "Sign in to reply" })).toBeTruthy();
   expect(within(card).queryByRole("button", { name: /^(Reply|Resolve)/ })).toBeNull();
+});
+
+const LINE_26 =
+  "  - : This interim response indicates that the client should continue the request or ignore the response if the request is already finished.";
+
+it("suggests a change to diff lines, from the selection toolbar, as a native suggestion", async () => {
+  renderPage();
+  const { composer } = await commentOn("This interim response indicates", "interim response", "Suggest");
+  expect(within(composer).getByRole("button", { name: "Suggest" }).getAttribute("aria-pressed")).toBe("true");
+  expect(within(composer).getByText("Suggesting a replacement for line 26")).toBeTruthy();
+  const replacement = within(composer).getByRole("textbox", { name: "Replacement" });
+  expect(replacement).toHaveProperty("value", LINE_26);
+  expect(within(composer).getByText(/authors can apply it on GitHub/)).toBeTruthy();
+
+  await userEvent.clear(replacement);
+  await userEvent.type(replacement, "  - : This interim response tells the client to continue.");
+  responses[`${WRITE}/comment`] = JSON.stringify({ comment: { id: 1 } });
+  await userEvent.click(within(composer).getByRole("button", { name: "Comment now" }));
+  await vi.waitFor(() => expect(screen.queryByRole("region", { name: "New comment" })).toBeNull());
+
+  const sent = posted.at(-1)!.body;
+  expect(sent).toMatchObject({ representation: "review-line", path: INDEX, line: 26, side: "RIGHT" });
+  expect(sent).not.toHaveProperty("startLine");
+  expect(String(sent.body)).toMatch(
+    /^```suggestion\n {2}- : This interim response tells the client to continue\.\n```\n\n<!-- rendered-review:v1:/,
+  );
+  const decoded = extractAnnotation(String(sent.body));
+  expect(decoded.status === "ok" && decoded.annotation.motivation).toBe("suggesting");
+});
+
+it("adds a suggestion outside the diff to the review and submits it as a proposed change to apply manually", async () => {
+  renderPage();
+  const { composer } = await commentOn("Responses are grouped", "grouped");
+  await userEvent.click(within(composer).getByRole("button", { name: "Suggest" }));
+  expect(within(composer).getByText(/it must be applied manually/)).toBeTruthy();
+  const replacement = within(composer).getByRole("textbox", { name: "Replacement" });
+  await userEvent.clear(replacement);
+  await userEvent.type(replacement, "Responses fall into five classes:");
+  await userEvent.type(within(composer).getByRole("textbox", { name: "Comment (optional)" }), "Simpler.");
+  await userEvent.click(within(composer).getByRole("button", { name: "Add to review" }));
+
+  const draft = await screen.findByRole("region", { name: "Draft suggestion on line 10" });
+  expect(within(draft).getByRole("group", { name: "Suggested change" }).textContent).toContain(
+    "Responses fall into five classes:",
+  );
+
+  await userEvent.click(await reviewButton());
+  const dialog = screen.getByRole("dialog", { name: "Submit review" });
+  vi.stubGlobal("fetch", wrapReview(globalThis.fetch));
+  await userEvent.click(within(dialog).getByRole("radio", { name: "Approve" }));
+  await userEvent.click(within(dialog).getByRole("button", { name: "Submit review" }));
+  await vi.waitFor(() => expect(posted.at(-1)?.url).toBe(`${WRITE}/review`));
+
+  const [d] = posted.at(-1)!.body.drafts as Record<string, unknown>[];
+  expect(d).toMatchObject({ representation: "review-file", path: INDEX });
+  const body = String(d!.body);
+  expect(body).toMatch(/^> grouped\n\nSimpler\.\n\n\*\*Suggested change\*\* \(apply it manually/);
+  expect(body).toContain("```diff\n-Responses are grouped in five classes:\n+Responses fall into five classes:\n```");
+  const decoded = extractAnnotation(body);
+  expect(decoded.status === "ok" && decoded.annotation.motivation).toBe("suggesting");
+});
+
+it("retries a native suggestion GitHub refuses on its line as a proposed change on the file", async () => {
+  renderPage();
+  const { composer } = await commentOn("This interim response indicates", "interim response", "Suggest");
+  await userEvent.type(within(composer).getByRole("textbox", { name: "Replacement" }), "!");
+  responses[`${WRITE}/comment`] = new Response(
+    JSON.stringify({ code: "github-rejected", message: "Line not in diff", retryAs: "review-file" }),
+    { status: 422 },
+  );
+  const inner = globalThis.fetch;
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    const res = await inner(input, init);
+    if (JSON.parse(String(init?.body ?? "{}")).representation === "review-file")
+      return Response.json({ comment: { id: 2 } });
+    return res;
+  });
+  await userEvent.click(within(composer).getByRole("button", { name: "Comment now" }));
+  await vi.waitFor(() => expect(screen.queryByRole("region", { name: "New comment" })).toBeNull());
+  const retry = String(posted.at(-1)!.body.body);
+  expect(retry).not.toContain("```suggestion");
+  expect(retry).toContain(`\`\`\`diff\n-${LINE_26}\n+${LINE_26}!\n\`\`\``);
 });

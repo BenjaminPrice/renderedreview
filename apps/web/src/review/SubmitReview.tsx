@@ -130,6 +130,11 @@ export function SubmitReview({ drafts, headOid, publisher, onPublished, onClose 
                             Stale
                           </Badge>
                         )}
+                        {d.suggestion && (
+                          <Badge tone="accent" icon="change">
+                            Suggested change
+                          </Badge>
+                        )}
                         <span className="rr-draft-excerpt">{d.comment}</span>
                       </li>
                     ))}

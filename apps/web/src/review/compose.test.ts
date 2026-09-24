@@ -2,8 +2,16 @@
 import { extractAnnotation } from "@rendered-review/annotation-domain";
 import type { ChangedFile } from "@rendered-review/github-integration";
 import type { SourceSelection } from "@rendered-review/markdown-domain";
+import type { Representation } from "@rendered-review/review-domain";
 import { describe, expect, it } from "vitest";
-import { commentIntent, composeDraftBody, prepareAnnotation, representationFor, type CommentTarget } from "./compose";
+import {
+  commentIntent,
+  composeDraftBody,
+  prepareAnnotation,
+  representationFor,
+  selectedSourceLines,
+  type CommentTarget,
+} from "./compose";
 
 const HEAD = "a".repeat(40);
 const BLOB = "b".repeat(40);
@@ -107,6 +115,70 @@ describe("composeDraftBody", () => {
     const decoded = extractAnnotation(body);
     expect(decoded.status).toBe("ok");
     expect(decoded.status === "ok" && decoded.annotation).toEqual(prepared.annotation);
+  });
+});
+
+describe("selectedSourceLines", () => {
+  const source = "one\r\ntwo\nthree\nfour\n";
+  it("is the whole source lines the selection touches", () => {
+    const range = { startLine: 2, startColumn: 3, endLine: 3, endColumn: 2 };
+    expect(selectedSourceLines(source, { ...selection, sourceRange: range })).toBe("two\nthree");
+  });
+
+  it("leaves out a last line the range only reaches at its first column", () => {
+    const range = { startLine: 1, startColumn: 1, endLine: 3, endColumn: 1 };
+    expect(selectedSourceLines(source, { ...selection, sourceRange: range })).toBe("one\ntwo");
+  });
+});
+
+describe("composeDraftBody with a suggestion", () => {
+  const annotation = () => {
+    const prepared = prepareAnnotation(target, selection);
+    if (!prepared.ok) throw new Error(prepared.message);
+    return prepared.annotation;
+  };
+  const decode = (body: string) => {
+    const decoded = extractAnnotation(body);
+    if (decoded.status !== "ok") throw new Error(decoded.status);
+    return decoded.annotation;
+  };
+  const line: Representation = { kind: "review-line", line: 24, side: "RIGHT", reason: "" };
+  const suggestion = { original: "Each delay includes full jitter.", replacement: "Each delay includes equal jitter." };
+
+  it("is a native suggestion block on head diff lines, marked as suggesting", () => {
+    const body = composeDraftBody(annotation(), "Equal, not full.", line, suggestion);
+    expect(body).toMatch(
+      /^Equal, not full\.\n\n```suggestion\nEach delay includes equal jitter\.\n```\n\n<!-- rendered-review/,
+    );
+    expect(decode(body).motivation).toBe("suggesting");
+  });
+
+  it.each([
+    ["a file comment", { kind: "review-file", reason: "" }],
+    ["a conversation comment", { kind: "conversation", reason: "" }],
+    ["a base-side line comment", { ...line, side: "LEFT" }],
+  ] as [string, Representation][])("is a proposed change to apply manually as %s", (_, representation) => {
+    const body = composeDraftBody(annotation(), "", representation, suggestion);
+    expect(body).toContain("apply it manually");
+    expect(body).toContain("```diff\n-Each delay includes full jitter.\n+Each delay includes equal jitter.\n```");
+    expect(body).not.toContain("```suggestion");
+    expect(decode(body).motivation).toBe("suggesting");
+  });
+
+  it("fences a replacement containing backticks so it stays one block", () => {
+    const tricky = { original: "x", replacement: "use ```js fences``` and `code`" };
+    expect(composeDraftBody(annotation(), "", line, tricky)).toContain(
+      "````suggestion\nuse ```js fences``` and `code`\n````",
+    );
+    expect(composeDraftBody(annotation(), "", { kind: "review-file", reason: "" }, tricky)).toContain(
+      "````diff\n-x\n+use ```js fences``` and `code`\n````",
+    );
+  });
+
+  it("is a plain comment, marked as commenting, without a suggestion", () => {
+    expect(decode(composeDraftBody({ ...annotation(), motivation: "suggesting" }, "Hm", line)).motivation).toBe(
+      "commenting",
+    );
   });
 });
 

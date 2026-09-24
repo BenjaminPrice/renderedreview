@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // The comment composer card in the rail: quote of the selection, Markdown comment box with
-// preview, where the comment will post, and Add to review / Comment now / Cancel.
+// preview, where the comment will post, and Add to review / Comment now / Cancel. The Suggest tab
+// proposes a replacement for the selected source lines instead, with a live diff.
 import type { SourceSelection } from "@rendered-review/markdown-domain";
-import type { Representation } from "@rendered-review/review-domain";
+import { suggestionEligible, type Representation } from "@rendered-review/review-domain";
 import { useId, useState, type KeyboardEvent } from "react";
 import { linesLabel } from "../document/SelectionPopover";
-import { Markdown } from "./Markdown";
+import { selectedLines } from "./compose";
+import { ChangeDiff, diffLines, Markdown } from "./Markdown";
 
 const QUOTE_CHARS = 280;
 
@@ -20,16 +22,35 @@ export interface ComposerProps {
   /** Editing an existing draft: starts from its text, saves instead of adding, no Comment now. */
   initial?: string;
   editing?: boolean;
-  onAddToReview: (comment: string) => void;
+  /** The whole source lines the selection covers. Suggesting needs them. */
+  original?: string;
+  /** Opens on the Suggest tab. */
+  suggest?: boolean;
+  /** Editing a suggestion draft: its replacement (opens on the Suggest tab). */
+  initialReplacement?: string;
+  /** `replacement` is given for a suggestion, absent for a plain comment. */
+  onAddToReview: (comment: string, replacement?: string) => void;
   /** Rejects with an Error whose message is shown; the text is kept. */
-  onCommentNow: (comment: string) => Promise<void>;
+  onCommentNow: (comment: string, replacement?: string) => Promise<void>;
   onCancel: () => void;
   /** DOM id, for aligning the card with its anchor. */
   id?: string;
 }
 
+/** How a suggestion with `representation` will post. */
+export const suggestionReason = (representation: Representation) =>
+  suggestionEligible(representation)
+    ? "Will post as a native suggestion · authors can apply it on GitHub"
+    : "Will post as a proposed change · it must be applied manually";
+
 /** "Will post as X · why" with the representation in bold. */
-export function RepresentationHint({ representation, id }: { representation: Representation; id?: string }) {
+export function RepresentationHint({
+  representation,
+  id,
+}: {
+  representation: Pick<Representation, "reason">;
+  id?: string;
+}) {
   const [what, ...why] = representation.reason.split(" · ");
   return (
     <p className="rr-hint" id={id}>
@@ -59,23 +80,34 @@ export function Quote({ selection }: { selection: SourceSelection }) {
 
 export function Composer(props: ComposerProps) {
   const { selection, representation, error, signedIn, editing } = props;
+  const original = props.original;
+  const canSuggest = signedIn && original !== undefined;
+  const [suggesting, setSuggesting] = useState(
+    canSuggest && (!!props.suggest || props.initialReplacement !== undefined),
+  );
+  const startReplacement = props.initialReplacement ?? original ?? "";
+  const [replacement, setReplacement] = useState(startReplacement);
   const [text, setText] = useState(props.initial ?? "");
   const [preview, setPreview] = useState(false);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string>();
-  const ids = { text: useId(), hint: useId() };
+  const ids = { text: useId(), hint: useId(), replacement: useId(), lines: useId() };
   const blank = !text.trim();
-  const canSave = !error && !blank && !busy;
+  const unchanged = suggesting && replacement === original;
+  const canSave = !error && !busy && (suggesting ? !unchanged : !blank);
+  // A suggestion's replacement goes with it; a plain comment has none.
+  const args = (): [string, string?] => (suggesting ? [text, replacement] : [text]);
 
-  const add = () => canSave && props.onAddToReview(text);
+  const add = () => canSave && props.onAddToReview(...args());
   const cancel = () => {
-    if (text.trim() === (props.initial ?? "").trim() || confirm("Discard this comment?")) props.onCancel();
+    const untouched = text.trim() === (props.initial ?? "").trim() && replacement === startReplacement;
+    if (untouched || confirm("Discard this comment?")) props.onCancel();
   };
   const commentNow = async () => {
     setBusy(true);
     setFailure(undefined);
     try {
-      await props.onCommentNow(text);
+      await props.onCommentNow(...args());
     } catch (e) {
       setFailure((e as Error).message);
     } finally {
@@ -102,10 +134,16 @@ export function Composer(props: ComposerProps) {
     >
       <div className="rr-composer-top">
         <div className="rr-seg" role="group" aria-label="Comment type">
-          <button type="button" aria-pressed="true">
+          <button type="button" aria-pressed={!suggesting} onClick={() => setSuggesting(false)}>
             Comment
           </button>
-          <button type="button" aria-pressed="false" aria-disabled="true" title="Suggestions are coming soon">
+          <button
+            type="button"
+            aria-pressed={suggesting}
+            aria-disabled={!canSuggest}
+            title={canSuggest ? undefined : signedIn ? "The source lines aren't loaded" : "Sign in to suggest a change"}
+            onClick={() => canSuggest && setSuggesting(true)}
+          >
             Suggest
           </button>
         </div>
@@ -138,6 +176,29 @@ export function Composer(props: ComposerProps) {
         </div>
       ) : (
         <>
+          {suggesting && (
+            <>
+              <p className="rr-composer-note" id={ids.lines}>
+                Suggesting a replacement for {wholeLinesLabel(selection)}
+              </p>
+              <textarea
+                id={ids.replacement}
+                className="rr-composer-text rr-composer-code"
+                autoFocus
+                spellCheck={false}
+                value={replacement}
+                aria-label="Replacement"
+                aria-describedby={`${ids.lines} ${ids.hint}`}
+                onChange={(e) => setReplacement(e.target.value)}
+              />
+              <ChangeDiff
+                label="Preview of the change"
+                original={diffLines(original ?? "")}
+                proposed={diffLines(replacement)}
+              />
+              {unchanged && <p className="rr-composer-note">Edit the replacement to suggest a change.</p>}
+            </>
+          )}
           {preview ? (
             <div className="rr-composer-preview">
               {blank ? <p className="rr-composer-note">Nothing to preview.</p> : <Markdown source={text} />}
@@ -145,14 +206,14 @@ export function Composer(props: ComposerProps) {
           ) : (
             <>
               <label className="rr-sr-only" htmlFor={ids.text}>
-                Comment
+                {suggesting ? "Comment (optional)" : "Comment"}
               </label>
               <textarea
                 id={ids.text}
                 className="rr-composer-text"
-                autoFocus
+                autoFocus={!suggesting}
                 value={text}
-                placeholder="Leave a comment (Markdown)"
+                placeholder={suggesting ? "Why this change? (optional, Markdown)" : "Leave a comment (Markdown)"}
                 aria-describedby={ids.hint}
                 aria-keyshortcuts="Control+Enter Meta+Enter"
                 onChange={(e) => setText(e.target.value)}
@@ -164,7 +225,10 @@ export function Composer(props: ComposerProps) {
               {error ?? failure}
             </p>
           )}
-          <RepresentationHint representation={representation} id={ids.hint} />
+          <RepresentationHint
+            representation={suggesting ? { reason: suggestionReason(representation) } : representation}
+            id={ids.hint}
+          />
           <div className="rr-composer-actions">
             <button type="button" className="rr-btn rr-btn-sm rr-btn-primary" disabled={!canSave} onClick={add}>
               {editing ? "Save draft" : "Add to review"}
@@ -183,4 +247,10 @@ export function Composer(props: ComposerProps) {
       )}
     </section>
   );
+}
+
+/** "line 24" or "lines 22–24": the whole lines a suggestion replaces. */
+function wholeLinesLabel(selection: SourceSelection) {
+  const { startLine, endLine } = selectedLines(selection);
+  return startLine === endLine ? `line ${startLine}` : `lines ${startLine}–${endLine}`;
 }

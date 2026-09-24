@@ -11,7 +11,14 @@ import { PublishError } from "../github/mutations";
 import type { PrIdentity } from "../github/queries";
 import { linesLabel } from "../document/SelectionPopover";
 import { signIn } from "../ui/Viewer";
-import { commentIntent, composeDraftBody, prepareAnnotation, representationFor } from "./compose";
+import {
+  commentIntent,
+  composeDraftBody,
+  prepareAnnotation,
+  representationFor,
+  selectedSourceLines,
+  type SuggestedChange,
+} from "./compose";
 import { Composer } from "./Composer";
 import { DraftCard } from "./DraftCard";
 import { type Draft, useDrafts } from "./drafts";
@@ -43,7 +50,7 @@ export function useReviewMode({ pr, id, files, entry, doc, viewer }: ReviewModeI
     private: pr.base.repository?.private !== false,
   });
   const github = useGitHubPublisher(id);
-  const [pending, setPending] = useState<{ path: string; selection: SourceSelection } | null>(null);
+  const [pending, setPending] = useState<{ path: string; selection: SourceSelection; suggest?: true } | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   // Outcome worth telling after the composer closes; kept until dismissed or the next comment.
@@ -65,10 +72,14 @@ export function useReviewMode({ pr, id, files, entry, doc, viewer }: ReviewModeI
     annotation: Draft["annotation"],
     comment: string,
     selection: SourceSelection,
+    suggestion: SuggestedChange | undefined,
   ) {
     const send = (r: Representation) =>
       github.publishComment(
-        commentIntent({ path, representation: r, body: composeDraftBody(annotation, comment, r) }, id.headSha),
+        commentIntent(
+          { path, representation: r, body: composeDraftBody(annotation, comment, r, suggestion) },
+          id.headSha,
+        ),
       );
     try {
       await send(representation).catch((error: unknown) => {
@@ -92,7 +103,11 @@ export function useReviewMode({ pr, id, files, entry, doc, viewer }: ReviewModeI
       return outcomes.map((o) => {
         const d = !o.ok && o.retryAs && drafts.find((x) => x.id === o.draftId);
         if (!d || o.ok) return o;
-        save({ ...d, representation: AS_FILE, body: composeDraftBody(d.annotation, d.comment, AS_FILE) });
+        save({
+          ...d,
+          representation: AS_FILE,
+          body: composeDraftBody(d.annotation, d.comment, AS_FILE, d.suggestion),
+        });
         return { ...o, message: `${o.message}. It is now a file comment; submit again to post it.` };
       });
     },
@@ -114,9 +129,15 @@ export function useReviewMode({ pr, id, files, entry, doc, viewer }: ReviewModeI
   const unplaced: ReactNode[] = [];
 
   const composing = pending && target && pending.path === target.path ? pending.selection : undefined;
+  // The whole source lines a suggestion replaces; none while the source is loading.
+  const sourceLines = (selection: SourceSelection) =>
+    doc.source === undefined ? undefined : selectedSourceLines(doc.source, selection);
   if (composing && target) {
     const prepared = prepareAnnotation(target, composing);
     const representation = representationFor(files, target.path, composing);
+    const original = sourceLines(composing);
+    const change = (replacement?: string) =>
+      replacement === undefined || original === undefined ? undefined : { original, replacement };
     extras.push({
       id: "composer",
       blockId: composing.blockIds[0] ?? 0,
@@ -126,12 +147,15 @@ export function useReviewMode({ pr, id, files, entry, doc, viewer }: ReviewModeI
           id={threadDomId("composer")}
           selection={composing}
           representation={representation}
+          original={original}
+          suggest={pending?.suggest}
           error={prepared.ok ? undefined : prepared.message}
           signedIn={signedIn}
           onSignIn={viewer?.signInEnabled ? () => void signIn() : undefined}
           onCancel={() => setPending(null)}
-          onAddToReview={(comment) => {
+          onAddToReview={(comment, replacement) => {
             if (!prepared.ok) return;
+            const suggestion = change(replacement);
             save({
               id: crypto.randomUUID(),
               headOid: id.headSha,
@@ -139,15 +163,16 @@ export function useReviewMode({ pr, id, files, entry, doc, viewer }: ReviewModeI
               selection: composing,
               representation,
               comment,
-              body: composeDraftBody(prepared.annotation, comment, representation),
+              suggestion,
+              body: composeDraftBody(prepared.annotation, comment, representation, suggestion),
               annotation: prepared.annotation,
               createdAt: new Date().toISOString(),
             });
             setPending(null);
           }}
-          onCommentNow={async (comment) => {
+          onCommentNow={async (comment, replacement) => {
             if (!prepared.ok) return;
-            await publishNow(target.path, representation, prepared.annotation, comment, composing);
+            await publishNow(target.path, representation, prepared.annotation, comment, composing, change(replacement));
             setPending(null);
           }}
         />
@@ -164,12 +189,22 @@ export function useReviewMode({ pr, id, files, entry, doc, viewer }: ReviewModeI
           id={domId}
           editing
           initial={d.comment}
+          initialReplacement={d.suggestion?.replacement}
+          original={d.suggestion?.original ?? (stale(d) ? undefined : sourceLines(d.selection))}
           selection={d.selection}
           representation={d.representation}
           signedIn
           onCancel={() => setEditing(null)}
-          onAddToReview={(comment) => {
-            save({ ...d, comment, body: composeDraftBody(d.annotation, comment, d.representation) });
+          onAddToReview={(comment, replacement) => {
+            const original = d.suggestion?.original ?? sourceLines(d.selection);
+            const suggestion =
+              replacement === undefined || original === undefined ? undefined : { original, replacement };
+            save({
+              ...d,
+              comment,
+              suggestion,
+              body: composeDraftBody(d.annotation, comment, d.representation, suggestion),
+            });
             setEditing(null);
           }}
           onCommentNow={async () => {}}
@@ -192,10 +227,10 @@ export function useReviewMode({ pr, id, files, entry, doc, viewer }: ReviewModeI
 
   const editedDraft = drafts.find((d) => d.id === editing && here(d) && !stale(d));
   return {
-    compose: (path: string, selection: SourceSelection) => {
+    compose: (path: string, selection: SourceSelection, suggest?: true) => {
       setEditing(null);
       setNotice(null);
-      setPending({ path, selection });
+      setPending({ path, selection, suggest });
     },
     /** The selection to highlight in the document: the one being commented on or edited. */
     highlighted: composing ?? editedDraft?.selection,

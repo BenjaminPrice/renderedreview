@@ -370,7 +370,7 @@ function ReviewPage({ pr, id, files }: { pr: PullRequest; id: PrIdentity; files:
                 article={article}
                 rendered={doc.rendered}
                 source={doc.source}
-                onCompose={(selection) => reviewMode.compose(entry.path, selection)}
+                onCompose={(selection, suggest) => reviewMode.compose(entry.path, selection, suggest)}
               />
             </>
           ) : (
