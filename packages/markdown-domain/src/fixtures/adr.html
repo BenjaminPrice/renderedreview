@@ -1,0 +1,40 @@
+<h1 data-rr-id="0">ADR 7: Use PostgreSQL for the control plane</h1>
+<ul data-rr-id="1">
+<li data-rr-id="2">Status: accepted</li>
+<li data-rr-id="3">Deciders: platform team</li>
+<li data-rr-id="4">Date: 2026-01-15</li>
+</ul>
+<h2 data-rr-id="5">Context and Problem Statement</h2>
+<p data-rr-id="6">We need durable storage for installations and review sessions. Candidates
+were evaluated against operational cost and portability.</p>
+<h2 data-rr-id="7">Decision Drivers</h2>
+<ul data-rr-id="8">
+<li data-rr-id="9">Managed offerings on every major cloud</li>
+<li data-rr-id="10">Strong transactional semantics</li>
+<li data-rr-id="11">Familiar to the team</li>
+</ul>
+<h2 data-rr-id="12">Considered Options</h2>
+<ol data-rr-id="13">
+<li data-rr-id="14">PostgreSQL</li>
+<li data-rr-id="15">SQLite with replication</li>
+<li data-rr-id="16">A document store</li>
+</ol>
+<h2 data-rr-id="17">Decision Outcome</h2>
+<p data-rr-id="18">Chosen option: <strong data-rr-id="19">PostgreSQL</strong>, because it satisfies every driver.</p>
+<h3 data-rr-id="20">Consequences</h3>
+<ul data-rr-id="21">
+<li data-rr-id="22">
+<p data-rr-id="23">Good, because migrations are well understood.</p>
+</li>
+<li data-rr-id="24">
+<p data-rr-id="25">Bad, because local development needs a running server:</p>
+<pre data-rr-id="26"><code class="language-sh" data-rr-id="27">docker run --rm -p 5432:5432 postgres:17
+</code></pre>
+</li>
+</ul>
+<details data-rr-id="28">
+<summary data-rr-id="29">Benchmark notes</summary>
+<p data-rr-id="30">Throughput was measured with <code data-rr-id="31">pgbench</code> at scale factor 100.</p>
+</details>
+<hr data-rr-id="32">
+<p data-rr-id="33">Supersedes <a href="0003-use-sqlite.md" data-rr-id="34">ADR 3</a>.</p>
