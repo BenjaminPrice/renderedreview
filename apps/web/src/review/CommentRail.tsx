@@ -137,6 +137,27 @@ export function CommentRail(props: CommentRailProps) {
     return () => observer.disconnect();
   }, [doc, relayout]);
 
+  // Markers are drawn after the document, so Tab would reach them only past its end. Instead they
+  // take their place in the tab order right after their anchors.
+  useEffect(() => {
+    if (!doc || pinned) return;
+    const find = getAnchorElement ?? ((id: number) => doc.querySelector(`[data-rr-id="${id}"]`));
+    const anchorOf = new Map(anchored.map((p) => [p.thread.id, find(p.blocks[0]!.id)]));
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Tab") return;
+      const order = tabOrder(doc, (marker) => anchorOf.get(marker.dataset.threadId!) ?? null);
+      const i = order.indexOf(document.activeElement as HTMLElement);
+      const next = i < 0 ? undefined : order[i + (event.shiftKey ? -1 : 1)];
+      // At either end the browser's own order already leaves the document correctly.
+      if (!next) return;
+      event.preventDefault();
+      next.focus();
+    };
+    doc.addEventListener("keydown", onKey);
+    return () => doc.removeEventListener("keydown", onKey);
+    // `anchored` is derived from these props each render.
+  }, [doc, pinned, getAnchorElement, placements, filters]);
+
   // Connectors: pinned rail only, and only when the user turned them on.
   const showWires = shell.connectors && pinned;
   const [drawn, setDrawn] = useState(false);
@@ -230,6 +251,30 @@ export function CommentRail(props: CommentRailProps) {
         )}
     </div>
   );
+}
+
+const TABBABLE = "a[href], button, input, select, textarea, summary, [tabindex]";
+
+/** Tabbable elements in `container` in tab order, with each margin marker right after its anchor. */
+function tabOrder(container: HTMLElement, anchorOf: (marker: HTMLElement) => Element | null): HTMLElement[] {
+  const items: { el: HTMLElement; at: Element; marker: boolean }[] = [];
+  for (const el of container.querySelectorAll<HTMLElement>(TABBABLE)) {
+    const marker = el.classList.contains("rr-marker");
+    const at = marker ? anchorOf(el) : el;
+    if (!at) continue;
+    if (!marker && (el.tabIndex < 0 || el.matches(":disabled") || !(el.checkVisibility?.() ?? true))) continue;
+    items.push({ el, at, marker });
+  }
+  // Sort by position in the document; a marker goes right after its anchor, before the anchor's contents.
+  return items
+    .sort((a, b) =>
+      a.at === b.at
+        ? +a.marker - +b.marker
+        : a.at.compareDocumentPosition(b.at) & Node.DOCUMENT_POSITION_FOLLOWING
+          ? -1
+          : 1,
+    )
+    .map((i) => i.el);
 }
 
 const STATE_LABEL: Record<ThreadState, string> = {
