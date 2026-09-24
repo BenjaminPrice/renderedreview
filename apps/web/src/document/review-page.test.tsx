@@ -620,6 +620,24 @@ it("shows a PR breadcrumb in Overview and a file breadcrumb in a document", asyn
   expect(router.state.location.search).toMatchObject({ view: "overview" });
 });
 
+it("lands on the Overview when the link selects nothing, keeping the URL clean", async () => {
+  const router = renderPage();
+  expect(await overview()).toBeTruthy();
+  expect(prEntry().getAttribute("aria-current")).toBe("page");
+  expect(within(sidebar()).queryAllByRole("link", { current: "page" })).toHaveLength(1);
+  expect(screen.queryByRole("article", { name: "Rendered document" })).toBeNull();
+  expect(router.state.location.searchStr).toBe("");
+});
+
+it("opens a document thread's document when the link names only the thread", async () => {
+  suggestionOnHead();
+  renderPage(`?thread=${SUGGESTION}`);
+  const card = await threadCard(/GitHub line comment · L30/);
+  await vi.waitFor(() => expect(document.activeElement).toBe(card));
+  expect(fileLink(/status\/index\.md, modified/).getAttribute("aria-current")).toBe("page");
+  expect(prEntry().getAttribute("aria-current")).toBeNull();
+});
+
 it("lands on the Overview when no Markdown changed", async () => {
   edit("files.json", `${API}/pulls/45377/files?per_page=100`, (fs) =>
     fs.splice(0, fs.length, ...fs.filter((f) => !String(f.filename).endsWith(".md"))),
