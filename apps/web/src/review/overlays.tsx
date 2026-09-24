@@ -104,6 +104,9 @@ export function MarginMarkers({ markers, onOpen }: { markers: Marker[]; onOpen: 
       type="button"
       className={`rr-marker rr-marker-${m.state}${m.active ? " rr-marker-active" : ""}`}
       style={{ top: m.top, left: m.left }}
+      // Reached through the document's tab order, right after its anchor (CommentRail).
+      tabIndex={-1}
+      data-thread-id={m.threadId}
       aria-label={`${m.count} comment${m.count === 1 ? "" : "s"}, ${m.state}. Open in comment rail`}
       aria-controls="rr-rail"
       onClick={() => onOpen(m.threadId)}

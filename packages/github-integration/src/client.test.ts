@@ -220,6 +220,31 @@ describe("conditional requests", () => {
   });
 });
 
+describe("stale responses on rate limit", () => {
+  const limited = () => json({ message: "API rate limit exceeded" }, 403, { "x-ratelimit-remaining": "0" });
+
+  it("answers from the cache when rate-limited, if asked to, and reports it as stale", async () => {
+    const cache = new Map<string, CacheEntry>();
+    const { client, metrics } = setup([json(pull, 200, { etag: '"a"' }), limited()], {
+      cache,
+      staleOnRateLimit: true,
+    });
+    const fresh = await client.getPullRequest("mdn", "content", 45752);
+    expect(await client.getPullRequest("mdn", "content", 45752)).toEqual(fresh);
+    expect(metrics.map((m) => m.outcome)).toEqual(["ok", "stale"]);
+    expect(metrics[1]!.rateLimit?.resetAt).toEqual(new Date(1790225054 * 1000));
+  });
+
+  it("still throws without a cached entry, or by default", async () => {
+    const cache = new Map<string, CacheEntry>();
+    const cold = setup([limited()], { cache, staleOnRateLimit: true });
+    await expect(cold.client.getPullRequest("mdn", "content", 45752)).rejects.toBeInstanceOf(RateLimitError);
+    const byDefault = setup([json(pull, 200, { etag: '"a"' }), limited()], { cache });
+    await byDefault.client.getPullRequest("mdn", "content", 45752);
+    await expect(byDefault.client.getPullRequest("mdn", "content", 45752)).rejects.toBeInstanceOf(RateLimitError);
+  });
+});
+
 describe("errors and retries", () => {
   it("surfaces primary rate-limit exhaustion as RateLimitError without retrying", async () => {
     const { client, fetch } = setup([
