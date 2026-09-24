@@ -2,11 +2,16 @@
 // @vitest-environment happy-dom
 // DOM selection <-> source claims on the real rendered article, and the round trip back to a highlight.
 import { readFileSync } from "node:fs";
+import { createDiagramRegistry } from "@rendered-review/diagram-domain";
 import { renderMarkdown, type RenderOptions } from "@rendered-review/markdown-domain";
-import { cleanup, render } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { toJsxRuntime } from "hast-util-to-jsx-runtime";
 import { Fragment, jsx, jsxs } from "react/jsx-runtime";
 import { afterEach, describe, expect, test } from "vitest";
+import { DiagramRegistryContext } from "../diagram/registry";
+import { renderWithRouter } from "../test-utils";
+import { RenderedDocument } from "./document";
 import { convertRange, highlightRanges } from "./selection";
 
 afterEach(cleanup);
@@ -135,5 +140,85 @@ describe("round trip: select, convert, re-highlight the same rendered text", () 
       }
     }
     expect(checked).toBeGreaterThan(100);
+  });
+});
+
+describe("diagram fences", () => {
+  const DOC = "# Flow\n\n```mermaid\nflowchart LR\n  title Delivery flow\n  A --> B\n```\n\nAfter.\n";
+  const registry = createDiagramRegistry([
+    {
+      label: "Mermaid",
+      fenceNames: ["mermaid"],
+      load: async () => ({
+        id: "fake",
+        fenceNames: ["mermaid"],
+        version: "1",
+        render: async () => ({ svg: '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="10"/>' }),
+      }),
+    },
+  ]);
+  const LINK = { host: "github.com", owner: "o", repo: "r", sha: "abc", path: "flow.md" };
+
+  async function mountDiagram(source = DOC): Promise<Mounted> {
+    const rendered = renderMarkdown(source);
+    const { container } = await renderWithRouter(() => (
+      <DiagramRegistryContext value={registry}>
+        <RenderedDocument rendered={rendered} changes={[]} link={LINK} blobOid="blob" />
+      </DiagramRegistryContext>
+    ));
+    await screen.findByRole("img", { name: /Mermaid diagram/ });
+    return { rendered, source, article: container.querySelector("article")! };
+  }
+  const figure = () => screen.getByRole("figure");
+  const showSource = () => userEvent.click(within(figure()).getByRole("button", { name: "Source" }));
+  const claimed = (m: Mounted, range: Range) => {
+    const s = convert(m, range);
+    return m.source.slice(s.textPosition.start, s.textPosition.end);
+  };
+
+  test("a selection in the toolbar only is rejected as generated", async () => {
+    const m = await mountDiagram();
+    const result = convertRange(m.article, m.rendered, m.source, rangeOf(m.article, "Copy source"));
+    expect(result).toMatchObject({ ok: false, reason: "generated" });
+  });
+
+  test("a selection from document text into the toolbar clamps to the document text", async () => {
+    const m = await mountDiagram();
+    const range = rangeOf(m.article, "Flow");
+    range.setEnd(within(figure()).getByRole("button", { name: "Copy source" }).firstChild!, 4);
+    expect(convert(m, range)).toMatchObject({ exact: "Flow", expanded: false });
+  });
+
+  test("a selection in the source view maps to exactly those fence source characters", async () => {
+    const m = await mountDiagram();
+    await showSource();
+    const s = convert(m, rangeOf(m.article, "A --> B"));
+    expect(m.source.slice(s.textPosition.start, s.textPosition.end)).toBe("A --> B");
+    expect(s.sourceRange).toMatchObject({ startLine: 6, endLine: 6 });
+  });
+
+  test("line numbers inside a source view selection are not claimed", async () => {
+    const m = await mountDiagram();
+    await showSource();
+    expect(claimed(m, rangeOf(m.article, "flow\n6  A"))).toBe("flow\n  A");
+  });
+
+  test("a claim inside the fence highlights its text in the open source view", async () => {
+    const m = await mountDiagram();
+    await showSource();
+    expect(highlighted(m, rangeOf(m.article, "Delivery flow\n6  A"))).toBe("Delivery flow\n6  A");
+  });
+
+  test("a claim inside the fence highlights the whole diagram while the source view is closed", async () => {
+    const m = await mountDiagram();
+    await showSource();
+    const claim = convert(m, rangeOf(m.article, "A --> B")).textPosition;
+    await showSource();
+    const ranges = highlightRanges(m.article, m.rendered, m.source, claim);
+    expect(ranges).toHaveLength(1);
+    expect(ranges[0]!.startContainer).toBe(figure());
+    expect(ranges[0]!.startOffset).toBe(0);
+    expect(ranges[0]!.endContainer).toBe(figure());
+    expect(ranges[0]!.endOffset).toBe(figure().childNodes.length);
   });
 });
