@@ -15,7 +15,8 @@ export const renderWaveDrom: FrameRender = async ({ source, theme }) => {
   if (!isDiagram(diagram)) throw new Error("Not a WaveDrom diagram: expected an object with signal, reg or assign");
   const config = (diagram.config ?? {}) as { skin?: unknown };
   if (theme === "dark" && config.skin === undefined) diagram.config = { ...config, skin: "dark" };
-  return onml.stringify(renderAny(0, diagram, SKINS));
+  // WaveDrom paints a white background whatever the skin; the page shows through instead.
+  return onml.stringify(renderAny(0, diagram, SKINS)).replace('style="stroke:none;fill:white"', 'style="stroke:none;fill:none"');
 };
 
 const isDiagram = (value: unknown): value is Record<string, unknown> =>
