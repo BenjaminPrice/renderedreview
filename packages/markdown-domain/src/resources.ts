@@ -180,7 +180,7 @@ export function resolveResources(tree: Root, options: ResourceOptions): void {
           el.properties = {
             href: resolved.external.href,
             target: "_blank",
-            rel: ["noreferrer"],
+            rel: ["noopener", "noreferrer"],
             dataRrExternalImage: resolved.external.href,
           };
         }

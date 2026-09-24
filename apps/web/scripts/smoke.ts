@@ -4,6 +4,7 @@
 import { spawn } from "node:child_process";
 import assert from "node:assert/strict";
 import { once } from "node:events";
+import { checkCsp } from "./check-csp.ts";
 
 const entry = new URL("../.output/server/index.mjs", import.meta.url);
 const port = String(3100 + Math.floor(Math.random() * 800));
@@ -34,21 +35,7 @@ try {
   assert.deepEqual(await response.json(), { status: "ok" });
   console.log(`ok: /health answered on PORT=${port}`);
 
-  // Every page carries the CSP, and every script Start renders carries its nonce.
-  const page = await fetch(`http://127.0.0.1:${port}/`);
-  const csp = page.headers.get("content-security-policy") ?? "";
-  const nonce = /'nonce-([^']+)'/.exec(csp)?.[1];
-  assert.ok(nonce, `no script nonce in CSP: ${csp}`);
-  for (const directive of ["object-src 'none'", "base-uri 'none'", "frame-ancestors 'none'"]) {
-    assert.ok(csp.includes(directive), `CSP lacks ${directive}: ${csp}`);
-  }
-  assert.match(csp, /script-src 'self' 'nonce-[^';]+';/);
-  const scripts = (await page.text()).match(/<script\b[^>]*>/g) ?? [];
-  assert.ok(scripts.length > 0, "page rendered no scripts");
-  for (const tag of scripts) assert.ok(tag.includes(`nonce="${nonce}"`), `script without nonce: ${tag}`);
-  const again = await fetch(`http://127.0.0.1:${port}/`);
-  assert.notEqual(/'nonce-([^']+)'/.exec(again.headers.get("content-security-policy") ?? "")?.[1], nonce);
-  console.log(`ok: / sends the CSP and nonces all ${scripts.length} scripts`);
+  await checkCsp(`http://127.0.0.1:${port}/`);
 } finally {
   server.child.kill();
 }

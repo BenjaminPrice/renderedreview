@@ -129,7 +129,7 @@ describe("external images are not loaded automatically", () => {
     expect(link!.properties).toMatchObject({
       href: "https://tracker.example/pixel.png",
       target: "_blank",
-      rel: ["noreferrer"],
+      rel: ["noopener", "noreferrer"],
     });
     expect(link!.properties.dataRrExternalImage).toBe("https://tracker.example/pixel.png");
     expect(toHtml(link!)).toContain("build status (external image from tracker.example)");
