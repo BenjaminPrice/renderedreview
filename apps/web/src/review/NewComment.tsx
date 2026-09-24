@@ -70,9 +70,11 @@ export function NewConversationComment({
 
   return (
     <section className="rr-tl-item rr-tl-new" aria-labelledby={ids.heading} onKeyDown={onKeyDown}>
-      <span className="rr-avatar rr-tl-av" aria-hidden="true">
-        {viewer.login ? initials(viewer.login) : "?"}
-      </span>
+      {viewer.login && (
+        <span className="rr-avatar rr-tl-av" aria-hidden="true">
+          {initials(viewer.login)}
+        </span>
+      )}
       <div className="rr-tl-card">
         <div className="rr-desc-head">
           <h3 id={ids.heading}>Add a comment</h3>

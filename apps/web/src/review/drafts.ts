@@ -72,17 +72,21 @@ export function useDrafts(scope: DraftScope, cache: BrowserCache = browserCache)
  */
 export function useUnsentComment(scope: DraftScope, cache: BrowserCache = browserCache) {
   const key = `${scope.host}/${scope.repositoryId}/${scope.number}/conversation`;
-  const [text, setText] = useState("");
+  // Text belongs to the key it was written under: another PR (same mounted page) never shows it.
+  const [state, setState] = useState({ key, text: "" });
+  const text = state.key === key ? state.text : "";
   useEffect(() => {
     let live = true;
     // Text typed before the stored one arrives wins.
-    void cache.get<string>("drafts", key).then((stored) => live && setText((t) => t || stored || ""));
+    void cache
+      .get<string>("drafts", key)
+      .then((stored) => live && setState((s) => (s.key === key && s.text ? s : { key, text: stored ?? "" })));
     return () => {
       live = false;
     };
   }, [cache, key]);
   const update = (next: string) => {
-    setText(next);
+    setState({ key, text: next });
     void cache.set("drafts", key, next, { private: scope.private });
   };
   return [text, update] as const;

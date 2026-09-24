@@ -371,7 +371,8 @@ async function handle(request: Request, deps: Deps): Promise<Result> {
       const d = draft(input);
       const expected = oid(input.expectedHeadOid, "expectedHeadOid");
       const { client, pr } = await connect(t, "comment", deps);
-      checkHead(pr, expected);
+      // A plain conversation comment isn't tied to a revision; anything annotated or on a line is.
+      if (d.representation !== "conversation" || d.annotation) checkHead(pr, expected);
       checkTarget(d.annotation, t.host, pr);
       const comment = await publishDraft(client, t, d, pr.head.sha).catch((e: unknown) => {
         throw fromGitHub(e, d.representation);
