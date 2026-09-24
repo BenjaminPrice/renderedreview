@@ -1,0 +1,48 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+import { normalizeText, type RenderedMarkdown } from "@rendered-review/markdown-domain";
+import type { AnnotationSelector, RenderedReviewAnnotationV1 } from "./annotation.js";
+
+export type ContentCheck = { ok: true } | { ok: false; reason: string };
+
+type Selector<T extends AnnotationSelector["type"]> = Extract<AnnotationSelector, { type: T }>;
+const selector = <T extends AnnotationSelector["type"]>(a: RenderedReviewAnnotationV1, type: T) =>
+  a.target.selectors.find((s): s is Selector<T> => s.type === type)!;
+
+/**
+ * Check an annotation against the blob it references (`source`, rendered as `rendered`): the
+ * source range must lie inside the blob, and the quote must be the (normalized) source text at
+ * that range, or be rendered by the innermost element enclosing it (inline formatting makes the
+ * source differ from the rendered words).
+ *
+ * ponytail: the TextPositionSelector is not checked until the selection module defines the
+ * document's rendered text; a quote spanning several top-level blocks that is not a verbatim
+ * source slice fails.
+ */
+export function verifyContent(
+  annotation: RenderedReviewAnnotationV1,
+  source: string,
+  rendered: RenderedMarkdown,
+): ContentCheck {
+  const range = selector(annotation, "MarkdownSourceRangeSelector");
+  const exact = normalizeText(selector(annotation, "TextQuoteSelector").exact);
+  // Offsets of each line start and end (before its line ending), as the Markdown parser counts them.
+  const lines: { start: number; end: number }[] = [];
+  const endings = /\r\n?|\n/g;
+  let start = 0;
+  for (const m of source.matchAll(endings)) {
+    lines.push({ start, end: m.index });
+    start = m.index + m[0].length;
+  }
+  lines.push({ start, end: source.length });
+  const offset = (line: number, column: number) => {
+    const l = lines[line - 1];
+    return l && l.start + column - 1 <= l.end ? l.start + column - 1 : undefined;
+  };
+  const from = offset(range.startLine, range.startColumn);
+  const to = offset(range.endLine, range.endColumn);
+  if (from === undefined || to === undefined) return { ok: false, reason: "The source range is outside the document" };
+  if (normalizeText(source.slice(from, to)) === exact) return { ok: true };
+  const enclosing = rendered.nodes.filter((n) => n.range.start.offset <= from && to <= n.range.end.offset).at(-1);
+  if (enclosing?.text.includes(exact)) return { ok: true };
+  return { ok: false, reason: "The quoted text does not match the document at the source range" };
+}
