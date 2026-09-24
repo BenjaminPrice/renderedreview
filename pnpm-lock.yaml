@@ -35,6 +35,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@rendered-review/github-integration':
+        specifier: workspace:*
+        version: link:../../packages/github-integration
       '@tanstack/react-query':
         specifier: ^5.103.2
         version: 5.103.2(react@19.3.0)

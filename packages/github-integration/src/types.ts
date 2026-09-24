@@ -15,6 +15,8 @@ export interface Repository {
   id: number;
   nodeId: string;
   owner: string;
+  /** Stable owner account ID; survives owner renames. */
+  ownerId: number;
   name: string;
   fullName: string;
   private: boolean;
@@ -148,6 +150,7 @@ const repository = (r: Raw): Repository | null =>
     id: r.id,
     nodeId: r.node_id,
     owner: r.owner.login,
+    ownerId: r.owner.id,
     name: r.name,
     fullName: r.full_name,
     private: r.private,

@@ -6,7 +6,8 @@ import { routeTree } from "./routeTree.gen";
 
 export function getRouter() {
   // A new QueryClient per router, so SSR requests never share cache state.
-  const queryClient = new QueryClient();
+  // The GitHub client already retries transient failures; 404s and rate limits should not repeat.
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const router = createRouter({
     routeTree,
     context: { queryClient },
