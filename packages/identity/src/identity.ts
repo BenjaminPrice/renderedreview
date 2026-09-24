@@ -2,9 +2,17 @@
 // Sign-in with GitHub (a GitHub App's user authorization) through Better Auth. Web Platform APIs
 // only, so the same code runs on Node and Workers; the runtime supplies the SqlDatabase.
 import { betterAuth } from "better-auth/minimal";
+import { genericOAuth } from "better-auth/plugins/generic-oauth";
 import type { AppConfig, SqlDatabase } from "@rendered-review/runtime";
 import { sqlAdapter } from "./sql-adapter";
 import { createTokenCipher } from "./token-cipher";
+
+export interface Viewer {
+  login: string;
+  avatarUrl: string | null;
+  /** Whether the OAuth App for commenting on public repositories is linked. Absent when not configured. */
+  publicComments?: "linked" | "unlinked";
+}
 
 export interface SessionUser {
   /** Internal user ID: pass to `getUserGitHubToken`. Never sent to the browser. */
@@ -14,7 +22,11 @@ export interface SessionUser {
 }
 
 export interface Identity {
-  /** Serves `/api/auth/*`: Better Auth's sign-in, callback and sign-out, plus `GET /api/auth/viewer`. */
+  /**
+   * Serves `/api/auth/*`: Better Auth's sign-in, callback and sign-out, linking the OAuth App
+   * (`POST /link-social` with provider `github-public`, callback `/callback/github-public`), plus
+   * `GET /api/auth/viewer`.
+   */
   handle(request: Request): Promise<Response>;
   /** The signed-in user for a request's cookies, or null. */
   getSessionUser(headers: Headers): Promise<SessionUser | null>;
@@ -25,15 +37,26 @@ export interface Identity {
    * Server-side only: the token must never reach the browser.
    */
   getUserGitHubToken(userId: string, host: string): Promise<string | null>;
+  /**
+   * The user's OAuth App token (scope `public_repo`) for writing to public repositories where the
+   * GitHub App is not installed. Null when the OAuth App is not configured or not linked, or its
+   * token can no longer be refreshed. Same refresh and secrecy rules as `getUserGitHubToken`.
+   */
+  getUserPublicWriteToken(userId: string, host: string): Promise<string | null>;
 }
 
 // ponytail: only github.com. Better Auth's GitHub provider has github.com endpoints built in; an
 // Enterprise Server host needs its own OAuth endpoints (generic OAuth provider) keyed by host.
 const HOST = "github.com";
 const PROVIDER = "github";
+// The OAuth App, linked to a user signed in through the GitHub App (Better Auth's generic OAuth
+// provider: social providers are keyed by type, so a second GitHub client needs its own ID).
+const PUBLIC_PROVIDER = "github-public";
 // Better Auth routes the browser may call. Everything else, notably the ones that return session or
 // provider tokens (get-session, get-access-token, account-info, ...), answers 404.
 const BROWSER_ROUTES = new Set(["/sign-in/social", `/callback/${PROVIDER}`, "/sign-out", "/error"]);
+// Starting routes take only these fields from the browser: no extra scopes or authorization params.
+const START_ROUTES: Record<string, string> = { "/sign-in/social": PROVIDER, "/link-social": PUBLIC_PROVIDER };
 // Refresh this long before expiry, so a token handed out still works for the request using it.
 const REFRESH_MARGIN_MS = 5 * 60 * 1000;
 
@@ -61,19 +84,20 @@ export async function createIdentity({
   baseURL: string;
 }): Promise<Identity> {
   const app = config.github.app;
+  const oauth = config.github.oauth;
   if (!app || !config.authSecret || !config.encryptionKey) throw new Error("GitHub sign-in is not configured");
   const cipher = await createTokenCipher(config.encryptionKey, config.previousEncryptionKey);
   const tokenEndpoint = `${config.github.url}/login/oauth/access_token`;
 
   // GitHub answers a rejected refresh with 200 and an `error` field, which Better Auth's generic
   // refresh would store as an undefined token. Shared by Better Auth and getUserGitHubToken.
-  async function refreshAccessToken(refreshToken: string) {
+  const refreshWith = (client: { clientId: string; clientSecret: string }) => async (refreshToken: string) => {
     const response = await fetch(tokenEndpoint, {
       method: "POST",
       headers: { accept: "application/json", "content-type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
-        client_id: app!.clientId,
-        client_secret: app!.clientSecret,
+        client_id: client.clientId,
+        client_secret: client.clientSecret,
         grant_type: "refresh_token",
         refresh_token: refreshToken,
       }),
@@ -90,7 +114,8 @@ export async function createIdentity({
       tokenType: typeof data.token_type === "string" ? data.token_type : undefined,
       scopes: [],
     };
-  }
+  };
+  const refreshAccessToken = refreshWith(app);
 
   const auth = betterAuth({
     baseURL,
@@ -114,6 +139,64 @@ export async function createIdentity({
         }),
       },
     },
+    plugins: oauth
+      ? [
+          genericOAuth({
+            config: [
+              {
+                providerId: PUBLIC_PROVIDER,
+                clientId: oauth.clientId,
+                clientSecret: oauth.clientSecret,
+                authorizationUrl: `${config.github.url}/login/oauth/authorize`,
+                tokenUrl: tokenEndpoint,
+                // Write access to public repositories only (PR reviews, review and issue comments).
+                scopes: ["public_repo"],
+                disableSignUp: true,
+                getUserInfo: async ({ accessToken }) => {
+                  const response = await fetch(`${config.github.apiUrl}/user`, {
+                    headers: { authorization: `Bearer ${accessToken}`, "user-agent": "rendered-review" },
+                  });
+                  if (!response.ok) return null;
+                  const profile = (await response.json()) as {
+                    id: number;
+                    login: string;
+                    email: string | null;
+                    avatar_url: string;
+                  };
+                  return {
+                    id: String(profile.id),
+                    name: profile.login,
+                    email: profile.email || `${profile.id}+${profile.login}@users.noreply.github.com`,
+                    image: profile.avatar_url,
+                    emailVerified: false,
+                  };
+                },
+              },
+            ],
+          }),
+        ]
+      : [],
+    account: {
+      accountLinking: {
+        // Only the OAuth App is linked (see handle), and only to the same GitHub user (validateUserInfo):
+        // the GitHub user ID is the identity, not an email that may have changed since sign-in.
+        trustedProviders: [PUBLIC_PROVIDER],
+        allowDifferentEmails: true,
+      },
+    },
+    user: {
+      validateUserInfo: async ({ user, source }, ctx) => {
+        if (source.action !== "link-account") return;
+        const accounts = await ctx.context.internalAdapter.findAccounts(String(user.id));
+        const signedInAs = accounts.find((a) => a.providerId === PROVIDER)?.accountId;
+        if (!signedInAs || signedInAs !== String(source.oauth?.profile?.id)) {
+          return {
+            error: "github_account_mismatch",
+            errorDescription: "Authorize with the GitHub account you signed in with",
+          };
+        }
+      },
+    },
     advanced: {
       // Secure cookies everywhere except plain-http localhost development.
       useSecureCookies: !["localhost", "127.0.0.1", "[::1]"].includes(new URL(baseURL).hostname),
@@ -132,10 +215,20 @@ export async function createIdentity({
 
   const refreshing = new Map<string, Promise<string | null>>();
 
-  async function getUserGitHubToken(userId: string, host: string): Promise<string | null> {
+  const getUserGitHubToken = (userId: string, host: string) => userToken(PROVIDER, refreshAccessToken, userId, host);
+  const refreshPublic = oauth && refreshWith(oauth);
+  const getUserPublicWriteToken = async (userId: string, host: string) =>
+    refreshPublic ? userToken(PUBLIC_PROVIDER, refreshPublic, userId, host) : null;
+
+  async function userToken(
+    provider: string,
+    refresh: typeof refreshAccessToken,
+    userId: string,
+    host: string,
+  ): Promise<string | null> {
     if (host !== HOST) return null;
     const context = await auth.$context;
-    const account = (await context.internalAdapter.findAccounts(userId)).find((a) => a.providerId === PROVIDER);
+    const account = (await context.internalAdapter.findAccounts(userId)).find((a) => a.providerId === provider);
     if (!account?.accessToken) return null;
     const expiresAt = account.accessTokenExpiresAt ? new Date(account.accessTokenExpiresAt).getTime() : Infinity;
     if (expiresAt - Date.now() > REFRESH_MARGIN_MS) return account.accessToken;
@@ -148,7 +241,7 @@ export async function createIdentity({
     if (!pending) {
       pending = (async () => {
         try {
-          const tokens = await refreshAccessToken(account.refreshToken!);
+          const tokens = await refresh(account.refreshToken!);
           await context.internalAdapter.updateAccount(account.id, {
             accessToken: tokens.accessToken,
             refreshToken: tokens.refreshToken ?? account.refreshToken,
@@ -173,8 +266,26 @@ export async function createIdentity({
     let response: Response;
     if (path === "/viewer" && request.method === "GET") {
       const user = await getSessionUser(request.headers);
-      response = Response.json(user && { login: user.login, avatarUrl: user.avatarUrl });
-    } else if (BROWSER_ROUTES.has(path)) {
+      let viewer: Viewer | null = user && { login: user.login, avatarUrl: user.avatarUrl };
+      if (viewer && oauth) {
+        const accounts = await (await auth.$context).internalAdapter.findAccounts(user!.id);
+        viewer.publicComments = accounts.some((a) => a.providerId === PUBLIC_PROVIDER) ? "linked" : "unlinked";
+      }
+      response = Response.json(viewer);
+    } else if (START_ROUTES[path] && request.method === "POST") {
+      const body = (await request.json().catch(() => null)) as { provider?: unknown; callbackURL?: unknown } | null;
+      const provider = START_ROUTES[path];
+      if (body?.provider !== provider || (provider === PUBLIC_PROVIDER && !oauth)) {
+        response = new Response("Not Found", { status: 404 });
+      } else {
+        const headers = new Headers(request.headers);
+        headers.delete("content-length");
+        const callbackURL = typeof body.callbackURL === "string" ? body.callbackURL : undefined;
+        response = await auth.handler(
+          new Request(request.url, { method: "POST", headers, body: JSON.stringify({ provider, callbackURL }) }),
+        );
+      }
+    } else if (BROWSER_ROUTES.has(path) || (oauth && path === `/callback/${PUBLIC_PROVIDER}`)) {
       response = await auth.handler(request);
     } else {
       response = new Response("Not Found", { status: 404 });
@@ -185,5 +296,5 @@ export async function createIdentity({
     return out;
   }
 
-  return { handle, getSessionUser, getUserGitHubToken };
+  return { handle, getSessionUser, getUserGitHubToken, getUserPublicWriteToken };
 }

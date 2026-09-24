@@ -111,6 +111,9 @@ async function signIn(identity: Identity, callbackURL: string, base = BASE) {
   return { authorizeUrl: new URL(url), callback, cookie: cookieHeader(callback.headers.getSetCookie()) };
 }
 
+const mergeCookies = (...headers: string[]) =>
+  [...new Map(headers.flatMap((h) => h.split("; ")).map((c) => [c.split("=")[0], c])).values()].join("; ");
+
 const viewer = async (identity: Identity, cookie?: string) => {
   const response = await identity.handle(new Request(`${BASE}/api/auth/viewer`, { headers: cookie ? { cookie } : {} }));
   return { response, body: await response.json() };
@@ -291,7 +294,8 @@ describe.each(databases)("GitHub sign-in on %s", (_, open) => {
       const state = new URL(url).searchParams.get("state");
       const callback = await pub.handle(
         new Request(`${BASE}/api/auth/callback/github-public?code=oauth-code&state=${state}`, {
-          headers: { cookie: [cookie, cookieHeader(start.headers.getSetCookie())].filter(Boolean).join("; ") },
+          // Like a browser: the state cookie just set replaces the cleared one from sign-in.
+          headers: { cookie: mergeCookies(cookie, cookieHeader(start.headers.getSetCookie())) },
         }),
       );
       return { authorizeUrl: new URL(url), callback };
@@ -324,7 +328,9 @@ describe.each(databases)("GitHub sign-in on %s", (_, open) => {
     it("stores the OAuth App token only as ciphertext", async () => {
       const { cookie } = await signIn(pub, "/");
       await link(cookie);
-      const rows = await db.all<Record<string, string | null>>(`SELECT * FROM "account" WHERE "providerId" = 'github-public'`);
+      const rows = await db.all<Record<string, string | null>>(
+        `SELECT * FROM "account" WHERE "providerId" = 'github-public'`,
+      );
       expect(rows).toHaveLength(1);
       expect(JSON.stringify(rows)).not.toContain(oauthToken);
       expect(await (await createTokenCipher(key)).decrypt(rows[0]!.accessToken!)).toBe(oauthToken);
