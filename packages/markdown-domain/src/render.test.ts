@@ -170,6 +170,12 @@ describe("rfd fixture mapping", () => {
     expect(at(4)).toEqual(["html:summary"]);
     expect(at(6)).toEqual(["paragraph:p"]);
   });
+
+  test("nested elements sharing one source range keep their own types", () => {
+    const types = (md: string) => renderMarkdown(md).nodes.map((n) => `${n.tagName}:${n.type}`);
+    expect(types("- outer\n  - inner\n")).toEqual(["ul:list", "li:listItem", "ul:list", "li:listItem"]);
+    expect(types("*all*\n")).toEqual(["p:paragraph", "em:emphasis"]);
+  });
 });
 
 describe("GitHub Flavored Markdown", () => {

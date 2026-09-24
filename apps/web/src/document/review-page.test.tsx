@@ -783,3 +783,23 @@ it("lands on the Overview when no Markdown changed", async () => {
   expect(await overview()).toBeTruthy();
   expect(prEntry().getAttribute("aria-current")).toBe("page");
 });
+
+it("turns a text selection into a pending comment on its source lines", async () => {
+  renderPage(`?doc=${encodeURIComponent(INDEX)}`);
+  const article = await screen.findByRole("article", { name: "Rendered document" });
+  const text = [...article.querySelectorAll("p")]
+    .flatMap((p) => [...p.childNodes])
+    .find((n): n is Text => n instanceof Text && n.data.includes("Responses are grouped"))!;
+  const from = text.data.indexOf("grouped");
+  document.getSelection()!.setBaseAndExtent(text, from, text, from + "grouped".length);
+  article.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+  const actions = await screen.findByRole("toolbar", { name: "Selection actions" });
+  await userEvent.click(within(actions).getByRole("button", { name: /Comment/ }));
+
+  const pending = screen.getByRole("region", { name: "New comment" });
+  expect(within(pending).getByText("grouped")).toBeTruthy();
+  expect(pending.textContent).toContain("line 10");
+  await userEvent.click(within(pending).getByRole("button", { name: "Cancel" }));
+  expect(screen.queryByRole("region", { name: "New comment" })).toBeNull();
+  document.getSelection()!.removeAllRanges();
+});
