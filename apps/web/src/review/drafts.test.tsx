@@ -5,7 +5,7 @@ import { openBrowserCache } from "@rendered-review/browser-cache";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { IDBFactory } from "fake-indexeddb";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { type Draft, useDrafts } from "./drafts";
+import { type Draft, useDrafts, useUnsentComment } from "./drafts";
 
 beforeEach(() => vi.stubGlobal("indexedDB", new IDBFactory()));
 afterEach(() => vi.unstubAllGlobals());
@@ -52,4 +52,37 @@ it("keeps each pull request's drafts apart", async () => {
   const b = renderHook(() => useDrafts({ ...scope, number: 8, private: false }, cache));
   await new Promise((r) => setTimeout(r, 20));
   expect(b.result.current.drafts).toEqual([]);
+});
+
+it("keeps an unsent conversation comment across reloads on public repositories only", async () => {
+  const pub = load(false);
+  const first = renderHook(() => useUnsentComment({ ...scope, private: false }, openBrowserCache()));
+  await new Promise((r) => setTimeout(r, 20));
+  act(() => first.result.current[1]("Half-written thought"));
+  const reloaded = renderHook(() => useUnsentComment({ ...scope, private: false }, openBrowserCache()));
+  await waitFor(() => expect(reloaded.result.current[0]).toBe("Half-written thought"));
+  // Separate from the review drafts.
+  expect(pub.result.current.drafts).toEqual([]);
+
+  const secret = renderHook(() => useUnsentComment({ ...scope, number: 8, private: true }, openBrowserCache()));
+  act(() => secret.result.current[1]("Private words"));
+  const reloadedSecret = renderHook(() => useUnsentComment({ ...scope, number: 8, private: true }, openBrowserCache()));
+  await new Promise((r) => setTimeout(r, 20));
+  expect(reloadedSecret.result.current[0]).toBe("");
+});
+
+it("never carries an unsent conversation comment over to another pull request", async () => {
+  const cache = openBrowserCache();
+  const b = renderHook(() => useUnsentComment({ ...scope, number: 8, private: false }, cache));
+  act(() => b.result.current[1]("For B"));
+  const view = renderHook((number: number) => useUnsentComment({ ...scope, number, private: false }, cache), {
+    initialProps: 7,
+  });
+  await new Promise((r) => setTimeout(r, 20));
+  act(() => view.result.current[1]("For A"));
+  view.rerender(8);
+  expect(view.result.current[0]).not.toBe("For A");
+  await waitFor(() => expect(view.result.current[0]).toBe("For B"));
+  view.rerender(9);
+  expect(view.result.current[0]).toBe("");
 });

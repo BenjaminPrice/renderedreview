@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Unpublished review comments, kept in the browser per pull request until submitted.
+// Unpublished review comments, and the Overview's unsent comment, kept in the browser per pull
+// request until submitted.
 import type { RenderedReviewAnnotationV1 } from "@rendered-review/annotation-domain";
 import type { BrowserCache } from "@rendered-review/browser-cache";
 import type { SourceSelection } from "@rendered-review/markdown-domain";
@@ -63,4 +64,30 @@ export function useDrafts(scope: DraftScope, cache: BrowserCache = browserCache)
       ),
     remove: (ids: string[]) => update((ds) => ds.filter((d) => !ids.includes(d.id))),
   };
+}
+
+/**
+ * The Overview's unsent conversation comment, kept like drafts: across reloads for public
+ * repositories, in this tab's memory for private ones.
+ */
+export function useUnsentComment(scope: DraftScope, cache: BrowserCache = browserCache) {
+  const key = `${scope.host}/${scope.repositoryId}/${scope.number}/conversation`;
+  // Text belongs to the key it was written under: another PR (same mounted page) never shows it.
+  const [state, setState] = useState({ key, text: "" });
+  const text = state.key === key ? state.text : "";
+  useEffect(() => {
+    let live = true;
+    // Text typed before the stored one arrives wins.
+    void cache
+      .get<string>("drafts", key)
+      .then((stored) => live && setState((s) => (s.key === key && s.text ? s : { key, text: stored ?? "" })));
+    return () => {
+      live = false;
+    };
+  }, [cache, key]);
+  const update = (next: string) => {
+    setState({ key, text: next });
+    void cache.set("drafts", key, next, { private: scope.private });
+  };
+  return [text, update] as const;
 }

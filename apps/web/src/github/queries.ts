@@ -148,10 +148,11 @@ export const blobQuery = (id: PrIdentity, oid: string) =>
  */
 export const viewerQuery = queryOptions({
   queryKey: ["viewer"],
-  queryFn: async () => {
+  queryFn: async (): Promise<{ signInEnabled: boolean; signedIn: boolean; login?: string }> => {
     const res = await fetch("/api/auth/viewer", { cache: "no-store" }).catch(() => undefined);
     if (!res?.ok) return { signInEnabled: false, signedIn: false };
-    return { signInEnabled: true, signedIn: !!(await res.json().catch(() => null)) };
+    const user = (await res.json().catch(() => null)) as { login?: string } | null;
+    return { signInEnabled: true, signedIn: !!user, login: user?.login };
   },
   staleTime: Infinity,
 });

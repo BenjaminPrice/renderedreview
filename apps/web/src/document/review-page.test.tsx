@@ -742,6 +742,36 @@ it("opens the Overview at a conversation comment linked by the thread param", as
   await vi.waitFor(() => expect(item.contains(document.activeElement)).toBe(true));
 });
 
+it("adds a top-level comment below the conversation and shows it there once posted", async () => {
+  responses["/api/auth/viewer"] = '{"login":"octocat","avatarUrl":null}';
+  const answer = globalThis.fetch;
+  const posted: unknown[] = [];
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    if (String(input) !== "/api/github/write/github.com/mdn/content/pulls/45377/comment") return answer(input, init);
+    posted.push(JSON.parse(init!.body as string));
+    // What GitHub lists afterwards.
+    editIssueComments((cs) =>
+      cs.push({
+        ...cs[0]!,
+        id: 2,
+        body: "Nice work",
+        user: { ...(cs[0]!.user as object), login: "octocat", type: "User" },
+        created_at: "2026-09-10T00:00:00Z",
+      }),
+    );
+    return Response.json({ comment: { id: 2 } }, { status: 201 });
+  });
+  renderPage("?view=overview");
+  const region = await overview();
+  const list = await within(region).findByRole("list", { name: "Conversation, oldest first" });
+  const box = await within(region).findByRole("textbox", { name: "Add a comment" });
+  expect(list.compareDocumentPosition(box) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  await userEvent.type(box, "Nice work");
+  await userEvent.click(within(region).getByRole("button", { name: "Comment" }));
+  expect(await within(list).findByRole("listitem", { name: "octocat commented" })).toBeTruthy();
+  expect(posted).toEqual([{ representation: "conversation", body: "Nice work", expectedHeadOid: HEAD }]);
+});
+
 it("lists documents with comments in the Overview rail, without filters, connectors or markers", async () => {
   localStorage.setItem("rr-connectors", "on");
   const router = renderPage("?view=overview");

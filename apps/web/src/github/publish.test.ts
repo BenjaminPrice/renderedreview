@@ -240,6 +240,34 @@ describe("comment", () => {
     expect(sent(0)).toEqual({ body });
   });
 
+  it("publishes a plain top-level conversation comment with no annotation", async () => {
+    const { call, sent } = setup({ routes: { "POST /issues/7/comments": created() } });
+    const res = await call("comment", { expectedHeadOid: HEAD, representation: "conversation", body: "Looks good" });
+    expect(res.status).toBe(201);
+    expect(sent(0)).toEqual({ body: "Looks good" });
+  });
+
+  it("publishes a plain conversation comment even when the head moved: it isn't tied to a revision", async () => {
+    const { call, sent } = setup({ head: OTHER, routes: { "POST /issues/7/comments": created() } });
+    const res = await call("comment", { expectedHeadOid: HEAD, representation: "conversation", body: "LGTM" });
+    expect(res.status).toBe(201);
+    expect(sent(0)).toEqual({ body: "LGTM" });
+  });
+
+  it("still refuses an annotated conversation comment when the head moved", async () => {
+    const { call, writes } = setup({ head: OTHER });
+    const body = withMarker("Agreed", annotation());
+    const res = await call("comment", { expectedHeadOid: HEAD, representation: "conversation", body });
+    expect(res.status).toBe(409);
+    expect(writes()).toHaveLength(0);
+  });
+
+  it("still checks the expected head's format on a plain conversation comment", async () => {
+    const { call } = setup();
+    const res = await call("comment", { expectedHeadOid: "nope", representation: "conversation", body: "b" });
+    expect(res.status).toBe(400);
+  });
+
   it("answers 409 stale-head with the current head when the PR moved on", async () => {
     const { call, writes } = setup({ head: OTHER });
     const res = await call("comment", comment());
