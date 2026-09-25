@@ -21,7 +21,8 @@ import {
 import type { Identity } from "@rendered-review/identity";
 import { anchorLines } from "@rendered-review/review-domain";
 import { log, readBodyCapped } from "@rendered-review/runtime";
-import type { EntitlementCheck } from "../billing";
+import type { EntitlementCheck, PrivateRepository } from "../billing";
+import type { ContributorTracker } from "../contributors";
 import { forRepository, type WriteOperation } from "./broker";
 import type { InstallationCheck } from "./installation";
 import { meteredFetch } from "./metrics";
@@ -214,6 +215,8 @@ interface Deps {
   installed?: InstallationCheck;
   /** Undefined in community mode: private repositories are then refused. */
   entitlement?: EntitlementCheck;
+  /** Hosted mode only: counts monthly active private contributors. */
+  contributors?: ContributorTracker;
   fetch?: typeof fetch;
   /** The OAuth App's page on GitHub, where users ask an organization to approve it. */
   approvalUrl?: string;
@@ -254,7 +257,17 @@ async function connect(t: Target, operation: WriteOperation["operation"], deps: 
   const pr = await client.getPullRequest(t.owner, t.repo, t.number).catch((e: unknown) => {
     throw fromGitHub(e, deps.approvalUrl);
   });
-  return { client, pr };
+  return { client, pr, repository: credential.kind === "user" ? credential.repository : undefined };
+}
+
+/**
+ * Counts the user as an active private contributor once a qualifying write landed on GitHub:
+ * a comment or reply (suggestions included), a review, or resolving or reopening a thread.
+ * Anchor repair (`edit`) only moves an existing comment and does not count. Public repositories
+ * carry no `repository`, so they never count.
+ */
+async function countContributor(deps: Deps, t: Target, repository: PrivateRepository | undefined) {
+  if (repository) await deps.contributors?.(repository, t.userId);
 }
 
 function checkHead(pr: PullRequest, expected: string) {
@@ -318,7 +331,7 @@ async function submitReview(
     drafts: (Draft & { id: string })[];
   },
 ): Promise<Result> {
-  const { client, pr } = await connect(t, "review", deps);
+  const { client, pr, repository } = await connect(t, "review", deps);
   checkHead(pr, review.expected);
   checkTarget(review.summary?.annotation, t.host, pr);
   for (const d of review.drafts) forDraft(d.id, () => checkTarget(d.annotation, t.host, pr));
@@ -362,6 +375,7 @@ async function submitReview(
   }
   const results = review.drafts.map((d) => outcomes.get(d.id)!);
   const ok = (native?.ok ?? true) && results.every((r) => r.ok);
+  if (native?.ok || results.some((r) => r.ok)) await countContributor(deps, t, repository);
   return { status: 200, body: { ok, ...(native && { review: native }), results } };
 }
 
@@ -415,20 +429,21 @@ async function handle(request: Request, deps: Deps): Promise<Result> {
     case "comment": {
       const d = draft(input);
       const expected = oid(input.expectedHeadOid, "expectedHeadOid");
-      const { client, pr } = await connect(t, "comment", deps);
+      const { client, pr, repository } = await connect(t, "comment", deps);
       // A plain conversation comment isn't tied to a revision; anything annotated or on a line is.
       if (d.representation !== "conversation" || d.annotation) checkHead(pr, expected);
       checkTarget(d.annotation, t.host, pr);
       const comment = await publishDraft(client, t, d, pr.head.sha).catch((e: unknown) => {
         throw fromGitHub(e, deps.approvalUrl, d.representation);
       });
+      await countContributor(deps, t, repository);
       return { status: 201, body: { comment } };
     }
     case "reply": {
       const { body, annotation } = commentBody(input.body);
       const inReplyTo = line(input.inReplyTo, "inReplyTo");
       const expected = oid(input.expectedHeadOid, "expectedHeadOid");
-      const { client, pr } = await connect(t, "comment", deps);
+      const { client, pr, repository } = await connect(t, "comment", deps);
       checkHead(pr, expected);
       checkTarget(annotation, t.host, pr);
       const comment = await client
@@ -436,6 +451,7 @@ async function handle(request: Request, deps: Deps): Promise<Result> {
         .catch((e: unknown) => {
           throw fromGitHub(e, deps.approvalUrl);
         });
+      await countContributor(deps, t, repository);
       return { status: 201, body: { comment } };
     }
     case "resolve": {
@@ -444,7 +460,7 @@ async function handle(request: Request, deps: Deps): Promise<Result> {
       if (typeof threadNodeId !== "string" || !NODE_ID.test(threadNodeId)) invalid("threadNodeId must be a node id");
       if (typeof resolved !== "boolean") invalid("resolved must be true or false");
       const id = threadNodeId as string;
-      const { client, pr } = await connect(t, "resolve", deps);
+      const { client, pr, repository } = await connect(t, "resolve", deps);
       const thread = await (async () => {
         // Access was checked for this repository only: the thread must belong to this PR.
         const owner = await client.getReviewThreadPullRequest(id);
@@ -454,6 +470,7 @@ async function handle(request: Request, deps: Deps): Promise<Result> {
       })().catch((e: unknown) => {
         throw e instanceof Refusal ? e : fromGitHub(e, deps.approvalUrl);
       });
+      await countContributor(deps, t, repository);
       return { status: 200, body: { thread } };
     }
     case "edit": {

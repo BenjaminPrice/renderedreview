@@ -7,6 +7,7 @@ import {
 } from "@rendered-review/annotation-domain";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { EntitlementCheck } from "../billing";
+import type { ContributorTracker } from "../contributors";
 import { captureLogs } from "../test-utils";
 import { publishToGitHub, WRITE_PREFIX } from "./publish";
 
@@ -61,6 +62,7 @@ function setup({
   routes = {} as Record<string, Route>,
   approvalUrl = undefined as string | undefined,
   entitlement = undefined as EntitlementCheck | undefined,
+  contributors = undefined as ContributorTracker | undefined,
 } = {}) {
   const repo = `widgets-${++repoCounter}`;
   // Its own user too: the per-user publish limit is process-wide.
@@ -100,7 +102,15 @@ function setup({
           duplex: "half",
         }),
       } as RequestInit),
-      { allowedHosts: ["github.com"], identity, installed: async () => installed, fetch, approvalUrl, entitlement },
+      {
+        allowedHosts: ["github.com"],
+        identity,
+        installed: async () => installed,
+        fetch,
+        approvalUrl,
+        entitlement,
+        contributors,
+      },
     );
   const writes = () => fetch.mock.calls.filter(([, init]) => init?.method === "POST");
   const sent = (i: number) => JSON.parse(writes()[i]![1]!.body as string) as Record<string, unknown>;
@@ -769,6 +779,15 @@ describe("edit", () => {
   const patches = (fetch: ReturnType<typeof setup>["fetch"]) =>
     fetch.mock.calls.filter(([, init]) => init?.method === "PATCH");
 
+  it("does not count repairing an anchor as contributor activity", async () => {
+    // A repair only moves an existing comment; the pricing metric's qualifying actions don't include it.
+    const contributors = vi.fn<ContributorTracker>(async () => {});
+    const entitlement = async () => ({ allowed: true, reason: "subscription" }) as const;
+    const { call } = setup({ routes: routes(), visibility: "private", entitlement, contributors });
+    expect((await call("edit", edit())).status).toBe(200);
+    expect(contributors).not.toHaveBeenCalled();
+  });
+
   it("replaces the signed-in author's conversation comment body", async () => {
     const { call, fetch } = setup({ routes: routes() });
     const res = await call("edit", edit());
@@ -895,5 +914,116 @@ describe("edit", () => {
     expect(res.status).toBe(400);
     expect(await json(res)).toMatchObject({ code });
     expect(patches(fetch)).toHaveLength(0);
+  });
+});
+
+describe("active private contributor counting", () => {
+  const allowed = async () => ({ allowed: true, reason: "subscription" }) as const;
+  /** A private repository its owner's plan covers, with a contributor tracker spy. */
+  function counting(routes: Record<string, Route>, options: Parameters<typeof setup>[0] = {}) {
+    const contributors = vi.fn<ContributorTracker>(async () => {});
+    const s = setup({ visibility: "private", entitlement: allowed, contributors, routes, ...options });
+    const countedFor = async () => {
+      const viewer = await s.identity.getSessionUser();
+      expect(contributors).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ host: "github.com", owner: "acme", ownerId: "2", ownerType: "Organization" }),
+        viewer!.id,
+      );
+    };
+    return { ...s, contributors, countedFor };
+  }
+  const threadRoutes = {
+    "POST /graphql": (init: RequestInit) => {
+      const { query } = JSON.parse(init.body as string) as { query: string };
+      if (query.startsWith("query"))
+        return Response.json({
+          data: { node: { pullRequest: { number: 7, repository: { databaseId: REPO_ID } } } },
+        });
+      const mutation = /(\w+)\(input/.exec(query)![1]!;
+      return Response.json({ data: { [mutation]: { thread: { id: "PRRT_1", isResolved: true } } } });
+    },
+  };
+  const talk = { id: "d1", representation: "conversation", body: "Unchanged file" };
+  const review = (extra: object = {}) => ({
+    expectedHeadOid: HEAD,
+    submissionId: "s-1",
+    event: "COMMENT",
+    drafts: [talk],
+    ...extra,
+  });
+
+  it.each([
+    ["publishing a comment", "comment", comment(), { "POST /pulls/7/comments": created() }],
+    [
+      "creating a suggestion",
+      "comment",
+      comment({ body: "```suggestion\nretry three times\n```" }),
+      { "POST /pulls/7/comments": created() },
+    ],
+    [
+      "publishing a conversation comment",
+      "comment",
+      { expectedHeadOid: HEAD, representation: "conversation", body: "Looks good" },
+      { "POST /issues/7/comments": created() },
+    ],
+    [
+      "replying",
+      "reply",
+      { expectedHeadOid: HEAD, inReplyTo: 1, body: "Done" },
+      { "POST /pulls/7/comments/1/replies": created() },
+    ],
+    ["submitting a review", "review", review(), { "POST /issues/7/comments": created() }],
+    [
+      "approving without comments",
+      "review",
+      review({ event: "APPROVE", drafts: [] }),
+      { "POST /pulls/7/reviews": () => Response.json({ id: 55, state: "APPROVED" }) },
+    ],
+    ["resolving a thread", "resolve", { threadNodeId: "PRRT_1", resolved: true }, threadRoutes],
+    ["reopening a thread", "resolve", { threadNodeId: "PRRT_1", resolved: false }, threadRoutes],
+  ])("counts the publisher after %s lands on GitHub", async (_, operation, body, routes) => {
+    const { call, countedFor } = counting(routes);
+    expect((await call(operation, body)).status).toBeLessThan(300);
+    await countedFor();
+  });
+
+  it("counts a review in which only some drafts landed", async () => {
+    const { call, countedFor } = counting({
+      "POST /issues/7/comments": created(),
+      "POST /pulls/7/comments": () => Response.json({ message: "path not in diff" }, { status: 422 }),
+    });
+    const file = { id: "d2", representation: "review-file", body: "Whole file", path: "docs/b.md" };
+    expect(await json(await call("review", review({ drafts: [talk, file] })))).toMatchObject({ ok: false });
+    await countedFor();
+  });
+
+  it("does not count a review of which nothing landed", async () => {
+    const { call, contributors } = counting({
+      "POST /issues/7/comments": () => Response.json({ message: "locked" }, { status: 403 }),
+    });
+    expect(await json(await call("review", review()))).toMatchObject({ ok: false });
+    expect(contributors).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [
+      "GitHub rejects the write",
+      comment(),
+      {},
+      { "POST /pulls/7/comments": () => new Response("{}", { status: 422 }) },
+    ],
+    ["the head moved (nothing is written)", comment({ expectedHeadOid: OTHER }), {}, {}],
+    ["the body is invalid (nothing is written)", comment({ body: "" }), {}, {}],
+    [
+      "the owner's plan does not cover the repository",
+      comment(),
+      { entitlement: async () => ({ allowed: false, reason: "entitlement-expired" }) as const },
+      {},
+    ],
+    ["the repository is public", comment(), { visibility: "public" as const }, { "POST /pulls/7/comments": created() }],
+  ])("does not count when %s", async (_, body, options, routes) => {
+    const { call, contributors } = counting(routes, options);
+    await call("comment", body);
+    expect(contributors).not.toHaveBeenCalled();
   });
 });
