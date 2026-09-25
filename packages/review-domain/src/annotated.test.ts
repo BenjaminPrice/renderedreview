@@ -35,6 +35,25 @@ describe("projectReview with application comments", () => {
     expect(p.unresolvedByPath).toEqual({ "doc.md": 1 });
   });
 
+  it("lets the pull request author resolve an application thread without write access", () => {
+    const root = issueComment(body(annotation()), { createdAt: at(0) });
+    const resolve = issueComment(body(annotation({ motivation: "resolving", threadId: String(root.id) })), {
+      createdAt: at(10),
+      author: { login: "pat", id: 42, nodeId: "U42", type: "User" },
+      authorAssociation: "CONTRIBUTOR",
+    });
+    const p = (author?: { login: string; id: number; nodeId: string; type: string }) =>
+      projectReview({
+        repository: context,
+        reviewComments: [],
+        reviews: [],
+        issueComments: [root, resolve],
+        pullRequestAuthor: author,
+      });
+    expect(p(resolve.author!).threads[0]!.resolution).toBe("resolved");
+    expect(p().threads[0]!.resolution).toBe("unresolved");
+  });
+
   it("keeps damaged and unsupported metadata in the conversation with its classification", () => {
     const damaged = issueComment(body(target({ pullRequest: 8 })));
     const unsupported = issueComment("Hi <!-- rendered-review:v9:e30= -->");

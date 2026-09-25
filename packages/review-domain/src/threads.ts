@@ -2,6 +2,13 @@
 // Rebuilds application threads from PR conversation comments (design §3): replies name their
 // thread root (`threadId`) and/or the comment they answer (`replyTo`) by GitHub comment id, as a
 // decimal string; resolve/reopen are `resolving` comments naming the thread. Pure, no I/O.
+//
+// Who may resolve follows GitHub's rule for review conversations: the pull request author and
+// people with write access to the repository. Write access is read from `author_association`:
+// OWNER, MEMBER and COLLABORATOR count. That over-counts read- or triage-only collaborators and
+// organization members without write access (people the owner already chose to trust), and a
+// member whose organization membership is private may show as CONTRIBUTOR to some viewers. We
+// accept those limits to stop drive-by resolves without an API call per commenter.
 import type { IssueComment } from "@rendered-review/github-integration";
 import { type Classification, classifyComment, type CommentContext } from "./classify.js";
 import type { NativeThread, ResolutionEvent } from "./projection.js";
@@ -17,6 +24,9 @@ export interface ReconstructedThreads {
   rest: ClassifiedComment[];
 }
 
+/** `author_association` values that stand in for write access (see the header). */
+const MAY_RESOLVE = new Set(["OWNER", "MEMBER", "COLLABORATOR"]);
+
 const byTime = (a: IssueComment, b: IssueComment) => a.createdAt.localeCompare(b.createdAt) || a.id - b.id;
 
 /**
@@ -24,9 +34,15 @@ const byTime = (a: IssueComment, b: IssueComment) => a.createdAt.localeCompare(b
  * metadata validated against `context` take part, and a reference only counts when it names an
  * older such comment loaded with the same pull request (GitHub assigns ids in creation order, so
  * references can never form a cycle). A reply whose parent is missing starts its own thread; a
- * resolution event with no thread stays in the conversation. Nothing is dropped.
+ * resolution event with no thread stays in the conversation. Nothing is dropped. A resolve or
+ * reopen from someone GitHub would not let resolve the thread is kept but marked `ignored`.
+ * `pullRequestAuthorId` is the pull request author's GitHub user id.
  */
-export function reconstructThreads(comments: IssueComment[], context: CommentContext): ReconstructedThreads {
+export function reconstructThreads(
+  comments: IssueComment[],
+  context: CommentContext,
+  pullRequestAuthorId?: number,
+): ReconstructedThreads {
   const classified = comments.map((comment) => ({ comment, classification: classifyComment(comment, context) }));
   const app = new Map(classified.filter((c) => c.classification.annotation).map((c) => [c.comment.id, c]));
   const isEvent = (c: ClassifiedComment) => c.classification.annotation!.motivation === "resolving";
@@ -65,13 +81,15 @@ export function reconstructThreads(comments: IssueComment[], context: CommentCon
         resolution: app.get(comment.id)!.classification.annotation!.resolution ?? "resolved",
         at: comment.createdAt,
         comment,
+        ...(!MAY_RESOLVE.has(comment.authorAssociation) &&
+          (comment.author === null || comment.author.id !== pullRequestAuthorId) && { ignored: true as const }),
       }));
     const replies = all.filter((c) => c !== root && !isEvent(c)).map((c) => c.comment);
     const thread: NativeThread = {
       id: `app:${root.comment.id}`,
       path: annotation.target.path,
       comments: [root.comment, ...replies.sort(byTime)],
-      resolution: events.at(-1)?.resolution === "resolved" ? "resolved" : "unresolved",
+      resolution: events.filter((e) => !e.ignored).at(-1)?.resolution === "resolved" ? "resolved" : "unresolved",
       anchor: { type: "annotation", annotation },
       metadata: Object.fromEntries(all.map((c) => [c.comment.id, c.classification])),
     };
