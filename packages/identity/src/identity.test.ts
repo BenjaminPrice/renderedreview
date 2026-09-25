@@ -299,6 +299,53 @@ describe.each(databases)("GitHub sign-in on %s", (_, open) => {
     }
   });
 
+  it("stops reading an oversized request body, before anyone is signed in", async () => {
+    for (const path of ["sign-in/social", "sign-out"]) {
+      // 4 MiB in 64 KiB chunks, with no Content-Length to go by.
+      let pulled = 0;
+      const body = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          if (++pulled > 64) return controller.close();
+          controller.enqueue(new Uint8Array(64 * 1024).fill(32));
+        },
+      });
+      const response = await identity.handle(
+        new Request(`${BASE}/api/auth/${path}`, {
+          method: "POST",
+          headers: { origin: BASE, "content-type": "application/json" },
+          body,
+          duplex: "half",
+        } as RequestInit),
+      );
+      expect(response.status, path).toBe(413);
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      expect(pulled, path).toBeLessThan(4);
+    }
+  });
+
+  it("refuses to start sign-in or linking from another site (CSRF)", async () => {
+    const { cookie } = await signIn(identity, "/");
+    for (const [path, provider] of [
+      ["sign-in/social", "github"],
+      ["link-social", "github-public"],
+    ]) {
+      for (const contentType of ["application/json", "text/plain"]) {
+        const response = await (
+          path === "link-social" ? await createIdentity({ config: publicConfig, db, baseURL: BASE }) : identity
+        ).handle(
+          new Request(`${BASE}/api/auth/${path}`, {
+            method: "POST",
+            headers: { origin: "https://evil.example", "content-type": contentType, cookie },
+            body: JSON.stringify({ provider, callbackURL: "/" }),
+          }),
+        );
+        // A form-encodable body is refused before the origin check even runs.
+        expect(response.status, `${path} ${contentType}`).toBe(contentType === "text/plain" ? 415 : 403);
+        expect(response.headers.getSetCookie(), `${path} ${contentType}`).toEqual([]);
+      }
+    }
+  });
+
   it("rejects cross-site sign-out (CSRF) and signs out same-site", async () => {
     const { cookie } = await signIn(identity, "/");
     const signOut = (origin: string) =>

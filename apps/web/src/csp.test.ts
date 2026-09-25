@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { loadConfig } from "@rendered-review/runtime";
 import { expect, test } from "vitest";
-import { contentSecurityPolicy, createNonce } from "./csp";
+import { contentSecurityPolicy, createNonce, secureResponse } from "./csp";
 
 const config = (url?: string) => loadConfig({ HOSTING_MODE: "community", ACCESS_POLICY: "disabled", GITHUB_URL: url });
 
@@ -55,4 +55,25 @@ test("nonces are fresh 128-bit values", () => {
   const nonce = createNonce();
   expect(atob(nonce)).toHaveLength(16);
   expect(createNonce()).not.toBe(nonce);
+});
+
+test("every response gets the policy, no referrer and no MIME sniffing; a frame keeps its own policy", () => {
+  const page = secureResponse(Response.json({}), "Content-Security-Policy", "default-src 'self'");
+  expect(page.headers.get("content-security-policy")).toBe("default-src 'self'");
+  expect(page.headers.get("referrer-policy")).toBe("no-referrer");
+  // A proxied GitHub body must never be sniffed into HTML or script.
+  expect(page.headers.get("x-content-type-options")).toBe("nosniff");
+
+  const frame = secureResponse(
+    new Response("", { headers: { "content-security-policy": "sandbox allow-scripts" } }),
+    "Content-Security-Policy",
+    "default-src 'self'",
+  );
+  expect(frame.headers.get("content-security-policy")).toBe("sandbox allow-scripts");
+  expect(frame.headers.get("x-content-type-options")).toBe("nosniff");
+
+  // Redirects have immutable headers.
+  expect(secureResponse(Response.redirect("https://app.example/"), "X", "y").headers.get("referrer-policy")).toBe(
+    "no-referrer",
+  );
 });

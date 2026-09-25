@@ -18,6 +18,7 @@ export async function checkCsp(url: string): Promise<void> {
   assert.match(csp, /(^|;\s*)worker-src 'self'\s*(;|$)/, `CSP should allow only same-origin Workers: ${csp}`);
   // Links out (GitHub, external images) must not reveal which PR the reader was viewing.
   assert.equal(page.headers.get("referrer-policy"), "no-referrer");
+  assert.equal(page.headers.get("x-content-type-options"), "nosniff");
   const scripts = (await page.text()).match(/<script\b[^>]*>/g) ?? [];
   assert.ok(scripts.length > 0, "page rendered no scripts");
   for (const tag of scripts) assert.ok(tag.includes(`nonce="${nonce}"`), `script without nonce: ${tag}`);
