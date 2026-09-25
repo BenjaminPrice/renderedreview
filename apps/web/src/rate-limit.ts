@@ -54,11 +54,16 @@ export async function hmacHex(secret: string | Uint8Array<ArrayBuffer>, info: st
 
 // Without BETTER_AUTH_SECRET (public-only deployments) keys are only stable within this process
 // or isolate, which is all the in-memory limiters need; on Workers the bindings then count per isolate.
-const processSecret = crypto.getRandomValues(new Uint8Array(32));
+// Created on first use: Workers forbid random values at global scope.
+let processSecret: Uint8Array<ArrayBuffer> | undefined;
 
 /** The rate limit key for a client address. Requests without a known address share one bucket. */
 export const addressKey = (config: AppConfig, address: string | undefined) =>
-  hmacHex(config.authSecret ?? processSecret, "rendered-review rate limit v1", address ?? "unknown");
+  hmacHex(
+    config.authSecret ?? (processSecret ??= crypto.getRandomValues(new Uint8Array(32))),
+    "rendered-review rate limit v1",
+    address ?? "unknown",
+  );
 
 /** Counts one request (or `cost`) against `key`; the refusal when over the limit, logged by name. */
 export async function checkLimit(

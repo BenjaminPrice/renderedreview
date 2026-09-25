@@ -24,7 +24,12 @@ function start(env: NodeJS.ProcessEnv) {
 }
 
 // 1. Valid config: serves /health on PORT.
-const server = start({ PORT: port, HOSTING_MODE: "community", ACCESS_POLICY: "disabled" });
+const server = start({
+  PORT: port,
+  HOSTING_MODE: "community",
+  ACCESS_POLICY: "disabled",
+  RATE_LIMIT_GUEST_PER_MINUTE: "3",
+});
 try {
   let response: Response | undefined;
   for (let attempt = 0; attempt < 50 && !response; attempt++) {
@@ -49,6 +54,16 @@ try {
   const webhook = await fetch(`http://127.0.0.1:${port}/api/github/webhook`, { method: "POST" });
   assert.equal(webhook.status, 404);
   console.log("ok: the webhook endpoint is off without a webhook secret");
+
+  // Guest reads are limited per socket address: a spoofed X-Forwarded-For does not reset the count.
+  const guest = (i: number) =>
+    fetch(`http://127.0.0.1:${port}/api/github/public/github.com/not-allowed`, {
+      headers: { "x-forwarded-for": `203.0.113.${i}` },
+    });
+  const statuses = [];
+  for (let i = 0; i < 4; i++) statuses.push((await guest(i)).status);
+  assert.deepEqual(statuses, [403, 403, 403, 429]);
+  console.log("ok: the guest proxy is rate limited per client address");
 } finally {
   server.child.kill();
 }
