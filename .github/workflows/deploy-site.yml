@@ -1,0 +1,47 @@
+name: Deploy site
+
+# Manual only. Deploys the marketing site (apps/site) as Cloudflare Workers static assets.
+# Requires the CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID secrets on the chosen GitHub
+# environment. See docs/deploy-site.md.
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Cloudflare environment
+        type: choice
+        options: [preview, production]
+        default: preview
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-site-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  site:
+    # Production deploys only from main.
+    if: inputs.environment != 'production' || github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/site.yml
+
+  deploy:
+    needs: site
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      WRANGLER_SEND_METRICS: "false"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: jetify-com/devbox-install-action@8c6a66ed6273138b1915457069de78cb52fe3bd7 # v0.15.0
+        with:
+          devbox-version: 0.17.2
+          enable-cache: true
+      - run: devbox run -- pnpm install --frozen-lockfile
+      - run: devbox run -- pnpm --filter @rendered-review/site build
+      - name: Deploy
+        run: devbox run -- sh -c 'cd apps/site && pnpm exec wrangler deploy --env "$ENVIRONMENT"'
+        env:
+          ENVIRONMENT: ${{ inputs.environment }}
