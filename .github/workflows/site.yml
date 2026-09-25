@@ -1,0 +1,37 @@
+name: Site
+
+# The marketing site (apps/site). Runs only when the site or what it builds from changes, so
+# app-only changes skip it; ci.yml skips site-only changes.
+on:
+  pull_request:
+    paths: &site
+      - "apps/site/**"
+      - "packages/design-tokens/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/site.yml"
+      - ".github/workflows/deploy-site.yml"
+  push:
+    branches: [main]
+    paths: *site
+  # Reused by the site deploy workflow so every deploy passes the same checks.
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  site:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: jetify-com/devbox-install-action@8c6a66ed6273138b1915457069de78cb52fe3bd7 # v0.15.0
+        with:
+          devbox-version: 0.17.2
+          enable-cache: true
+      - run: devbox run -- pnpm install --frozen-lockfile
+      - run: devbox run -- pnpm format:check
+      - run: devbox run -- pnpm lint
+      - run: devbox run -- pnpm --filter @rendered-review/site typecheck
+      # Builds the site, then checks the output: links, prices, SEO, CSP-safe markup, axe.
+      - run: devbox run -- pnpm --filter @rendered-review/site test

@@ -1,9 +1,15 @@
 name: CI
 
+# The marketing site has its own workflow (site.yml); site-only changes skip the app checks here.
 on:
   pull_request:
+    paths-ignore: &site-only
+      - "apps/site/**"
+      - ".github/workflows/site.yml"
+      - ".github/workflows/deploy-site.yml"
   push:
     branches: [main]
+    paths-ignore: *site-only
   # Reused by the deploy workflow so every deploy passes the same checks.
   workflow_call:
 
