@@ -9,6 +9,10 @@
 // revives it or grants it repositories: a late `created` stays deleted. Other events carry no
 // usable event time, so the last delivery wins; `localInstallation` only trusts the tables where a
 // stale row cannot cause a wrong "no" (see there).
+//
+// Grants are stored for selected-repositories installations only. An all-repositories installation
+// covers every repository of its owner, so its grants would say nothing, and writing one per
+// repository would make a large organization's delivery run past D1's per-request query limit.
 import { log, type LogFields, type SqlDatabase } from "@rendered-review/runtime";
 import type { WebhookDelivery, WebhookHandler, WebhookHandlers } from "./webhook";
 
@@ -191,6 +195,10 @@ const onInstallation = logged(async ({ action, payload }, store) => {
   if (action === "suspend") inst.suspendedAt ??= store.now;
   if (action === "unsuspend") inst.suspendedAt = null;
   if (!(await store.installation(inst))) return { outcome: "stale", installationId: inst.id };
+  if (inst.selection === "all") {
+    await store.revoke(inst.id);
+    return { outcome: "applied", installationId: inst.id, count: 0 };
+  }
   await store.grant(inst, repos);
   return { outcome: "applied", installationId: inst.id, count: repos.length };
 });
@@ -202,13 +210,12 @@ const onInstallationRepositories = logged(async ({ payload }, store) => {
   const removed = repositories(p?.repositories_removed);
   if (!inst || !added || !removed) return { outcome: "invalid", installationId: installationIdOf(p) };
   await store.owner(inst.account);
-  const [previous] = await store.db.all<{ selection: string }>(
-    "SELECT repository_selection AS selection FROM github_installation WHERE host = ? AND github_id = ?",
-    [store.host, inst.id],
-  );
   if (!(await store.installation(inst))) return { outcome: "stale", installationId: inst.id };
-  // Grants recorded under "all" are every repository GitHub listed then, not the new selection.
-  if (previous?.selection === "all" && inst.selection === "selected") await store.revoke(inst.id);
+  if (inst.selection === "all") {
+    await store.revoke(inst.id);
+    return { outcome: "applied", installationId: inst.id, count: 0 };
+  }
+  // From "all" there are no grants yet: `added` is the new selection.
   await store.grant(inst, added);
   await store.revoke(
     inst.id,
@@ -258,8 +265,13 @@ export const installationHandlers: WebhookHandlers = {
  * Is the app installed on `owner/repo`, according to the webhook-fed tables? `undefined` means the
  * tables cannot say, so the caller must ask GitHub: nothing is known about the owner (webhooks off,
  * or installed before they were on), or a selected-repositories installation has no grant for the
- * repository (its grant list may predate the webhooks, or a rename may not have arrived yet).
- * Only a deleted or suspended installation is a local "no".
+ * repository (its grant list may predate the webhooks, or a rename may not have arrived yet), or
+ * every installation known for the owner is deleted (a reinstall's `created` may have been missed).
+ * Only a live but suspended installation is a local "no".
+ *
+ * Stale "yes" is possible: a `removed` delivered before its `added`, or a missed account rename
+ * whose old login someone else takes. GitHub then refuses the app token's write, and the user
+ * sees that error.
  */
 export async function localInstallation(
   db: SqlDatabase,
@@ -280,5 +292,5 @@ export async function localInstallation(
   if (rows.length === 0) return undefined;
   const active = rows.filter((row) => !row.deleted && !row.suspended);
   if (active.some((row) => row.selection === "all" || Number(row.granted) === 1)) return true;
-  return active.length === 0 ? false : undefined;
+  return active.length === 0 && rows.some((row) => !row.deleted) ? false : undefined;
 }
