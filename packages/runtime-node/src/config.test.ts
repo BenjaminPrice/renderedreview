@@ -26,6 +26,12 @@ describe("loadNodeConfig", () => {
     expect(loadNodeConfig({ ...env, GITHUB_APP_PRIVATE_KEY_FILE: path }).github.app?.privateKey).toBe(pem);
   });
 
+  it("requires PUBLIC_URL in hosted and dedicated mode: on Node the Host header would pick the origin", () => {
+    const dedicated = { ...env, HOSTING_MODE: "dedicated", GITHUB_APP_PRIVATE_KEY: "pem" };
+    expect(() => loadNodeConfig(dedicated)).toThrow(/PUBLIC_URL required when HOSTING_MODE is dedicated/);
+    expect(loadNodeConfig({ ...dedicated, PUBLIC_URL: "https://rr.example" }).publicUrl).toBe("https://rr.example");
+  });
+
   it("reports a key file it cannot read", () => {
     const missing = join(tmpdir(), "rr-missing", "app.pem");
     expect(() => loadNodeConfig({ ...env, GITHUB_APP_PRIVATE_KEY_FILE: missing })).toThrow(ConfigError);

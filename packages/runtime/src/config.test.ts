@@ -23,6 +23,7 @@ const hosted: Env = {
   BILLING_API_KEY: "billing-api-key-value",
   BILLING_WEBHOOK_SECRET: "billing-webhook-secret-value",
   GITHUB_PUBLIC_READ_TOKEN: "public-read-token-value",
+  PUBLIC_URL: "https://review.example.com",
 };
 
 function problems(env: Env, options?: LoadConfigOptions): string[] {
@@ -187,6 +188,39 @@ describe("loadConfig", () => {
       const config = loadConfig({ ...worker, GITHUB_APP_PRIVATE_KEY: stored }, { databaseBinding: true });
       expect(config.github.app?.privateKey).toBe(pem);
     }
+  });
+
+  const community: Env = { HOSTING_MODE: "community", ACCESS_POLICY: "disabled" };
+
+  it("pins PUBLIC_URL to an origin: https, or http only for localhost", () => {
+    const withUrl = (PUBLIC_URL: string) => loadConfig({ ...community, PUBLIC_URL }).publicUrl;
+    expect(withUrl("https://review.example.com")).toBe("https://review.example.com");
+    expect(withUrl("https://review.example.com/")).toBe("https://review.example.com");
+    expect(withUrl("https://Review.Example.com:8443")).toBe("https://review.example.com:8443");
+    expect(withUrl("http://localhost:3000")).toBe("http://localhost:3000");
+    expect(loadConfig(community).publicUrl).toBeUndefined();
+    for (const bad of [
+      "review.example.com",
+      "http://review.example.com",
+      "https://review.example.com/app",
+      "https://review.example.com/?a=1",
+      "https://review.example.com/#x",
+      "https://user:pw@review.example.com",
+      "ftp://review.example.com",
+    ]) {
+      expect(problems({ ...community, PUBLIC_URL: bad }), bad).toEqual([
+        `PUBLIC_URL must be an https:// origin with no path, query or fragment (or http://localhost for development), got "${bad}"`,
+      ]);
+    }
+  });
+
+  it("requires PUBLIC_URL outside community mode when the runtime takes the origin from the Host header", () => {
+    const { PUBLIC_URL: _, ...rest } = hosted;
+    expect(problems(rest, { requirePublicUrl: true })).toEqual([
+      "PUBLIC_URL required when HOSTING_MODE is hosted on this runtime (the public origin, e.g. https://review.example.com)",
+    ]);
+    expect(() => loadConfig(rest)).not.toThrow();
+    expect(() => loadConfig(community, { requirePublicUrl: true })).not.toThrow();
   });
 
   it("rejects malformed values", () => {

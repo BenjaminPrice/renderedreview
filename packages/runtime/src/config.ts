@@ -34,6 +34,12 @@ export interface AppConfig {
   databaseUrl?: string;
   /** Only in hosted mode. */
   billing?: { provider: BillingProviderName; apiKey: string; webhookSecret: string };
+  /**
+   * The public origin (`https://host[:port]`, or `http://localhost[:port]`). When set, every request
+   * is treated as addressed to it, whatever its Host header: auth callbacks, redirects and CSRF
+   * origin checks follow it.
+   */
+  publicUrl?: string;
 }
 
 export type Env = Readonly<Record<string, string | undefined>>;
@@ -46,6 +52,11 @@ export interface LoadConfigOptions {
    * Config stays platform-neutral, so the loader never reads files itself.
    */
   githubAppPrivateKeyFile?: string;
+  /**
+   * The runtime takes the request origin from the Host header (Node), so hosted and dedicated
+   * deployments must pin it with PUBLIC_URL.
+   */
+  requirePublicUrl?: boolean;
 }
 
 export class ConfigError extends Error {
@@ -197,6 +208,18 @@ export function loadConfig(env: Env, options: LoadConfigOptions = {}): AppConfig
     if (creds) billing = { provider, ...creds };
   }
 
+  const rawPublicUrl = read("PUBLIC_URL");
+  const publicUrl = rawPublicUrl && publicOrigin(rawPublicUrl);
+  if (rawPublicUrl && !publicUrl) {
+    problems.push(
+      `PUBLIC_URL must be an https:// origin with no path, query or fragment (or http://localhost for development), got "${rawPublicUrl}"`,
+    );
+  } else if (!rawPublicUrl && options.requirePublicUrl && hostingMode !== "community") {
+    problems.push(
+      `PUBLIC_URL required when HOSTING_MODE is ${hostingMode} on this runtime (the public origin, e.g. https://review.example.com)`,
+    );
+  }
+
   if (problems.length > 0) {
     throw new ConfigError(
       problems,
@@ -213,7 +236,15 @@ export function loadConfig(env: Env, options: LoadConfigOptions = {}): AppConfig
     authSecret,
     databaseUrl,
     billing,
+    publicUrl: publicUrl || undefined,
   };
+}
+
+/** `raw` as a bare origin, or undefined unless it is https (http only for localhost) with nothing after the host. */
+function publicOrigin(raw: string): string | undefined {
+  const url = parseUrl(raw);
+  if (!url || url.username || url.password || url.search || url.hash || url.pathname !== "/") return undefined;
+  if (url.protocol === "https:" || (url.protocol === "http:" && url.hostname === "localhost")) return url.origin;
 }
 
 const secretKeys = new Set([
