@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "pnpm --filter @rendered-review/web dev",
-    "build": "pnpm -r --if-present build",
+    "build": "pnpm -r --if-present --filter !@rendered-review/site build",
     "test": "vitest run",
     "bench": "vitest bench --run --reporter=verbose",
     "lint": "eslint .",
