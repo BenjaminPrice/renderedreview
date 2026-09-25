@@ -5,7 +5,14 @@
 // delivery ID is recorded in the control-plane database once the handler succeeds, so a replay of
 // a processed delivery is a no-op and a failed one runs again when GitHub redelivers it. Payloads and signatures are
 // never logged. Web Request/Response/crypto only, so Node and Workers run the same code.
-import { errorName, log, type LogFields, type RequestContext, type SqlDatabase } from "@rendered-review/runtime";
+import {
+  errorName,
+  log,
+  readBodyCapped,
+  type LogFields,
+  type RequestContext,
+  type SqlDatabase,
+} from "@rendered-review/runtime";
 import { installationHandlers } from "./installations";
 
 /** A verified, parsed delivery, as handlers receive it. */
@@ -76,7 +83,7 @@ export async function receiveWebhook(
   // Well-formed, but still unverified until the signature check: rejected lines may carry made-up IDs.
   Object.assign(fields, { deliveryId: id, githubEvent: event });
 
-  const body = await readCapped(request, MAX_WEBHOOK_BYTES);
+  const body = await readBodyCapped(request, MAX_WEBHOOK_BYTES);
   if (!body) return reject(413, "too-large");
   if (!(await verifySignature(secret, request.headers.get("x-hub-signature-256"), body)))
     return reject(401, "bad-signature");
@@ -113,25 +120,6 @@ export async function receiveWebhook(
 
 // Own keys only, so an event named like an Object.prototype member never resolves to one.
 const pick = (handlers: WebhookHandlers, key: string) => (Object.hasOwn(handlers, key) ? handlers[key] : undefined);
-
-/** The body's bytes, or undefined once it exceeds `max`; a declared Content-Length is not trusted. */
-async function readCapped(request: Request, max: number): Promise<Uint8Array<ArrayBuffer> | undefined> {
-  if (Number(request.headers.get("content-length")) > max) return undefined;
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  const reader = request.body?.getReader();
-  for (;;) {
-    const chunk = await reader?.read();
-    if (!chunk || chunk.done) break;
-    size += chunk.value.byteLength;
-    if (size > max) {
-      await reader?.cancel();
-      return undefined;
-    }
-    chunks.push(chunk.value);
-  }
-  return new Uint8Array(await new Blob(chunks as BlobPart[]).arrayBuffer());
-}
 
 /** Web Crypto's HMAC verify compares in constant time. */
 async function verifySignature(secret: string, header: string | null, body: Uint8Array<ArrayBuffer>) {
