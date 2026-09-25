@@ -111,7 +111,12 @@ describe("proxyUserGitHub", () => {
 
   describe("private repositories", () => {
     const privateRepo = () =>
-      Response.json({ private: true, visibility: "private", owner: { id: 100, login: "acme", type: "Organization" } });
+      Response.json({
+        id: 4242,
+        private: true,
+        visibility: "private",
+        owner: { id: 100, login: "acme", type: "Organization" },
+      });
     const withPrivate = (entitlement: EntitlementCheck | undefined) => {
       const t = setup({ entitlement });
       const upstream = t.fetch.getMockImplementation()!;
@@ -160,7 +165,13 @@ describe("proxyUserGitHub", () => {
       const { call } = withPrivate(async () => ({ allowed: false, reason: "trial-expired" }));
       const res = await call("github.com/repos/acme/ended/pulls/1");
       expect(res.status).toBe(403);
-      expect(await res.json()).toEqual({ code: "trial-expired", message: TRIAL_EXPIRED, upgradeUrl: UPGRADE_URL });
+      // The repository ID (GitHub just showed it to this viewer) lets the page find this PR's drafts.
+      expect(await res.json()).toEqual({
+        code: "trial-expired",
+        message: TRIAL_EXPIRED,
+        upgradeUrl: UPGRADE_URL,
+        repositoryId: 4242,
+      });
     });
 
     it("are refused with the reason when the owner's plan does not cover them", async () => {

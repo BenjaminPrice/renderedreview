@@ -50,12 +50,12 @@ const deny = (status: number, category: string, message: string) => {
   return res;
 };
 const reauth = () => deny(401, "reauth", "Sign in with GitHub again");
-const notEntitled = (reason: string) => {
+const notEntitled = (reason: string, repositoryId?: number) => {
   const ended = reason === "trial-expired";
   log.info("github.user_proxy", { category: ended ? reason : "not-entitled", status: 403 });
   return Response.json(
     ended
-      ? { code: reason, message: TRIAL_EXPIRED, upgradeUrl: UPGRADE_URL }
+      ? { code: reason, message: TRIAL_EXPIRED, upgradeUrl: UPGRADE_URL, repositoryId }
       : { message: NOT_ENTITLED, code: "not-entitled", reason },
     { status: 403, headers: { "cache-control": "no-store", vary: "Cookie" } },
   );
@@ -117,7 +117,8 @@ export async function proxyUserGitHub(
       operation: "read",
     });
     if (!decision) return deny(403, "private-repo-unsupported", PRIVATE_REPO_UNSUPPORTED);
-    if (!decision.allowed) return notEntitled(decision.reason);
+    // The ID lets an ended trial's page find this PR's drafts; GitHub just showed this viewer the repository.
+    if (!decision.allowed) return notEntitled(decision.reason, facts.id);
     if (decision.reason === "trial" && decision.validUntil)
       served = { ...PRIVATE, [TRIAL_ENDS_HEADER]: decision.validUntil };
   }
