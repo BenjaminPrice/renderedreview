@@ -1,0 +1,18 @@
+---
+// SPDX-License-Identifier: AGPL-3.0-only
+import Base from "../layouts/Base.astro";
+import Ext from "../components/Ext.astro";
+import { APP_URL } from "../site";
+---
+
+<Base title="Page not found · Rendered Review" description="This page doesn't exist on renderedreview.com. The Rendered Review app is at renderedreview.dev." noindex>
+  <div class="wrap plain">
+    <div class="kicker">404</div>
+    <h1>Page not found</h1>
+    <p>There's nothing at this address. If you were opening a pull request, the app lives at renderedreview.dev.</p>
+    <div class="ctas">
+      <a class="btn btn-primary" href="/">Go to the home page</a>
+      <Ext class="btn" href={APP_URL}>Open the app</Ext>
+    </div>
+  </div>
+</Base>

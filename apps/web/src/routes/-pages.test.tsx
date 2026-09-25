@@ -244,7 +244,7 @@ describe("signed-in and sign-in states", () => {
           JSON.stringify({
             code: "trial-expired",
             message: "The private-repository trial for this owner has ended",
-            upgradeUrl: "/pricing",
+            upgradeUrl: "https://renderedreview.com/pricing",
           }),
           { status: 403 },
         ),
@@ -255,17 +255,31 @@ describe("signed-in and sign-in states", () => {
     const message = title.parentElement!;
     expect(message.textContent).toMatch(/30-day trial for mdn has ended/);
     expect(message.textContent).toMatch(/Comments already on GitHub are unaffected/);
-    const plans = within(message).getByRole("link", { name: "See plans" });
-    expect(plans.getAttribute("href")).toBe("/pricing");
-    expect(plans.getAttribute("target")).toBeNull();
+    // The deployment's pricing page, from the refusal; a new tab keeps this page's drafts to copy.
+    const plans = await within(message).findByRole("link", { name: /^See plans/ });
+    expect(plans.getAttribute("href")).toBe("https://renderedreview.com/pricing");
+    expectNewTab(plans);
     expect(message.textContent).not.toMatch(/draft/i);
+  });
+
+  it("leaves the plans link out of the trial-ended page when the deployment hides it", async () => {
+    const ended = { code: "trial-expired", message: "The private-repository trial for this owner has ended" };
+    const requested: string[] = [];
+    stubGitHub(signedIn((url) => (requested.push(url), json(JSON.stringify(ended), { status: 403 }))));
+    renderApp("/github.com/mdn/content/pull/45377");
+    const message = (await heading("Private-repository trial ended")).parentElement!;
+    // The page rereads the refusal for its details; check once that answer has rendered.
+    await vi.waitFor(() => expect(requested).toContain(USER));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(within(message).queryByRole("link")).toBeNull();
+    expect(message.textContent).not.toMatch(/See plans/);
   });
 
   it("lists this pull request's stored drafts with Copy on the trial-ended page", async () => {
     const ended = JSON.stringify({
       code: "trial-expired",
       message: "The private-repository trial for this owner has ended",
-      upgradeUrl: "/pricing",
+      upgradeUrl: "https://renderedreview.com/pricing",
       repositoryId: 295774370,
     });
     stubGitHub(signedIn(() => json(ended, { status: 403 })));

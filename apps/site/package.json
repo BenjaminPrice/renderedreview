@@ -1,0 +1,26 @@
+{
+  "name": "@rendered-review/site",
+  "version": "0.0.0",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "wrangler dev",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@astrojs/markdown-remark": "^7.3.1",
+    "@rendered-review/design-tokens": "workspace:*",
+    "astro": "^7.3.3"
+  },
+  "devDependencies": {
+    "@types/jsdom": "^21.1.7",
+    "@types/node": "^24.13.6",
+    "axe-core": "^4.13.0",
+    "jsdom": "^30.1.1",
+    "wrangler": "^4.136.3"
+  }
+}

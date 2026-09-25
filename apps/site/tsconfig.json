@@ -1,0 +1,7 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node", "astro/client"]
+  },
+  "include": ["src/**/*.ts", "test", "astro.config.ts", "vitest.config.ts"]
+}

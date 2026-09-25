@@ -28,7 +28,7 @@ import { forRepository, type WriteOperation } from "./broker";
 import type { InstallationCheck } from "./installation";
 import { meteredFetch } from "./metrics";
 import { parseProxyPath, REPO_SEGMENT } from "./proxy";
-import { NOT_ENTITLED, REQUESTED_WITH, TRIAL_EXPIRED, UPGRADE_URL } from "./user-proxy";
+import { NOT_ENTITLED, REQUESTED_WITH, TRIAL_EXPIRED } from "./user-proxy";
 
 export const WRITE_PREFIX = "/api/github/write/";
 
@@ -215,6 +215,8 @@ interface Deps {
   limiter: RateLimiter;
   /** The trusted client address: starting a trial is limited per address. */
   clientAddress?: string;
+  /** Where an ended trial points (deployment config); left out of the refusal when unset. */
+  upgradeUrl?: string;
 }
 
 interface Target {
@@ -244,11 +246,11 @@ async function connect(t: Target, operation: WriteOperation["operation"], deps: 
       return refuse(403, "private-repo-unsupported", "Private repositories aren't supported yet");
     case "not-entitled":
       if (credential.reason === "trial-expired")
-        return refuse(403, "trial-expired", TRIAL_EXPIRED, { upgradeUrl: UPGRADE_URL });
+        return refuse(403, "trial-expired", TRIAL_EXPIRED, { upgradeUrl: deps.upgradeUrl });
       // Contributors already counted keep publishing; only a new one is refused.
       if (credential.reason === "trial-contributor-cap")
         return refuse(403, "trial-contributor-cap", "All of this trial's active private contributor places are taken", {
-          upgradeUrl: UPGRADE_URL,
+          upgradeUrl: deps.upgradeUrl,
         });
       return refuse(403, "not-entitled", NOT_ENTITLED, { reason: credential.reason });
     case "unavailable":

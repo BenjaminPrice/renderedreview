@@ -31,8 +31,6 @@ export const PRIVATE_REPO_UNSUPPORTED = "Private repositories aren't supported y
 export const NOT_ENTITLED = "This private repository isn't covered by a Rendered Review plan";
 /** Body of the 403 once the owner's private-repository trial has ended; the client matches on it. */
 export const TRIAL_EXPIRED = "The private-repository trial for this owner has ended";
-/** Where an ended trial points. ponytail: a placeholder path until billing has its own pages. */
-export const UPGRADE_URL = "/pricing";
 /** On private reads covered by a trial: when it ends (ISO), for the days-left indicator. */
 export const TRIAL_ENDS_HEADER = "x-rendered-review-trial-ends";
 
@@ -51,12 +49,12 @@ const deny = (status: number, category: string, message: string) => {
   return res;
 };
 const reauth = () => deny(401, "reauth", "Sign in with GitHub again");
-const notEntitled = (reason: string, repositoryId?: number) => {
+const notEntitled = (reason: string, upgradeUrl: string | undefined, repositoryId?: number) => {
   const ended = reason === "trial-expired";
   log.info("github.user_proxy", { category: ended ? reason : "not-entitled", status: 403 });
   return Response.json(
     ended
-      ? { code: reason, message: TRIAL_EXPIRED, upgradeUrl: UPGRADE_URL, repositoryId }
+      ? { code: reason, message: TRIAL_EXPIRED, upgradeUrl, repositoryId }
       : { message: NOT_ENTITLED, code: "not-entitled", reason },
     { status: 403, headers: { "cache-control": "no-store", vary: "Cookie" } },
   );
@@ -70,6 +68,7 @@ export async function proxyUserGitHub(
     fetch: unmetered = fetch,
     entitlement,
     clientAddress,
+    upgradeUrl,
   }: {
     allowedHosts: string[];
     /** Undefined when this deployment has no sign-in. */
@@ -79,6 +78,8 @@ export async function proxyUserGitHub(
     entitlement?: EntitlementCheck;
     /** The trusted client address: starting a trial is limited per address. */
     clientAddress?: string;
+    /** Where an ended trial points (deployment config); left out of the refusal when unset. */
+    upgradeUrl?: string;
   },
 ): Promise<Response> {
   if (request.method !== "GET") return reject(405, "Method not allowed");
@@ -130,7 +131,7 @@ export async function proxyUserGitHub(
     }
     if (!decision) return deny(403, "private-repo-unsupported", PRIVATE_REPO_UNSUPPORTED);
     // The ID lets an ended trial's page find this PR's drafts; GitHub just showed this viewer the repository.
-    if (!decision.allowed) return notEntitled(decision.reason, facts.id);
+    if (!decision.allowed) return notEntitled(decision.reason, upgradeUrl, facts.id);
     if (decision.reason === "trial" && decision.validUntil)
       served = { ...PRIVATE, [TRIAL_ENDS_HEADER]: decision.validUntil };
   }

@@ -22,6 +22,7 @@ export const Route = createFileRoute("/api/github/write/$")({
           approvalUrl: github.oauth && `${github.url}/settings/connections/applications/${github.oauth.clientId}`,
           limiter: context.limiters.writes,
           clientAddress: context.clientAddress(request),
+          upgradeUrl: context.config.upgradeUrl,
         });
       },
     },

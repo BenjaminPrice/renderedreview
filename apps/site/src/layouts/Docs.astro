@@ -1,0 +1,105 @@
+---
+// SPDX-License-Identifier: AGPL-3.0-only
+// The docs layout: top bar, left docs nav (a disclosure on phones), the page, "On this page".
+// No search box: with a handful of pages the nav lists them all.
+import Base from "./Base.astro";
+// After the layout, so these rules follow the base styles in the cascade.
+import "../styles/docs.css";
+import Ext from "../components/Ext.astro";
+import Logo from "../components/Logo.astro";
+import ThemeToggle from "../components/ThemeToggle.astro";
+import { docsNav } from "../docs-nav";
+import { APP_URL, REPO_URL, SPONSORS_URL } from "../site";
+
+interface Props {
+  title: string;
+  description: string;
+  /** The current page's slug, or undefined on the docs home. */
+  current?: string;
+  /** Level-2 headings for "On this page". */
+  toc?: { slug: string; text: string }[];
+}
+const { title, description, current, toc = [] } = Astro.props;
+const href = (slug: string) => `/docs/${slug}/`;
+---
+
+<Base title={title} description={description} bare>
+  <header class="top">
+    <a class="wordmark" href="/" aria-label="Rendered Review home"><Logo />Rendered Review <span class="sec">Docs</span></a>
+    <nav class="top-links" aria-label="Main">
+      <a href="/" class="hide-sm">Home</a>
+      <a href="/docs/" class="hide-sm">Docs</a>
+      <a href="/pricing/" class="hide-sm">Pricing</a>
+      <Ext class="hide-sm" href={REPO_URL} arrow>GitHub</Ext>
+      <ThemeToggle />
+      <Ext class="btn btn-sm btn-primary hide-sm" href={APP_URL}>Open a pull request</Ext>
+    </nav>
+  </header>
+
+  <div class="layout">
+    <nav class="side" aria-label="Docs">
+      <ul>
+        <li><a href="/docs/" aria-current={current ? undefined : "page"}>Overview</a></li>
+      </ul>
+      {
+        docsNav.map((group) => (
+          <>
+            <h2 id={group.id}>{group.title}</h2>
+            <ul>
+              {group.items.map((item) => (
+                <li>
+                  <a href={href(item.slug)} aria-current={item.slug === current ? "page" : undefined}>
+                    {item.label}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </>
+        ))
+      }
+    </nav>
+
+    <main class="content" id="main">
+      <details class="docnav-sm">
+        <summary>Docs menu</summary>
+        <ul>
+          <li><a href="/docs/">Overview</a></li>
+          {
+            docsNav.flatMap((group) =>
+              group.items.map((item) => (
+                <li>
+                  <a href={href(item.slug)}>{item.label}</a>
+                </li>
+              )),
+            )
+          }
+        </ul>
+      </details>
+      <slot />
+    </main>
+
+    {
+      toc.length > 0 && (
+        <aside class="toc" aria-labelledby="toc-h">
+          <h2 id="toc-h">On this page</h2>
+          <ol>
+            {toc.map((h) => (
+              <li>
+                <a href={`#${h.slug}`}>{h.text}</a>
+              </li>
+            ))}
+          </ol>
+        </aside>
+      )
+    }
+  </div>
+
+  <footer class="docs-foot">
+    <Ext href={REPO_URL} arrow>GitHub</Ext>
+    <a href="/docs/">Docs</a>
+    <a href="/pricing/">Pricing</a>
+    <a href="/commercial/">Commercial options</a>
+    <Ext href={SPONSORS_URL} arrow>GitHub Sponsors</Ext>
+    <span class="sp">© 2026 Rendered Review · AGPL-3.0-only code</span>
+  </footer>
+</Base>
