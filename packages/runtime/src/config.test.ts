@@ -215,7 +215,7 @@ describe("loadConfig", () => {
   });
 
   it("requires PUBLIC_URL outside community mode when the runtime takes the origin from the Host header", () => {
-    const { PUBLIC_URL: _, ...rest } = hosted;
+    const rest = { ...hosted, PUBLIC_URL: undefined };
     expect(problems(rest, { requirePublicUrl: true })).toEqual([
       "PUBLIC_URL required when HOSTING_MODE is hosted on this runtime (the public origin, e.g. https://review.example.com)",
     ]);
