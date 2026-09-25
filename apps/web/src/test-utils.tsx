@@ -4,6 +4,7 @@ import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } fr
 import { render } from "@testing-library/react";
 import axe from "axe-core";
 import type { ReactNode } from "react";
+import { type AppConfig, memoryLimiters, type RequestContext } from "@rendered-review/runtime";
 import { expect, vi } from "vitest";
 
 export async function renderWithRouter(ui: () => ReactNode, url = "/") {
@@ -73,3 +74,13 @@ export function stubSelectionModify() {
     this.extend(texts[i]!, offset + (forward ? 1 : -1));
   };
 }
+
+/** A server request context for `config`; the client address is whatever `x-test-client` says. */
+export const serverContext = (config: AppConfig, extra: Partial<RequestContext> = {}): RequestContext => ({
+  config,
+  secrets: { get: async () => undefined },
+  scheduler: { waitUntil: () => {} },
+  clientAddress: (request) => request.headers.get("x-test-client") ?? undefined,
+  limiters: memoryLimiters(config.limits),
+  ...extra,
+});

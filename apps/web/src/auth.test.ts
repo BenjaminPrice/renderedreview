@@ -4,12 +4,9 @@ import { loadConfig, type RequestContext } from "@rendered-review/runtime";
 import { openDatabase } from "@rendered-review/runtime-node";
 import { expect, it } from "vitest";
 import { handleAuthRequest, identityFor } from "./auth";
+import { serverContext } from "./test-utils";
 
-const base = { secrets: { get: async () => undefined }, scheduler: { waitUntil: () => {} } };
-const publicOnly: RequestContext = {
-  ...base,
-  config: loadConfig({ HOSTING_MODE: "community", ACCESS_POLICY: "disabled" }),
-};
+const publicOnly = serverContext(loadConfig({ HOSTING_MODE: "community", ACCESS_POLICY: "disabled" }));
 
 async function signInContext(): Promise<RequestContext> {
   const db = openDatabase("sqlite::memory:");
@@ -26,7 +23,7 @@ async function signInContext(): Promise<RequestContext> {
     BETTER_AUTH_SECRET: "s".repeat(32),
     DATABASE_URL: "sqlite::memory:",
   });
-  return { ...base, config, db };
+  return serverContext(config, { db });
 }
 
 it("answers 404 for every auth route when sign-in is not configured", async () => {

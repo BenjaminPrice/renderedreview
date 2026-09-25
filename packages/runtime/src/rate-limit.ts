@@ -2,6 +2,8 @@
 // Request rate limits. Each runtime supplies its limiters (Workers: the Rate Limiting binding where
 // one is configured; otherwise this in-memory window). Keys are opaque: callers pass a user ID or an
 // HMAC of a client address, never a raw address. Web Platform APIs only.
+import type { Limiters } from "./adapters";
+import type { AppConfig } from "./config";
 
 export interface RateLimiter {
   /** Counts `cost` (default 1) against `key`: 0 when allowed, else the seconds until it may retry. */
@@ -37,3 +39,10 @@ export function memoryRateLimiter({
     },
   };
 }
+
+/** Every limiter in memory, sized from config. */
+export const memoryLimiters = (limits: AppConfig["limits"]): Limiters => ({
+  guest: memoryRateLimiter({ limit: limits.guestPerMinute, periodSeconds: 60 }),
+  auth: memoryRateLimiter({ limit: limits.authPerMinute, periodSeconds: 60 }),
+  writes: memoryRateLimiter({ limit: limits.writesPerMinute, periodSeconds: 60 }),
+});

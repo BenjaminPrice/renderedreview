@@ -44,4 +44,31 @@ describe("buildRequestContext", () => {
   it("throws a readable ConfigError for invalid vars", () => {
     expect(() => buildRequestContext({}, () => {})).toThrow(ConfigError);
   });
+
+  it("takes the client address from CF-Connecting-IP only, never a client-sent X-Forwarded-For", () => {
+    const { clientAddress } = buildRequestContext({ ...publicOnly, TRUSTED_PROXY_HEADER: "x-forwarded-for" }, () => {});
+    const headers = { "cf-connecting-ip": "203.0.113.7", "x-forwarded-for": "6.6.6.6" };
+    expect(clientAddress(new Request("https://rr.example/", { headers }))).toBe("203.0.113.7");
+    expect(clientAddress(new Request("https://rr.example/", { headers: { "x-forwarded-for": "6.6.6.6" } }))).toBe(
+      undefined,
+    );
+  });
+
+  it("limits guests and sign-ins with the Rate Limiting bindings when configured", async () => {
+    const guest = { limit: vi.fn(async () => ({ success: false })) };
+    const auth = { limit: vi.fn(async () => ({ success: true })) };
+    const { limiters } = buildRequestContext({ ...publicOnly, GUEST_RATE_LIMIT: guest, AUTH_RATE_LIMIT: auth }, () => {});
+    expect(await limiters.guest.limit("k1")).toBe(60);
+    expect(guest.limit).toHaveBeenCalledWith({ key: "k1" });
+    expect(await limiters.auth.limit("k2")).toBe(0);
+    expect(auth.limit).toHaveBeenCalledWith({ key: "k2" });
+  });
+
+  it("falls back to in-memory limits from config without bindings; writes always count in memory", async () => {
+    const { limiters } = buildRequestContext({ ...publicOnly, RATE_LIMIT_GUEST_PER_MINUTE: "1" }, () => {});
+    expect(await limiters.guest.limit("k")).toBe(0);
+    expect(await limiters.guest.limit("k")).toBeGreaterThan(0);
+    expect(await limiters.writes.limit("u", 60)).toBe(0);
+    expect(await limiters.writes.limit("u")).toBeGreaterThan(0);
+  });
 });

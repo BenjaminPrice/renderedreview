@@ -5,6 +5,7 @@ import { createHmac } from "node:crypto";
 import { migrate } from "@rendered-review/control-plane";
 import { loadConfig, type RequestContext, type SqlDatabase } from "@rendered-review/runtime";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { serverContext } from "../test-utils";
 import { localInstallation } from "./installations";
 import { testDatabases } from "./test-databases";
 import { receiveWebhook } from "./webhook";
@@ -62,8 +63,6 @@ async function deliver(context: RequestContext, event: string, payload: object) 
   return (await res.json()) as { outcome: string };
 }
 
-const noScheduler = { waitUntil: () => {} };
-const noSecrets = { get: async () => undefined };
 
 describe.each(testDatabases)("installation tracking on %s", (_, open) => {
   let db: SqlDatabase;
@@ -95,7 +94,7 @@ describe.each(testDatabases)("installation tracking on %s", (_, open) => {
   beforeAll(async () => {
     ({ db, close } = await open());
     await migrate(db);
-    context = { config, secrets: noSecrets, scheduler: noScheduler, db };
+    context = serverContext(config, { db });
   });
   afterAll(() => close?.());
   beforeEach(async () => {
