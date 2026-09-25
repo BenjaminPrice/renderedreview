@@ -45,6 +45,10 @@ try {
     assert.equal(res.status, 404, path);
   }
   console.log("ok: invalid and unsupported-host PR links answer 404");
+
+  const webhook = await fetch(`http://127.0.0.1:${port}/api/github/webhook`, { method: "POST" });
+  assert.equal(webhook.status, 404);
+  console.log("ok: the webhook endpoint is off without a webhook secret");
 } finally {
   server.child.kill();
 }

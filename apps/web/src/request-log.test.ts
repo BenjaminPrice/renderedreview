@@ -9,6 +9,7 @@ describe("appRoute", () => {
   it.each([
     ["/", "/"],
     ["/health", "/health"],
+    ["/api/github/webhook", "/api/github/webhook"],
     ["/frames/mermaid", "/frames/*"],
     ["/frames/renderer", "/frames/*"],
     ["/github.com/acme/secret-app/pull/12", "/:host/:owner/:repo/pull/:number"],

@@ -12,7 +12,7 @@ const PREFIXES = [
   "/_serverFn/",
   "/assets/",
 ];
-const EXACT = new Set(["/", "/health"]);
+const EXACT = new Set(["/", "/health", "/api/github/webhook"]);
 const PULL = /^\/[^/]+\/[^/]+\/[^/]+\/pull\/\d+\/?$/;
 
 /** The route template for `pathname`, never the concrete path. */
