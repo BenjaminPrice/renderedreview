@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Hero video: loads only at 900px and wider, in the rendition matching the theme; a Pause/Play
-// button (WCAG 2.2.2); with reduced motion it never starts by itself (poster plus a large Play).
+// Hero video: loads only at 900px and wider, as the MP4 matching the theme; a Pause/Play button
+// (WCAG 2.2.2); with reduced motion it never starts by itself (poster plus a large Play).
+// Playback starts through `autoplay` once the new source can play, not with play() right after
+// load(), which raced the load and sometimes left the video stopped.
 
 export function startHeroVideo() {
   const video = document.getElementById("hero-video") as HTMLVideoElement | null;
@@ -30,27 +32,27 @@ export function startHeroVideo() {
     const name = `/video/hero${dark() ? "-dark" : ""}`;
     if (loaded === name) return;
     const time = video.currentTime;
-    const [webm, mp4] = video.querySelectorAll("source");
+    if (started) video.addEventListener("loadedmetadata", () => (video.currentTime = time), { once: true });
     video.poster = `${name}-poster.png`;
-    webm!.src = `${name}.webm`;
-    mp4!.src = `${name}.mp4`;
-    video.preload = "metadata";
-    video.load();
+    video.preload = "auto";
+    video.autoplay = !userPaused && !still.matches;
+    video.src = `${name}.mp4`;
     loaded = name;
-    if (started) video.currentTime = time;
-    if (!userPaused && !still.matches) video.play().catch(() => {});
+    sync();
   };
 
   video.addEventListener("play", () => {
     started = true;
-    userPaused = false;
     sync();
   });
   video.addEventListener("pause", sync);
   button.addEventListener("click", () => {
-    if (video.paused) void video.play();
-    else {
+    if (video.paused) {
+      userPaused = false;
+      video.play().catch(() => {});
+    } else {
       userPaused = true;
+      video.autoplay = false;
       video.pause();
     }
   });

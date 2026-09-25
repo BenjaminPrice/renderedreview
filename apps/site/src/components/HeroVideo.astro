@@ -1,7 +1,7 @@
 ---
 // SPDX-License-Identifier: AGPL-3.0-only
-// The 18-second product demo, 900px and wider only. The markup has no src or poster: the script adds
-// them when the width matches, so phones (and pages without JavaScript) never download the video.
+// The 18-second product demo (H.264 MP4), 900px and wider only. The markup has no src or poster: the
+// script adds them when the width matches, so phones (and pages without JavaScript) never download the video.
 ---
 
 <figure class="visual hero-video">
@@ -16,10 +16,7 @@
       height="720"
       aria-label="Product demo video, no sound"
       aria-describedby="hero-video-desc"
-    >
-      <source data-src="/video/hero.webm" type="video/webm" />
-      <source data-src="/video/hero.mp4" type="video/mp4" />
-    </video>
+    ></video>
     <button class="vbtn" type="button" id="hero-video-btn" aria-controls="hero-video"
       ><svg class="icon i-pause" viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 3.5v9M10.5 3.5v9"></path></svg><svg
         class="icon i-play"

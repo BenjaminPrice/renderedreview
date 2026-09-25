@@ -28,7 +28,7 @@ Pages work without JavaScript. Three small scripts add to them:
 
 ### The hero video
 
-`apps/site/public/video/` holds the rendered hero video (`hero.{webm,mp4}`, `hero-dark.{webm,mp4}`) and poster frames. They were rendered with [Remotion](https://www.remotion.dev) from a composition that draws the same markup and design tokens as the site's product preview; the Remotion project is not part of this repository and the site does not ship Remotion. Remotion's license is free for individuals and small companies; check [remotion.pro](https://www.remotion.pro) before re-rendering commercially.
+`apps/site/public/video/` holds the rendered hero video as H.264 MP4 (`hero.mp4`, `hero-dark.mp4`) and poster frames. They were rendered with [Remotion](https://www.remotion.dev) from a composition that draws the same markup and design tokens as the site's product preview; the Remotion project is not part of this repository and the site does not ship Remotion. Remotion's license is free for individuals and small companies; check [remotion.pro](https://www.remotion.pro) before re-rendering commercially.
 
 ## Environments
 

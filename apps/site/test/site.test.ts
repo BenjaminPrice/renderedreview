@@ -158,10 +158,7 @@ describe("hero video", () => {
     expect(video.getAttribute("src")).toBeNull();
     expect(video.getAttribute("poster")).toBeNull();
     expect(video.getAttribute("preload")).toBe("none");
-    for (const source of video.querySelectorAll("source")) {
-      expect(source.getAttribute("src")).toBeNull();
-      expect(source.getAttribute("data-src")).toMatch(/^\/video\/hero\.(webm|mp4)$/);
-    }
+    expect(video.querySelectorAll("source")).toHaveLength(0);
   });
 
   it("is described for screen readers and has a pause control", () => {
