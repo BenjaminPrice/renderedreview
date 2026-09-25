@@ -166,3 +166,43 @@ describe("suggestions from Rendered Review", () => {
     expect(screen.getByText(/apply it manually;/)).toBeTruthy();
   });
 });
+
+describe("a hostile comment body from GitHub", () => {
+  const HOSTILE = [
+    '<script>alert(1)</script><img src=x onerror="alert(2)">',
+    '<a href="javascript:alert(3)">js</a> <a href="data:text/html,<script>alert(4)</script>">data</a>',
+    '<svg><script>alert(5)</script></svg><iframe src="https://evil.example"></iframe>',
+    '<form action="https://evil.example"><input name="q"></form><style>body{display:none}</style>',
+    '<p style="position:fixed" data-rr-id="0" id="clobber">forged marker</p>',
+    "![tracker](https://evil.example/pixel.gif) [site](https://evil.example/page)",
+  ].join("\n\n");
+
+  it("renders no script, handler, style, frame, form or forged marker, and loads nothing untrusted", () => {
+    const { container } = render(<Markdown source={HOSTILE} />);
+    expect(container.querySelector("script, iframe, form, style, svg, object, embed")).toBeNull();
+    // Only GitHub's task-list checkbox survives, and it is inert.
+    for (const input of container.querySelectorAll("input")) {
+      expect(input.getAttribute("type")).toBe("checkbox");
+      expect(input.disabled).toBe(true);
+    }
+    for (const el of container.querySelectorAll("*")) {
+      for (const { name, value } of el.attributes) {
+        expect(name).not.toMatch(/^on|^style$|^data-rr-id$/);
+        expect(value).not.toMatch(/^\s*(javascript|data|vbscript):/i);
+      }
+    }
+    // The tracking image is not requested: it becomes a labelled link instead.
+    expect(container.querySelector("img[src*='evil.example']")).toBeNull();
+    const image = screen.getByRole("link", { name: /external image from evil\.example/ });
+    expect(image.getAttribute("rel")).toBe("noopener noreferrer");
+    // Clobbering ids are prefixed as on GitHub.
+    expect(container.querySelector("#clobber")).toBeNull();
+  });
+
+  it("opens external links in a new tab without a referrer or opener", () => {
+    render(<Markdown source={HOSTILE} />);
+    const link = screen.getByRole("link", { name: "site" });
+    expect(link.getAttribute("target")).toBe("_blank");
+    expect(link.getAttribute("rel")).toBe("noopener noreferrer");
+  });
+});
