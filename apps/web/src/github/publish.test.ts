@@ -232,6 +232,22 @@ describe("credential selection", () => {
     expect(writes()).toHaveLength(0);
   });
 
+  it.each([
+    ["trial-expired", /trial for this owner has ended/],
+    ["trial-contributor-cap", /active private contributor places are taken/],
+  ] as const)("refuses %s with a typed error and the upgrade path", async (reason, message) => {
+    const { call, writes } = setup({
+      visibility: "private",
+      entitlement: async () => ({ allowed: false, reason }),
+    });
+    const res = await call("comment", comment());
+    expect(res.status).toBe(403);
+    const body = (await json(res)) as { code: string; message: string; upgradeUrl: string };
+    expect(body).toMatchObject({ code: reason, upgradeUrl: "/pricing" });
+    expect(body.message).toMatch(message);
+    expect(writes()).toHaveLength(0);
+  });
+
   it("publishes to a private repository its owner's plan covers, with the GitHub App user token", async () => {
     const { call, auth } = setup({
       visibility: "private",
