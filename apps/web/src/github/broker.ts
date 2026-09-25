@@ -3,7 +3,7 @@
 // returns must never reach the browser or a log.
 import type { EntitlementDecision } from "@rendered-review/control-plane";
 import type { Identity } from "@rendered-review/identity";
-import type { EntitlementCheck } from "../billing";
+import type { EntitlementCheck, Requester } from "../billing";
 import type { InstallationCheck } from "./installation";
 import { type RepoFacts, repoFacts } from "./proxy";
 
@@ -81,7 +81,7 @@ export async function forRepository(
     return facts.status === 401 ? { kind: "reauth" } : { kind: "unavailable", status: facts.status };
   }
   if (facts.visibility === "private") {
-    const decision = await privateAccess(host, op.repo, facts, deps.entitlement);
+    const decision = await privateAccess(host, op.repo, facts, deps.entitlement, { userId: op.userId, operation: "write" });
     if (!decision) return { kind: "private-repo-unsupported" };
     // An entitled private repository is written with the GitHub App user token (the app is installed there).
     return decision.allowed ? { kind: "user", token } : { kind: "not-entitled", reason: decision.reason };
@@ -99,10 +99,11 @@ export async function privateAccess(
   name: string | undefined,
   facts: RepoFacts,
   entitlement: EntitlementCheck | undefined,
+  requester?: Requester,
 ): Promise<EntitlementDecision | undefined> {
   // GitHub's current name wins over the requested path's (which may be a pre-rename redirect).
   name = facts.name ?? name;
   if (!entitlement || !facts.owner || !name) return undefined;
   const { id, login, type } = facts.owner;
-  return entitlement({ host, owner: login, name, ownerId: id, ownerType: type });
+  return entitlement({ host, owner: login, name, ownerId: id, ownerType: type }, requester);
 }
