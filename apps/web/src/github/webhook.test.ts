@@ -269,4 +269,43 @@ describe.each(databases)("receiveWebhook on %s", (_, open) => {
       expect(await rows()).toEqual(["f-1"]);
     });
   });
+
+  describe("logging", () => {
+    const logged = () =>
+      (["info", "warn", "error"] as const).flatMap((level) =>
+        vi.mocked(console[level]).mock.calls.map(([line]) => JSON.parse(line as string) as Record<string, unknown>),
+      );
+
+    it("logs one github.webhook event per delivery with its ID, event, action, outcome and duration", async () => {
+      const failing = { ping: async () => Promise.reject(new TypeError("boom")) };
+      const body = JSON.stringify({ action: "created", secretMarker: "payload-body-marker" });
+      await receiveWebhook(delivery("installation", body, { id: "l-1" }), context, { installation: async () => {} });
+      await receiveWebhook(delivery("installation", body, { id: "l-1" }), context, { installation: async () => {} });
+      await receiveWebhook(delivery("star", body, { id: "l-2" }), context);
+      await receiveWebhook(delivery("ping", PING, { id: "l-3" }), context, failing);
+      await receiveWebhook(delivery("ping", PING, { id: "l-4", headers: { "x-hub-signature-256": null } }), context);
+      const events = logged().filter((e) => e.event === "github.webhook");
+      expect(events.map(({ durationMs, ...rest }) => (expect(durationMs).toBeTypeOf("number"), rest))).toEqual(
+        expect.arrayContaining([
+          { level: "info", event: "github.webhook", deliveryId: "l-1", githubEvent: "installation", action: "created", outcome: "accepted", status: 200 },
+          { level: "info", event: "github.webhook", deliveryId: "l-1", githubEvent: "installation", action: "created", outcome: "duplicate", status: 200 },
+          { level: "info", event: "github.webhook", deliveryId: "l-2", githubEvent: "star", action: "created", outcome: "ignored", status: 200 },
+          { level: "error", event: "github.webhook", deliveryId: "l-3", githubEvent: "ping", outcome: "failed", status: 500, error: "TypeError" },
+          { level: "warn", event: "github.webhook", deliveryId: "l-4", githubEvent: "ping", outcome: "rejected", status: 401, category: "bad-signature" },
+        ]),
+      );
+      expect(events).toHaveLength(5);
+    });
+
+    it("never logs the payload, the signature or the secret", async () => {
+      const body = JSON.stringify({ action: "created", secretMarker: "payload-body-marker" });
+      await receiveWebhook(delivery("installation", body), context, { installation: async () => {} });
+      await receiveWebhook(delivery("installation", body, { headers: { "x-hub-signature-256": sign("x") } }), context);
+      await receiveWebhook(delivery("ping", "{not json payload-body-marker"), context);
+      const output = JSON.stringify(logged());
+      expect(output).not.toContain("payload-body-marker");
+      expect(output).not.toContain("sha256=");
+      expect(output).not.toContain(SECRET);
+    });
+  });
 });
