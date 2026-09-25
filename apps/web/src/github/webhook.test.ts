@@ -31,7 +31,7 @@ const sign = (body: string | Uint8Array, secret = SECRET) =>
 let deliveries = 0;
 function delivery(
   event: string,
-  body = PING,
+  body: string | Uint8Array<ArrayBuffer> = PING,
   { id = `d-${++deliveries}`, headers = {} as Record<string, string | null> } = {},
 ): Request {
   const all: Record<string, string | null> = {
@@ -187,6 +187,20 @@ describe.each(databases)("receiveWebhook on %s", (_, open) => {
       expect(streamed.headers.get("content-length")).toBeNull();
       expect((await receiveWebhook(streamed, context)).status).toBe(413);
       expect(await rows()).toEqual([]);
+    });
+
+    it("verifies the signature over the exact raw bytes, not a text round trip of them", async () => {
+      // 0xff is not UTF-8: decoding and re-encoding turns it into U+FFFD (ef bf bd).
+      const raw = new Uint8Array([...new TextEncoder().encode('{"zen":"'), 0xff, ...new TextEncoder().encode('"}')]);
+      const roundTripped = new TextEncoder().encode(new TextDecoder().decode(raw));
+      expect(roundTripped).not.toEqual(raw);
+      const signedRaw = await receiveWebhook(delivery("ping", raw), context);
+      expect(signedRaw.status).not.toBe(401);
+      const signedRoundTrip = await receiveWebhook(
+        delivery("ping", raw, { headers: { "x-hub-signature-256": sign(roundTripped) } }),
+        context,
+      );
+      expect(signedRoundTrip.status).toBe(401);
     });
 
     it("rejects a signed body that is not valid JSON with 400", async () => {
