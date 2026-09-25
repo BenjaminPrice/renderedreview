@@ -4,7 +4,7 @@
 // its JSON is parsed or anything is written. Deliveries are deduplicated by delivery ID in the
 // control-plane database, then dispatched to a handler by event name. Payloads and signatures are
 // never logged. Web Request/Response/crypto only, so Node and Workers run the same code.
-import type { RequestContext, SqlDatabase } from "@rendered-review/runtime";
+import { errorName, log, type LogFields, type RequestContext, type SqlDatabase } from "@rendered-review/runtime";
 
 /** A verified, parsed delivery, as handlers receive it. */
 export interface WebhookDelivery {
@@ -36,9 +36,6 @@ const DELIVERY_ID = /^[\w-]{1,100}$/;
 
 type Outcome = "accepted" | "duplicate" | "ignored" | "rejected" | "failed";
 
-const reply = (status: number, outcome: Outcome, reason?: string) =>
-  Response.json({ outcome, ...(reason && { reason }) }, { status, headers: { "cache-control": "no-store" } });
-
 export async function receiveWebhook(
   request: Request,
   context: RequestContext,
@@ -48,13 +45,24 @@ export async function receiveWebhook(
   const { db } = context;
   // Without a secret nothing can be verified, so the endpoint does not exist.
   if (!secret || !db) return new Response(null, { status: 404 });
-  const reject = (status: number, reason: string) => reply(status, "rejected", reason);
+
+  const started = Date.now();
+  const fields: LogFields = {};
+  const reply = (status: number, outcome: Outcome, extra: Pick<LogFields, "category" | "error"> = {}) => {
+    const level = outcome === "failed" ? "error" : outcome === "rejected" ? "warn" : "info";
+    log[level]("github.webhook", { ...fields, outcome, status, ...extra, durationMs: Date.now() - started });
+    const body = { outcome, ...(extra.category && { reason: extra.category }) };
+    return Response.json(body, { status, headers: { "cache-control": "no-store" } });
+  };
+  const reject = (status: number, category: string) => reply(status, "rejected", { category });
 
   if (request.method !== "POST") return reject(405, "method-not-allowed");
   if (!/^application\/json\s*(;|$)/i.test(request.headers.get("content-type") ?? ""))
     return reject(415, "unsupported-media-type");
   const event = request.headers.get("x-github-event") ?? "";
   const id = request.headers.get("x-github-delivery") ?? "";
+  // The logger drops values that fail its own checks, so unvalidated headers are safe to pass.
+  Object.assign(fields, { deliveryId: id, githubEvent: event });
   if (!EVENT.test(event) || !DELIVERY_ID.test(id)) return reject(400, "missing-headers");
 
   const body = await readCapped(request, MAX_WEBHOOK_BYTES);
@@ -70,6 +78,7 @@ export async function receiveWebhook(
   }
   const action = (payload as { action?: unknown } | null)?.action;
   const delivery: WebhookDelivery = { id, event, action: typeof action === "string" ? action : undefined, payload };
+  fields.action = delivery.action;
   const handler = pick(handlers, `${event}.${delivery.action}`) ?? pick(handlers, event);
   if (!handler) return reply(200, "ignored");
 
@@ -81,12 +90,12 @@ export async function receiveWebhook(
   if (changes === 0) return reply(200, "duplicate");
   try {
     await handler(delivery, { ...context, db });
-  } catch {
+  } catch (error) {
     // Release the claim so a redelivery (GitHub does not retry by itself) runs the handler again.
     // Handlers must therefore be idempotent. ponytail: a crash between claim and release leaves the
     // delivery marked processed; add a status column and a stale-claim sweep if that shows up.
     await db.run("DELETE FROM processed_webhook_event WHERE source = ? AND delivery_id = ?", ["github", id]);
-    return reply(500, "failed");
+    return reply(500, "failed", { error: errorName(error) });
   }
   return reply(200, "accepted");
 }
