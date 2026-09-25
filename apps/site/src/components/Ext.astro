@@ -1,0 +1,15 @@
+---
+// SPDX-License-Identifier: AGPL-3.0-only
+// A link to another site: new tab, no opener or referrer, and the accessible name says so.
+interface Props {
+  href: string;
+  class?: string;
+  /** Show the ↗ marker (text links; buttons leave it off). */
+  arrow?: boolean;
+}
+const { href, class: className, arrow = false } = Astro.props;
+---
+
+<a href={href} target="_blank" rel="noopener noreferrer" class:list={[className, { ext: arrow }]}
+  ><slot /><span class="sr-only"> (opens in new tab)</span></a
+>

@@ -1,0 +1,74 @@
+---
+// SPDX-License-Identifier: AGPL-3.0-only
+// The review screen drawn with the app's tokens: the hero on phones and without JavaScript.
+---
+
+<div class="pv" role="img" aria-label="Illustration of the Rendered Review screen: an example RFD rendered as a document. The phrase 'retries failed deliveries indefinitely' is highlighted, and a connector line runs from it to its thread in the comment rail, marked as a GitHub review thread on line 12. A second highlighted phrase connects to a thread further down.">
+  <div class="pv-top" aria-hidden="true">
+    <span class="wordmark"><span class="logo"><svg viewBox="0 0 14 14"><path d="M3 4h8M3 7h8M3 10h5"/></svg></span><span class="wm-text">Rendered Review</span></span>
+    <span class="pv-sep"></span>
+    <span class="pv-prt"><b>Define bounded retry policy for webhook deliveries #123</b><span><span class="pv-pill">Open</span>acme/widgets · 3 docs changed</span></span>
+    <span class="pv-actions"><span class="pv-fake-btn">Open in GitHub</span><span class="pv-fake-btn primary">Review <span class="pv-count">2</span></span></span>
+  </div>
+  <div class="pv-body" aria-hidden="true">
+    <div class="pv-side">
+      <div class="pv-seg"><span class="on">Changed docs 3</span><span>All docs 9</span></div>
+      <div class="pv-file on"><span class="pv-badge a">A</span><span>rfd/0042-webhook-retries.md</span><span class="pv-n">3</span></div>
+      <div class="pv-file"><span class="pv-badge m">M</span><span>reliability.mdx</span><span class="pv-n">1</span></div>
+      <div class="pv-file"><span class="pv-badge m">M</span><span>README.md</span></div>
+    </div>
+    <div class="pv-doc">
+      <div class="pv-meta"><span>State <b>discussion</b></span><span>Authors <b>Maya Chen</b></span><span>Updated <b>2026-09-22</b></span></div>
+      <h4>RFD 0042: Bounded retries for webhook deliveries</h4>
+      <h5>Summary</h5>
+      <p class="pv-chg mod">Today the dispatcher <span class="pv-hl">retries failed deliveries indefinitely</span><span class="pv-anchor a1"><span class="w-dot on"></span><span class="w-h on"></span><span class="pv-thread active pv-float">
+        <span class="pv-c">
+          <span class="pv-who"><span class="pv-av">PK</span><b>priya-k</b><span>2h</span></span>
+          <span class="pv-q">retries failed deliveries indefinitely</span>
+          Indefinitely? The proposal caps it at 8 tries. Should the summary say "until the cap"?
+        </span>
+        <span class="pv-foot"><span class="pv-gh">Review thread · L12</span><b>Reply · Resolve</b></span>
+      </span></span>, which lets one broken endpoint hold a worker slot for days. This RFD proposes a bounded schedule with jitter and a <span class="pv-hl idle">dead-letter queue</span><span class="pv-anchor a2"><span class="w-dot"></span><span class="w-elbow"></span><span class="w-in"></span><span class="pv-thread pv-float">
+        <span class="pv-c">
+          <span class="pv-who"><span class="pv-av">JL</span><b>jlo</b><span>1d</span></span>
+          <span class="pv-q">dead-letter queue</span>
+          Who gets paged when this fills up?
+        </span>
+      </span></span>.</p>
+      <h5>Proposal</h5>
+      <p class="pv-chg add">After the final attempt, the event moves to the dead-letter queue.</p>
+      <div class="pv-diagram">
+        <svg viewBox="0 0 420 70" role="presentation">
+          <defs><marker id="pvArrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path class="arrow" d="M0 0L8 4L0 8z"/></marker></defs>
+          <rect class="node" x="4" y="18" width="92" height="34" rx="6"/><text x="50" y="39" text-anchor="middle">Delivery</text>
+          <rect class="node" x="160" y="18" width="100" height="34" rx="6"/><text x="210" y="39" text-anchor="middle">Retry, backoff</text>
+          <rect class="node dlq" x="322" y="18" width="94" height="34" rx="6"/><text x="369" y="39" text-anchor="middle">Dead-letter</text>
+          <path class="edge" d="M96 35H158" marker-end="url(#pvArrow)"/><path class="edge" d="M260 35H320" marker-end="url(#pvArrow)"/>
+          <text x="127" y="28" text-anchor="middle" class="lbl">fails</text><text x="290" y="28" text-anchor="middle" class="lbl">8 tries</text>
+        </svg>
+        <div class="pv-dcap"><span>mermaid</span><span>Fit · Source</span></div>
+      </div>
+    </div>
+    <div class="pv-rail">
+      <div class="pv-railh">Comments <span class="n">3</span></div>
+      <div class="pv-switch"><span class="track"><span class="knob"></span></span>Show connectors <span class="pref">· your preference</span></div>
+      <div class="pv-chips"><span class="pv-chip">Current 2</span><span class="pv-chip">Resolved 1</span><span class="pv-chip off">Outdated 0</span></div>
+      <div class="pv-thread active pv-static">
+        <div class="pv-c">
+          <div class="pv-who"><span class="pv-av">PK</span><b>priya-k</b><span>2h</span></div>
+          <div class="pv-q">retries failed deliveries indefinitely</div>
+          Indefinitely? The proposal caps it at 8 tries. Should the summary say "until the cap"?
+        </div>
+        <div class="pv-foot"><span class="pv-gh">Review thread · L12</span><b>Reply · Resolve</b></div>
+      </div>
+      <div class="pv-thread pv-static">
+        <div class="pv-c">
+          <div class="pv-who"><span class="pv-av">JL</span><b>jlo</b><span>1d</span></div>
+          <div class="pv-q">dead-letter queue</div>
+          Who gets paged when this fills up?
+        </div>
+      </div>
+      <div class="pv-thread pv-res pv-static"><div class="pv-resolved"><span class="ok">&#10003;</span> Resolved · 1 comment</div></div>
+    </div>
+  </div>
+</div>

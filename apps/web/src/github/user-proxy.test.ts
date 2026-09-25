@@ -3,7 +3,9 @@ import { loadConfig } from "@rendered-review/runtime";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { entitlementCheckFor, type EntitlementCheck } from "../billing";
 import { captureLogs } from "../test-utils";
-import { proxyUserGitHub, TRIAL_ENDS_HEADER, TRIAL_EXPIRED, UPGRADE_URL, USER_PREFIX } from "./user-proxy";
+import { proxyUserGitHub, TRIAL_ENDS_HEADER, TRIAL_EXPIRED, USER_PREFIX } from "./user-proxy";
+
+const PLANS = "https://renderedreview.com/pricing";
 
 const OID = "a".repeat(40);
 const origin = "https://app.example";
@@ -19,6 +21,8 @@ function setup({
   token = "user-token" as string | null,
   upstream = (() => Response.json({}, { headers: { etag: '"e"', "set-cookie": "x=1" } })) as Upstream,
   entitlement = undefined as EntitlementCheck | undefined,
+  /** null: the deployment hides the link. */
+  upgradeUrl = PLANS as string | null,
 } = {}) {
   const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
     const url = String(input);
@@ -35,6 +39,7 @@ function setup({
       identity,
       fetch,
       entitlement,
+      upgradeUrl: upgradeUrl ?? undefined,
     });
   const auth = (i: number) => (fetch.mock.calls[i]![1]?.headers as Record<string, string>).Authorization;
   return { fetch, identity, call, auth };
@@ -117,8 +122,8 @@ describe("proxyUserGitHub", () => {
         visibility: "private",
         owner: { id: 100, login: "acme", type: "Organization" },
       });
-    const withPrivate = (entitlement: EntitlementCheck | undefined) => {
-      const t = setup({ entitlement });
+    const withPrivate = (entitlement: EntitlementCheck | undefined, upgradeUrl: string | null = PLANS) => {
+      const t = setup({ entitlement, upgradeUrl });
       const upstream = t.fetch.getMockImplementation()!;
       t.fetch.mockImplementation(async (input, init) =>
         /\/repos\/[^/]+\/[^/]+$/.test(String(input)) ? privateRepo() : upstream(input, init),
@@ -169,9 +174,16 @@ describe("proxyUserGitHub", () => {
       expect(await res.json()).toEqual({
         code: "trial-expired",
         message: TRIAL_EXPIRED,
-        upgradeUrl: UPGRADE_URL,
+        upgradeUrl: PLANS,
         repositoryId: 4242,
       });
+    });
+
+    it("leave the upgrade path out when the deployment hides it", async () => {
+      const { call } = withPrivate(async () => ({ allowed: false, reason: "trial-expired" }), null);
+      const res = await call("github.com/repos/acme/ended/pulls/1");
+      expect(res.status).toBe(403);
+      expect(await res.json()).not.toHaveProperty("upgradeUrl");
     });
 
     it("are refused with the reason when the owner's plan does not cover them", async () => {

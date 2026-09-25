@@ -1,0 +1,54 @@
+---
+// SPDX-License-Identifier: AGPL-3.0-only
+// Links only to pages that exist: legal pages (privacy, terms) are added once they have passed legal review.
+import { APP_URL, DOCS_URL, LICENSE_URL, REPO_URL, SITE_LICENSE_URL, SPONSORS_URL } from "../site";
+import Ext from "./Ext.astro";
+import Logo from "./Logo.astro";
+---
+
+<footer class="site-foot">
+  <div class="wrap">
+    <div class="foot">
+      <div class="about">
+        <span class="wordmark"><Logo />Rendered Review</span>
+        <p>Review GitHub pull requests of Markdown and MDX docs as rendered documents.</p>
+      </div>
+      <nav aria-labelledby="foot-product">
+        <h2 id="foot-product">Product</h2>
+        <ul>
+          <li><a href="/#how">How it works</a></li>
+          <li><a href="/pricing/">Pricing</a></li>
+          <li><a href="/commercial/">Commercial options</a></li>
+          <li><a href="/programs/">Startups &amp; Education</a></li>
+          <li><Ext href={APP_URL} arrow>Open the app</Ext></li>
+        </ul>
+      </nav>
+      <nav aria-labelledby="foot-docs">
+        <h2 id="foot-docs">Docs</h2>
+        <ul>
+          <li><Ext href={DOCS_URL} arrow>Documentation</Ext></li>
+          <li><Ext href={`${DOCS_URL}/annotation-format.md`} arrow>Annotation format</Ext></li>
+          <li><Ext href={`${DOCS_URL}/deploy-cloudflare.md`} arrow>Self-hosting</Ext></li>
+        </ul>
+      </nav>
+      <nav aria-labelledby="foot-oss">
+        <h2 id="foot-oss">Open source</h2>
+        <ul>
+          <li><Ext href={REPO_URL} arrow>GitHub</Ext></li>
+          <li><Ext href={SPONSORS_URL} arrow>GitHub Sponsors</Ext></li>
+          <li><Ext href={LICENSE_URL} arrow>AGPL-3.0-only</Ext></li>
+        </ul>
+      </nav>
+      <nav aria-labelledby="foot-company">
+        <h2 id="foot-company">Company</h2>
+        <ul>
+          <li><a href="/contact/">Contact</a></li>
+        </ul>
+      </nav>
+    </div>
+    <div class="legal">
+      <span>© 2026 Rendered Review. Rendered Review is not affiliated with GitHub.</span>
+      <span>Code: AGPL-3.0-only. Site content: <Ext href={SITE_LICENSE_URL}>separate license</Ext>.</span>
+    </div>
+  </div>
+</footer>

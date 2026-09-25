@@ -1,0 +1,52 @@
+---
+// SPDX-License-Identifier: AGPL-3.0-only
+// Every page: head (SEO, canonical on renderedreview.com, Open Graph), skip link, header and footer.
+import "../styles/base.css";
+import Footer from "../components/Footer.astro";
+import Header from "../components/Header.astro";
+import { SITE_URL } from "../site";
+
+interface Props {
+  title: string;
+  description: string;
+  /** Kept out of search results (404, coming-soon pages). */
+  noindex?: boolean;
+}
+const { title, description, noindex = false } = Astro.props;
+// The 404 page is served at any missing address, so it names no canonical URL of its own.
+const notFound = Astro.url.pathname.startsWith("/404");
+const canonical = new URL(Astro.url.pathname, SITE_URL).href;
+const image = `${SITE_URL}/video/hero-poster.png`;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    {noindex && <meta name="robots" content="noindex" />}
+    {!notFound && <link rel="canonical" href={canonical} />}
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <meta name="color-scheme" content="light dark" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Rendered Review" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    {!notFound && <meta property="og:url" content={canonical} />}
+    <meta property="og:image" content={image} />
+    <meta property="og:image:width" content="1280" />
+    <meta property="og:image:height" content="720" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <script is:inline src="/theme.js"></script>
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <Header />
+    <main id="main">
+      <slot />
+    </main>
+    <Footer />
+  </body>
+</html>

@@ -14,6 +14,7 @@ export const Route = createFileRoute("/api/github/user/$")({
           allowedHosts: allowedHosts(context.config),
           identity: await identityFor(context, new URL(request.url).origin),
           entitlement: entitlementCheckFor(context.config, context.db),
+          upgradeUrl: context.config.upgradeUrl,
         }),
     },
   },

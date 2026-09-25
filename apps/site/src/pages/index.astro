@@ -1,0 +1,110 @@
+---
+// SPDX-License-Identifier: AGPL-3.0-only
+import Check from "../components/Check.astro";
+import Ext from "../components/Ext.astro";
+import HeroVideo from "../components/HeroVideo.astro";
+import Pricing from "../components/Pricing.astro";
+import ProductPreview from "../components/ProductPreview.astro";
+import Base from "../layouts/Base.astro";
+// After the layout, so these rules follow the base styles in the cascade.
+import "../styles/home.css";
+import { APP_URL } from "../site";
+
+const worksWith = ["GitHub.com", "Markdown and MDX", "Mermaid and other diagrams", "Keyboard and screen reader"];
+---
+
+<Base
+  title="Rendered Review: review the docs in a pull request as documents"
+  description="Review the Markdown and MDX in a GitHub pull request as rendered pages. Comments are saved to the pull request in GitHub. Free for public repositories."
+>
+  <div class="wrap hero" id="top">
+    <a class="eyebrow" href="#features">Free for public repositories · open source</a>
+    <h1>Review the docs in a pull request as documents</h1>
+    <p class="lede">
+      Rendered Review opens the Markdown and MDX files in a GitHub pull request as formatted pages. Select the words you
+      mean and comment on them. Every comment is saved to the pull request in GitHub, so reviewers who stay in GitHub see
+      it too.
+    </p>
+    <div class="ctas">
+      <Ext class="btn btn-primary" href={APP_URL}>Open a pull request</Ext>
+      <a class="btn" href="#how">See how it works</a>
+    </div>
+    <p class="fine">Or put <code>renderedreview.dev/</code> in front of any pull request URL.</p>
+    <HeroVideo />
+    <div class="visual static-preview">
+      <ProductPreview />
+    </div>
+    <ul class="works-with" aria-label="Compatibility">
+      {
+        worksWith.map((item) => (
+          <li>
+            <Check />
+            {item}
+          </li>
+        ))
+      }
+    </ul>
+  </div>
+
+  <section class="alt" id="how">
+    <div class="wrap">
+      <div class="sec-head"><div class="kicker">How it works</div><h2>Three steps, and GitHub stays in charge</h2><p>No new place to keep comments. Rendered Review reads the pull request from GitHub and writes your feedback back to it.</p></div>
+      <ol class="steps">
+        <li><h3>Open the pull request</h3><p>Paste a pull request URL, follow the link the GitHub Action posts on the PR, or change <code>github.com/…</code> to <code>renderedreview.dev/github.com/…</code>.</p></li>
+        <li><h3>Read and select</h3><p>Changed and unchanged docs render as pages, with changed sections marked. Select a phrase, sentence, table cell or diagram and write your comment.</p></li>
+        <li><h3>Publish to GitHub</h3><p>Your comment is posted to the pull request in the closest form GitHub supports. The next section shows which.</p></li>
+      </ol>
+    </div>
+  </section>
+
+  <section id="where" aria-labelledby="where-h">
+    <div class="wrap">
+      <div class="sec-head"><div class="kicker">Comments live in GitHub</div><h2 id="where-h">Where your comment ends up</h2><p>Rendered Review keeps no copy of your review. Each comment becomes a GitHub object that anyone on the pull request can read and answer.</p></div>
+      <ol class="flow">
+        <li>
+          <div><div class="case">You select text on a changed line</div><div class="snip chg"><span class="doc-path">docs/rfd/0042-webhook-retries.md</span><p>Each delay includes <span class="hl">full jitter of up to 20%</span><span class="wire" aria-hidden="true"></span> so recovering endpoints are not hit at once.</p></div></div>
+          <div class="gh-card"><div class="h"><b>priya-k</b> commented on line 24<span class="kind">Review thread</span></div><div class="b"><blockquote>full jitter of up to 20%</blockquote><p>"Full jitter" usually means random in [0, delay). Which one do we mean?</p></div></div>
+        </li>
+        <li>
+          <div><div class="case">You select text the PR didn't change, in a changed file</div><div class="snip"><span class="doc-path">docs/rfd/0042-webhook-retries.md</span><p>The dispatcher <span class="hl">retries failed deliveries indefinitely</span><span class="wire" aria-hidden="true"></span>, holding a worker slot for days.</p></div></div>
+          <div class="gh-card"><div class="h"><b>priya-k</b> commented on the file<span class="kind">File comment</span></div><div class="b"><blockquote>retries failed deliveries indefinitely</blockquote><p>Do we know how long the longest one ran? A number here would make the case.</p></div></div>
+        </li>
+        <li>
+          <div><div class="case">You comment on a document the PR didn't touch</div><div class="snip"><span class="doc-path">docs/reliability.md</span><p>Webhook consumers must respond within <span class="hl">10 seconds</span><span class="wire" aria-hidden="true"></span>.</p></div></div>
+          <div class="gh-card"><div class="h"><b>jlo</b> commented<span class="kind">PR comment</span></div><div class="b"><div class="ref">docs/reliability.md · permalink @ e41f0c2</div><blockquote>10 seconds</blockquote><p>Does the new timeout change this?</p></div></div>
+        </li>
+        <li>
+          <div><div class="case">You suggest a change on a changed line</div><div class="snip chg"><span class="doc-path">docs/rfd/0042-webhook-retries.md</span><p>After the <del>last</del> <ins>final</ins><span class="wire" aria-hidden="true"></span> attempt the event moves to the dead-letter queue.</p></div></div>
+          <div class="gh-card"><div class="h"><b>mchen</b> suggested a change<span class="kind">GitHub suggestion</span></div><div class="b"><div class="snip-sug"><del>After the last attempt</del><ins>After the final attempt</ins></div><p>The author can apply it from GitHub with one click.</p></div></div>
+        </li>
+      </ol>
+      <p class="flow-foot">Comments made directly in GitHub show up in Rendered Review too, so it doesn't matter where each reviewer works.</p>
+    </div>
+  </section>
+
+  <section class="alt" id="features">
+    <div class="wrap">
+      <div class="sec-head"><div class="kicker">Features</div><h2>Built for reading, not diffing</h2></div>
+      <div class="features">
+        <div class="feature"><div class="fi"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M5 4L1.5 8 5 12M11 4l3.5 4-3.5 4"/></svg></div><h3>Markdown and MDX</h3><p>GitHub Flavored Markdown, front matter and alerts. MDX components show as labelled source, and nothing in the file is run.</p></div>
+        <div class="feature"><div class="fi"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="5.5" width="4" height="4" rx="1"/><rect x="10.5" y="2" width="4" height="4" rx="1"/><rect x="10.5" y="10" width="4" height="4" rx="1"/><path d="M5.5 7.5h2.5V4h2.5M8 7.5V12h2.5"/></svg></div><h3>Diagrams, rendered</h3><p>Mermaid, Graphviz, Vega, WaveDrom, maps and STL models render in the browser. Comment on the diagram or its source.</p></div>
+        <div class="feature"><div class="fi"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2.5 1.5"/></svg></div><h3>Comments survive revisions</h3><p>After a push, comments are matched to the new text. Uncertain matches are marked outdated, never dropped.</p></div>
+        <div class="feature"><div class="fi"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z"/></svg></div><h3>Unchanged docs too</h3><p>Switch from changed docs to all docs and comment on any Markdown file in the repository at that commit.</p></div>
+        <div class="feature"><div class="fi"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6"/><path d="M6.5 5.5l4 2.5-4 2.5z"/></svg></div><h3>One link per pull request</h3><p>An optional GitHub Action posts a single Rendered Review link on each PR that changes Markdown.</p></div>
+        <div class="feature"><div class="fi"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5l1.9 4 4.3.5-3.2 3 .9 4.3L8 11.2l-3.9 2.1.9-4.3-3.2-3 4.3-.5z"/></svg></div><h3>Open source</h3><p>AGPL-3.0-only. The code is on GitHub, and issues and pull requests are welcome.</p></div>
+      </div>
+    </div>
+  </section>
+
+
+  <Pricing />
+
+  <div class="wrap cta-band">
+    <h2>Try it on a pull request you're reviewing</h2>
+    <p>Public repositories are free and need no setup.</p>
+    <div class="ctas">
+      <Ext class="btn btn-primary" href={APP_URL}>Open a pull request</Ext>
+      <a class="btn" href="#pricing">See pricing</a>
+    </div>
+  </div>
+</Base>

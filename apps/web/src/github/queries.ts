@@ -170,15 +170,21 @@ export const trialEndsQuery = (id: PrIdentity) =>
     staleTime: Infinity,
   });
 
-/** The repository ID an ended trial's refusal names, so the ended page can find the PR's drafts. */
-export const trialEndedRepositoryQuery = (host: string, owner: string, repo: string) =>
+/**
+ * What an ended trial's refusal names: the repository ID, so the ended page can find the PR's drafts,
+ * and the deployment's plans page, when it has one.
+ */
+export const trialEndedQuery = (host: string, owner: string, repo: string) =>
   queryOptions({
-    queryKey: ["trial-ended-repository", host, owner.toLowerCase(), repo.toLowerCase()],
+    queryKey: ["trial-ended", host, owner.toLowerCase(), repo.toLowerCase()],
     queryFn: async () => {
       const path = `repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
       const res = await fetch(`${USER_PREFIX}${host}/${path}`, { headers: { "X-Requested-With": REQUESTED_WITH } });
-      const body = (await res.json().catch(() => null)) as { repositoryId?: unknown } | null;
-      return Number.isSafeInteger(body?.repositoryId) ? (body!.repositoryId as number) : null;
+      const body = (await res.json().catch(() => null)) as { repositoryId?: unknown; upgradeUrl?: unknown } | null;
+      return {
+        repositoryId: Number.isSafeInteger(body?.repositoryId) ? (body!.repositoryId as number) : null,
+        upgradeUrl: typeof body?.upgradeUrl === "string" ? body.upgradeUrl : null,
+      };
     },
     staleTime: Infinity,
   });

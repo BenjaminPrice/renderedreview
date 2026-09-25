@@ -1,0 +1,161 @@
+---
+// SPDX-License-Identifier: AGPL-3.0-only
+// Plans, rendered from src/pricing.ts. The monthly/annual switch is two radio buttons and CSS (:has),
+// so it works without JavaScript and with the keyboard.
+import { APP_URL, DOCS_URL } from "../site";
+import { annualPrice, formatUsd, plans, TRIAL_CONTRIBUTORS, TRIAL_DAYS } from "../pricing";
+import Check from "./Check.astro";
+import Ext from "./Ext.astro";
+
+interface Props {
+  /** h1 on the standalone pricing page, h2 on the home page. */
+  heading?: "h1" | "h2";
+}
+const { heading: Heading = "h2" } = Astro.props;
+const Sub = Heading === "h1" ? "h2" : "h3";
+
+const included = [
+  "Rendered review for changed and unchanged Markdown.",
+  "Contextual comments and replies.",
+  "Native and extended suggestions.",
+  "Historical and resolved discussions.",
+  "GitHub-originated comment interoperability.",
+  "Annotation validation and fallback behavior.",
+  "PR deep links and GitHub Action integration.",
+];
+const notCounted = [
+  "Reading.",
+  "Unpublished local drafts.",
+  "Activity performed directly in GitHub.",
+  "Repeated actions by an already active user.",
+  "Public-repository activity.",
+  "Automated webhook or GitHub Action activity.",
+];
+---
+
+<section class="alt" id="pricing" aria-labelledby="pricing-h">
+  <div class="wrap">
+    <div class="annot">
+      <div class="txt">
+        <div class="kicker">Pricing</div>
+        <Heading id="pricing-h">Free for public repositories</Heading>
+        <p>
+          Private repositories are priced by active private contributors: people who publish through Rendered Review in a
+          month. <span class="hl">Reading is always free.</span><span class="wire note-wire" aria-hidden="true"
+            ><span class="el"></span><span class="in"></span></span
+          ><span class="note note-float" role="note" aria-label="Margin note on: Reading is always free."
+            ><span class="c"
+              ><span class="who"><span class="av" aria-hidden="true">RR</span><b>Who you pay for</b></span><span class="q"
+                >Reading is always free.</span
+              ><span class="p"
+                >Reviewers who only read, or who comment directly in GitHub, never count toward your plan.</span
+              ></span
+            ></span
+          >
+        </p>
+      </div>
+    </div>
+    <div class="price-top">
+      <fieldset class="billing">
+        <legend>Billing period</legend>
+        <input type="radio" name="bill" id="bill-monthly" checked /><label for="bill-monthly">Monthly</label>
+        <input type="radio" name="bill" id="bill-annual" /><label for="bill-annual">Annual · 1 month free</label>
+      </fieldset>
+    </div>
+    <div class="plans">
+      {
+        plans.map((plan) => (
+          <div class:list={["plan", { featured: plan.featured }]} data-plan={plan.name}>
+            {plan.featured && <span class="tag">Free Trial</span>}
+            <Sub>{plan.name}</Sub>
+            <p class="for">{plan.audience}</p>
+            {plan.monthly === 0 ? (
+              <div class="price">Free</div>
+            ) : (
+              <>
+                <div class="price monthly">
+                  {formatUsd(plan.monthly)} <small>/ month</small>
+                </div>
+                <div class="price annual">
+                  {formatUsd(annualPrice(plan))} <small>/ year</small>
+                </div>
+              </>
+            )}
+            <p class="cap">
+              {plan.contributors === null ? (
+                <>
+                  <b>Unlimited</b> public activity
+                </>
+              ) : (
+                <>
+                  <b>{plan.contributors}</b> active private contributor{plan.contributors === 1 ? "" : "s"}
+                </>
+              )}
+            </p>
+            {plan.overage && <p class="over">Additional active contributors: ${plan.overage}/month each</p>}
+            <Ext class={`btn${plan.featured ? " btn-primary" : ""}`} href={APP_URL}>
+              {plan.cta}
+            </Ext>
+          </div>
+        ))
+      }
+    </div>
+    <p class="cap-rule">Additional contributors never cost more than the next plan. Nobody is blocked mid-review.</p>
+    <div class="band" data-plan-enterprise>
+      <div>
+        <Sub>Enterprise</Sub>
+        <p>
+          300 or more active private contributors plus enterprise services. For GHES, legal, security, SLA, and support
+          requirements.
+        </p>
+      </div>
+      <div>
+        <div class="price sm">Contact us</div>
+        <p>Annual agreement, priced for your organization.</p>
+      </div>
+      <a class="btn" href="/contact/">Contact us</a>
+    </div>
+    <div class="band quiet">
+      <div>
+        <Sub>Self-hosting</Sub>
+        <p>Free under AGPL-3.0-only, with no plan limits. Commercial licenses and support are available.</p>
+      </div>
+      <div></div>
+      <p>
+        <Ext href={`${DOCS_URL}/deploy-cloudflare.md`}>Self-hosting docs</Ext> · <a href="/commercial/"
+          >Commercial options</a
+        >
+      </p>
+    </div>
+    <div class="included">
+      <div>
+        <Sub>Every paid plan includes</Sub>
+        <ul>
+          {
+            included.map((item) => (
+              <li>
+                <Check />
+                {item}
+              </li>
+            ))
+          }
+        </ul>
+      </div>
+      <div class="def">
+        <p>
+          <b>Who counts as an active private contributor?</b> A unique GitHub user who performs at least one write action
+          through Rendered Review in a private repository during the billing month: publishing a comment or reply,
+          submitting a review, creating a suggestion, or resolving or reopening a reconstructed thread.
+        </p>
+        <p class="lead-in">These don't count:</p>
+        <ul>{notCounted.map((item) => <li>{item}</li>)}</ul>
+      </div>
+    </div>
+    <div class="price-notes">
+      <p>
+        {TRIAL_DAYS}-day private-repository trial with Team capacity for up to {TRIAL_CONTRIBUTORS} active private
+        contributors. No credit card. It starts when the first private document is opened.
+      </p>
+    </div>
+  </div>
+</section>

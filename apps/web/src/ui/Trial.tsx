@@ -3,8 +3,9 @@
 // then only a quiet days-left badge beside the pull request's details.
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { trialEndedRepositoryQuery } from "../github/queries";
+import { trialEndedQuery } from "../github/queries";
 import { useDrafts } from "../review/drafts";
+import { ExternalLink } from "./ExternalLink";
 import { markTrialNoticeSeen, trialNoticeSeen } from "./prefs";
 
 const day = (iso: string) => new Date(iso).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
@@ -30,6 +31,13 @@ export function TrialDaysLeft({ endsAt }: { endsAt: string }) {
   );
 }
 
+/** The deployment's plans page for an ended trial; nothing when the deployment hides it. */
+export function TrialEndedPlans({ host, owner, repo }: { host: string; owner: string; repo: string }) {
+  const upgradeUrl = useQuery(trialEndedQuery(host, owner, repo)).data?.upgradeUrl;
+  // A new tab keeps this page, and the drafts listed on it, open.
+  return upgradeUrl ? <ExternalLink href={upgradeUrl}>See plans</ExternalLink> : null;
+}
+
 /**
  * An ended trial's page: the PR's drafts still in this browser (this tab's memory, or IndexedDB when
  * the user opted in to keeping private content), to copy. Nothing when there are none.
@@ -45,7 +53,7 @@ export function TrialEndedDrafts({
   repo: string;
   number: number;
 }) {
-  const repositoryId = useQuery(trialEndedRepositoryQuery(host, owner, repo)).data;
+  const repositoryId = useQuery(trialEndedQuery(host, owner, repo)).data?.repositoryId;
   return repositoryId ? <StoredDrafts host={host} repositoryId={repositoryId} number={number} /> : null;
 }
 

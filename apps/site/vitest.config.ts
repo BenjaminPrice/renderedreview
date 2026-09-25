@@ -1,0 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+import { defineConfig } from "vitest/config";
+
+export default defineConfig({
+  test: {
+    name: "site",
+    include: ["src/**/*.test.ts", "test/**/*.test.ts"],
+    globalSetup: ["test/build.ts"],
+    testTimeout: 30_000,
+  },
+});

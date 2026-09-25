@@ -12,7 +12,7 @@ export const domainPackages = ["review-domain", "markdown-domain", "diagram-doma
 const boundary = "Domain packages must not depend on runtime-specific APIs; inject them through an interface.";
 
 export default tseslint.config(
-  { ignores: ["**/dist/", "**/.output/", "**/.wrangler/", "**/routeTree.gen.ts"] },
+  { ignores: ["**/dist/", "**/.output/", "**/.wrangler/", "**/.astro/", "**/routeTree.gen.ts"] },
   js.configs.recommended,
   tseslint.configs.recommended,
   {
