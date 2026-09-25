@@ -47,6 +47,7 @@ All builds read the same environment variables (`packages/runtime/src/config.ts`
 | `DATABASE_URL` (`postgres://…`, `sqlite:./relative.db`, `sqlite:///absolute.db`)                                           | Node build, when GitHub credentials are set or the mode is not `community`   |
 | `BILLING_PROVIDER` (`polar`, `stripe`), `BILLING_API_KEY`, `BILLING_WEBHOOK_SECRET`                                        | Hosted only; ignored otherwise                                               |
 | `PORT`                                                                                                                     | Node server listen port (default 3000)                                       |
+| `PUBLIC_URL` (`https://review.example.com`, or `http://localhost:3000` for development)                                    | Node build, hosted and dedicated; optional elsewhere (see below)             |
 | `GITHUB_PUBLIC_READ_TOKEN`                                                                                                 | Optional, any mode; meant for local development and self-hosting (see below) |
 
 ### Public read token
@@ -82,7 +83,7 @@ DATABASE_URL=sqlite:./.data/rendered-review.db
 
 Relative paths in `DATABASE_URL` and `GITHUB_APP_PRIVATE_KEY_FILE` resolve from the repository root (the directory with `pnpm-workspace.yaml`), or from the working directory when run outside a checkout. The SQLite file's directory is created on first start. `.data/` is git-ignored; keep the key file and database there. To put the key in the env file instead, set `GITHUB_APP_PRIVATE_KEY` on one line with `\n` for each line break (`awk 'NF {printf "%s\\n", $0}' key.pem` prints that form); a multi-line value breaks the env file.
 
-The server must see the public origin in the request URL, because the OAuth redirect URI and cookie security follow it. Behind a TLS-terminating proxy, forward `Host` and configure the proxy so the Node server receives the public `https://` URL. Session cookies are `HttpOnly`, `SameSite=Lax` and `Secure` everywhere except `localhost`.
+The OAuth redirect URI, cookie security, redirects and the same-origin check on writes all follow the public origin. Set `PUBLIC_URL` to it: an `https://` origin with no path, query or fragment (`http://localhost:<port>` is accepted for development). The server then treats every request as addressed to that origin, whatever its `Host` header. The Node build requires it in hosted and dedicated mode. Without it (community mode), the Node server takes the origin from the request URL, so behind a TLS-terminating proxy forward `Host` and make sure the server receives the public `https://` URL. On Cloudflare Workers the request URL is already the public one, so `PUBLIC_URL` is optional there. Session cookies are `HttpOnly`, `SameSite=Lax` and `Secure` everywhere except `localhost`.
 
 GitHub access and refresh tokens are encrypted with AES-256-GCM under `ENCRYPTION_KEY` before they reach the database, and are refreshed on the server shortly before they expire. They never go to the browser. To rotate the key, move the old value to `ENCRYPTION_KEY_PREVIOUS` and set a new `ENCRYPTION_KEY`. Existing rows still decrypt, and each is re-encrypted with the new key the next time its token is refreshed (at most eight hours for GitHub App tokens). Remove `ENCRYPTION_KEY_PREVIOUS` after that.
 
