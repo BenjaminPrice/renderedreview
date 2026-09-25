@@ -3,6 +3,7 @@
 // `wrangler dev`, which needs no Cloudflare account. Two runs: public-only (no GitHub App: health,
 // home, PR routes, sign-in off), then with fake GitHub App credentials and a fresh local D1 (sign-in on).
 import { execFileSync, spawn } from "node:child_process";
+import { createHmac } from "node:crypto";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -56,6 +57,22 @@ const publish = (origin: string) =>
     body: JSON.stringify({ expectedHeadOid: "a".repeat(40), representation: "conversation", body: "smoke" }),
   });
 
+/** A GitHub webhook delivery, signed with `secret` unless it is undefined. */
+const webhook = (origin: string, id: string, secret?: string) => {
+  const body = JSON.stringify({ zen: "Design for failure.", hook_id: 1 });
+  const signature = secret && `sha256=${createHmac("sha256", secret).update(body).digest("hex")}`;
+  return fetch(`${origin}/api/github/webhook`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-github-event": "ping",
+      "x-github-delivery": id,
+      ...(signature && { "x-hub-signature-256": signature }),
+    },
+    body,
+  });
+};
+
 // 1. Public-only, as preview runs.
 await serve([], async (origin) => {
   const home = await fetch(`${origin}/`);
@@ -82,6 +99,8 @@ await serve([], async (origin) => {
   const write = await publish(origin);
   assert.equal(write.status, 404);
   console.log("ok: publishing to GitHub is off without sign-in");
+  assert.equal((await webhook(origin, "smoke-off", "any-secret")).status, 404);
+  console.log("ok: the webhook endpoint is off without a webhook secret");
 
   const sw = await fetch(`${origin}/sw.js`);
   assert.equal(sw.status, 200);
@@ -131,6 +150,13 @@ try {
     assert.equal(write.status, 401);
     assert.equal(((await write.json()) as { code: string }).code, "unauthenticated");
     console.log("ok: publishing to GitHub requires a session");
+
+    assert.equal((await webhook(origin, "smoke-unsigned")).status, 401);
+    const ping = await webhook(origin, "smoke-ping", fakeApp.GITHUB_APP_WEBHOOK_SECRET);
+    assert.deepEqual([ping.status, await ping.json()], [200, { outcome: "accepted" }]);
+    const replay = await webhook(origin, "smoke-ping", fakeApp.GITHUB_APP_WEBHOOK_SECRET);
+    assert.deepEqual([replay.status, await replay.json()], [200, { outcome: "duplicate" }]);
+    console.log("ok: signed webhooks are accepted once (D1 dedup); unsigned ones are refused");
   });
 } finally {
   rmSync(state, { recursive: true, force: true });

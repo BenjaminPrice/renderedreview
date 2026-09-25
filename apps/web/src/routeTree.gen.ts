@@ -14,6 +14,7 @@ import { Route as HealthRouteImport } from './routes/health'
 import { Route as FramesMermaidRouteImport } from './routes/frames.mermaid'
 import { Route as FramesRendererRouteImport } from './routes/frames.renderer'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
+import { Route as ApiGithubWebhookRouteImport } from './routes/api/github/webhook'
 import { Route as ApiGithubPublicSplatRouteImport } from './routes/api/github/public/$'
 import { Route as ApiGithubUserSplatRouteImport } from './routes/api/github/user/$'
 import { Route as ApiGithubWriteSplatRouteImport } from './routes/api/github/write/$'
@@ -44,6 +45,11 @@ const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   path: '/api/auth/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiGithubWebhookRoute = ApiGithubWebhookRouteImport.update({
+  id: '/api/github/webhook',
+  path: '/api/github/webhook',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiGithubPublicSplatRoute = ApiGithubPublicSplatRouteImport.update({
   id: '/api/github/public/$',
   path: '/api/github/public/$',
@@ -71,6 +77,7 @@ export interface FileRoutesByFullPath {
   '/frames/mermaid': typeof FramesMermaidRoute
   '/frames/renderer': typeof FramesRendererRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/github/webhook': typeof ApiGithubWebhookRoute
   '/api/github/public/$': typeof ApiGithubPublicSplatRoute
   '/api/github/user/$': typeof ApiGithubUserSplatRoute
   '/api/github/write/$': typeof ApiGithubWriteSplatRoute
@@ -82,6 +89,7 @@ export interface FileRoutesByTo {
   '/frames/mermaid': typeof FramesMermaidRoute
   '/frames/renderer': typeof FramesRendererRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/github/webhook': typeof ApiGithubWebhookRoute
   '/api/github/public/$': typeof ApiGithubPublicSplatRoute
   '/api/github/user/$': typeof ApiGithubUserSplatRoute
   '/api/github/write/$': typeof ApiGithubWriteSplatRoute
@@ -94,6 +102,7 @@ export interface FileRoutesById {
   '/frames/mermaid': typeof FramesMermaidRoute
   '/frames/renderer': typeof FramesRendererRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/github/webhook': typeof ApiGithubWebhookRoute
   '/api/github/public/$': typeof ApiGithubPublicSplatRoute
   '/api/github/user/$': typeof ApiGithubUserSplatRoute
   '/api/github/write/$': typeof ApiGithubWriteSplatRoute
@@ -107,6 +116,7 @@ export interface FileRouteTypes {
     | '/frames/mermaid'
     | '/frames/renderer'
     | '/api/auth/$'
+    | '/api/github/webhook'
     | '/api/github/public/$'
     | '/api/github/user/$'
     | '/api/github/write/$'
@@ -118,6 +128,7 @@ export interface FileRouteTypes {
     | '/frames/mermaid'
     | '/frames/renderer'
     | '/api/auth/$'
+    | '/api/github/webhook'
     | '/api/github/public/$'
     | '/api/github/user/$'
     | '/api/github/write/$'
@@ -129,6 +140,7 @@ export interface FileRouteTypes {
     | '/frames/mermaid'
     | '/frames/renderer'
     | '/api/auth/$'
+    | '/api/github/webhook'
     | '/api/github/public/$'
     | '/api/github/user/$'
     | '/api/github/write/$'
@@ -141,6 +153,7 @@ export interface RootRouteChildren {
   FramesMermaidRoute: typeof FramesMermaidRoute
   FramesRendererRoute: typeof FramesRendererRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
+  ApiGithubWebhookRoute: typeof ApiGithubWebhookRoute
   ApiGithubPublicSplatRoute: typeof ApiGithubPublicSplatRoute
   ApiGithubUserSplatRoute: typeof ApiGithubUserSplatRoute
   ApiGithubWriteSplatRoute: typeof ApiGithubWriteSplatRoute
@@ -184,6 +197,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAuthSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/github/webhook': {
+      id: '/api/github/webhook'
+      path: '/api/github/webhook'
+      fullPath: '/api/github/webhook'
+      preLoaderRoute: typeof ApiGithubWebhookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/github/public/$': {
       id: '/api/github/public/$'
       path: '/api/github/public/$'
@@ -221,6 +241,7 @@ const rootRouteChildren: RootRouteChildren = {
   FramesMermaidRoute: FramesMermaidRoute,
   FramesRendererRoute: FramesRendererRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
+  ApiGithubWebhookRoute: ApiGithubWebhookRoute,
   ApiGithubPublicSplatRoute: ApiGithubPublicSplatRoute,
   ApiGithubUserSplatRoute: ApiGithubUserSplatRoute,
   ApiGithubWriteSplatRoute: ApiGithubWriteSplatRoute,

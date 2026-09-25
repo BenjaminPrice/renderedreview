@@ -31,6 +31,26 @@ describe("log", () => {
     ]);
   });
 
+  it("carries a webhook delivery's ID, GitHub event and action", () => {
+    const lines = capture();
+    log.info("github.webhook", {
+      deliveryId: "72d3162e-cc78-11e3-81ab-4c9367dc0958",
+      githubEvent: "installation_repositories",
+      action: "added",
+      outcome: "accepted",
+    });
+    expect(lines()).toEqual([
+      {
+        level: "info",
+        event: "github.webhook",
+        deliveryId: "72d3162e-cc78-11e3-81ab-4c9367dc0958",
+        githubEvent: "installation_repositories",
+        action: "added",
+        outcome: "accepted",
+      },
+    ]);
+  });
+
   it("logs info and error to their console levels", () => {
     const info = capture("info");
     const error = capture("error");
