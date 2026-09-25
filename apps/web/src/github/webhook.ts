@@ -73,12 +73,21 @@ export async function receiveWebhook(
   const handler = pick(handlers, `${event}.${delivery.action}`) ?? pick(handlers, event);
   if (!handler) return reply(200, "ignored");
 
-  await db.run("INSERT INTO processed_webhook_event (source, delivery_id, processed_at) VALUES (?, ?, ?)", [
-    "github",
-    id,
-    new Date().toISOString(),
-  ]);
-  await handler(delivery, { ...context, db });
+  // Claim the delivery first: the primary key lets exactly one concurrent copy through.
+  const { changes } = await db.run(
+    "INSERT INTO processed_webhook_event (source, delivery_id, processed_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING",
+    ["github", id, new Date().toISOString()],
+  );
+  if (changes === 0) return reply(200, "duplicate");
+  try {
+    await handler(delivery, { ...context, db });
+  } catch {
+    // Release the claim so a redelivery (GitHub does not retry by itself) runs the handler again.
+    // Handlers must therefore be idempotent. ponytail: a crash between claim and release leaves the
+    // delivery marked processed; add a status column and a stale-claim sweep if that shows up.
+    await db.run("DELETE FROM processed_webhook_event WHERE source = ? AND delivery_id = ?", ["github", id]);
+    return reply(500, "failed");
+  }
   return reply(200, "accepted");
 }
 
