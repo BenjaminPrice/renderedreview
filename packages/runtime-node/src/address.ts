@@ -8,5 +8,11 @@
  */
 export function clientAddress(request: Request, trustedHeader: string | undefined): string | undefined {
   const forwarded = trustedHeader && request.headers.get(trustedHeader)?.split(",").at(-1)?.trim();
-  return forwarded || (request as Request & { ip?: string }).ip || undefined;
+  return (forwarded && withoutPort(forwarded)) || (request as Request & { ip?: string }).ip || undefined;
+}
+
+/** `1.2.3.4:5678` and `[2001:db8::1]:443` without the port; a bare IPv6 address is left alone. */
+function withoutPort(value: string) {
+  if (value.startsWith("[")) return value.slice(1, value.indexOf("]"));
+  return value.split(":").length === 2 ? value.slice(0, value.indexOf(":")) : value;
 }

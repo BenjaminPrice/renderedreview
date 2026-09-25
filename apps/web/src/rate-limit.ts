@@ -62,8 +62,31 @@ export const addressKey = (config: AppConfig, address: string | undefined) =>
   hmacHex(
     config.authSecret ?? (processSecret ??= crypto.getRandomValues(new Uint8Array(32))),
     "rendered-review rate limit v1",
-    address ?? "unknown",
+    address ? addressBucket(address) : "unknown",
   );
+
+/**
+ * What one client is: an IPv4 address, or an IPv6 /64 (a household or host usually gets a whole
+ * /64, so counting single IPv6 addresses would let one client rotate through them). IPv4-mapped
+ * IPv6 (`::ffff:1.2.3.4`) counts as its IPv4 address.
+ */
+export function addressBucket(address: string): string {
+  const a = address.toLowerCase().replace(/%.*$/, "");
+  const mapped = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/.exec(a);
+  if (mapped) return mapped[1]!;
+  if (!a.includes(":")) return a;
+  const [head = "", tail] = a.split("::");
+  const left = head ? head.split(":") : [];
+  const right = tail ? tail.split(":") : [];
+  const groups =
+    tail === undefined
+      ? left
+      : [...left, ...Array<string>(Math.max(0, 8 - left.length - right.length)).fill("0"), ...right];
+  return `${groups
+    .slice(0, 4)
+    .map((g) => (parseInt(g, 16) || 0).toString(16))
+    .join(":")}::/64`;
+}
 
 /** Counts one request (or `cost`) against `key`; the refusal when over the limit, logged by name. */
 export async function checkLimit(

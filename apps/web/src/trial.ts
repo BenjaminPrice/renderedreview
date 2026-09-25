@@ -12,7 +12,7 @@ import type { SqlDatabase } from "@rendered-review/runtime";
 import { billingAccountFor } from "./billing";
 import { activeContributors } from "./contributors";
 import type { Account } from "./github/installations";
-import { hmacHex, limited } from "./rate-limit";
+import { addressBucket, hmacHex, limited } from "./rate-limit";
 
 export const TRIAL_DAYS = 30;
 /** Active private contributors a trial covers; sales-approved trials raise it on the ledger and entitlement. */
@@ -93,7 +93,7 @@ export async function countTrialStart(
   if (requester.clientAddress)
     subjects.push([
       "network",
-      await hmacHex(secret, "rendered-review trial start v1", `${day}\n${requester.clientAddress}`),
+      await hmacHex(secret, "rendered-review trial start v1", `${day}\n${addressBucket(requester.clientAddress)}`),
     ]);
   let over = false;
   for (const [scope, subject] of subjects) {

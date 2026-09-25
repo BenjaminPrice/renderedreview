@@ -33,6 +33,15 @@ describe("addressKey", () => {
     expect(key).not.toBe(await addressKey(config, "203.0.113.7"));
   });
 
+  it("groups IPv6 clients by /64 (one household or host), after unwrapping IPv4-mapped addresses", async () => {
+    const key = (address: string) => addressKey(config, address);
+    expect(await key("2001:db8:1:2::1")).toBe(await key("2001:0db8:0001:0002:ffff:eeee:dddd:cccc"));
+    expect(await key("2001:DB8:1:2:0:0:0:9")).toBe(await key("2001:db8:1:2::1"));
+    expect(await key("2001:db8:1:3::1")).not.toBe(await key("2001:db8:1:2::1"));
+    expect(await key("::ffff:198.51.100.7")).toBe(await key("198.51.100.7"));
+    expect(await key("198.51.100.8")).not.toBe(await key("198.51.100.7"));
+  });
+
   it("puts every request without a known address in one bucket", async () => {
     expect(await addressKey(config, undefined)).toBe(await addressKey(config, undefined));
   });
