@@ -245,11 +245,22 @@ describe.each(databases)("GitHub sign-in on %s", (_, open) => {
     expect(session).not.toMatch(/; Secure/i);
   });
 
-  it("shows the signed-in viewer by GitHub login and avatar, and nothing else", async () => {
+  it("shows the signed-in viewer by GitHub login, account id and avatar, and nothing else", async () => {
     expect((await viewer(identity)).body).toBeNull();
     const { cookie } = await signIn(identity, "/");
     const { response, body } = await viewer(identity, cookie);
     expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(body).toEqual({
+      login: "octocat",
+      id: 583231,
+      avatarUrl: "https://avatars.githubusercontent.com/u/583231?v=4",
+    });
+  });
+
+  it("leaves the account id out, rather than sending null, when the GitHub account row is missing", async () => {
+    const { cookie } = await signIn(identity, "/");
+    await db.run(`DELETE FROM "account"`);
+    const { body } = await viewer(identity, cookie);
     expect(body).toEqual({ login: "octocat", avatarUrl: "https://avatars.githubusercontent.com/u/583231?v=4" });
   });
 

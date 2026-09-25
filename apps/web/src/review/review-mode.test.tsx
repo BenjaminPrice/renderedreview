@@ -494,3 +494,141 @@ it("retries a native suggestion GitHub refuses on its line as a proposed change 
   expect(retry).not.toContain("```suggestion");
   expect(retry).toContain(`\`\`\`diff\n-${LINE_26}\n+${LINE_26}!\n\`\`\``);
 });
+
+// Repairing the anchor of the viewer's own comment. octocat is GitHub user 583231.
+const ME = { login: "octocat", id: 583231, node_id: "MDQ6VXNlcjU4MzIzMQ==", type: "User" };
+const OWN = 1001;
+const OTHERS = 1002;
+const DAMAGED_BODY =
+  "> This interim\r\n\r\nWhat does *interim* mean here?  \r\nAnd why?\r\n\r\n<!-- rendered-review:v1:not base64! -->";
+function damagedComments(extra: (c: Record<string, unknown>) => void = () => {}) {
+  const [template] = JSON.parse(fixture("review-comments.json")) as Record<string, unknown>[];
+  const at = (id: number, user: object, body = DAMAGED_BODY) => ({
+    ...template,
+    id,
+    node_id: `PRRC_${id}`,
+    pull_request_review_id: 1,
+    in_reply_to_id: null,
+    path: INDEX,
+    commit_id: HEAD,
+    original_commit_id: HEAD,
+    line: 26,
+    original_line: 26,
+    start_line: null,
+    original_start_line: null,
+    side: "RIGHT",
+    subject_type: "line",
+    body,
+    user,
+    created_at: "2026-09-07T00:00:00Z",
+    updated_at: "2026-09-07T00:00:00Z",
+    html_url: `https://github.com/mdn/content/pull/45377#discussion_r${id}`,
+  });
+  const comments = [at(OWN, ME), at(OTHERS, { ...ME, login: "hamishwillee", id: 5368500 })];
+  extra(comments[0]!);
+  responses[`${API}/pulls/45377/comments?per_page=100`] = JSON.stringify(comments);
+}
+
+/** Select `word` in the first text node containing `context`; returns the selection toolbar. */
+async function select(context: string, word: string) {
+  const article = await screen.findByRole("article", { name: "Rendered document" });
+  await vi.waitFor(() => expect(article.textContent).toContain(context));
+  const walker = document.createTreeWalker(article, NodeFilter.SHOW_TEXT);
+  let text: Text | null = null;
+  while (!text && walker.nextNode())
+    if ((walker.currentNode as Text).data.includes(context)) text = walker.currentNode as Text;
+  const from = text!.data.indexOf(word);
+  document.getSelection()!.setBaseAndExtent(text!, from, text!, from + word.length);
+  article.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+  return screen.findByRole("toolbar", { name: "Selection actions" });
+}
+
+const repairButton = (name: RegExp) =>
+  within(screen.getByRole("complementary", { name: /Comments/ })).queryByRole("button", {
+    name: new RegExp(`^Repair anchor of thread by ${name.source}`),
+  });
+
+it("repairs the anchor of the viewer's own damaged comment after previewing the change", async () => {
+  responses["/api/auth/viewer"] = JSON.stringify({ login: "octocat", id: ME.id, avatarUrl: null });
+  damagedComments();
+  renderPage();
+  await threadCardFor(/L26, by octocat/);
+  // Offered on the viewer's comment only, by GitHub user id.
+  expect(repairButton(/hamishwillee/)).toBeNull();
+  await userEvent.click(repairButton(/octocat/)!);
+  const status = screen.getByRole("status", { name: "Publishing status" });
+  expect(status.textContent).toMatch(/Select the text/);
+
+  const actions = await select("This interim response indicates", "interim response");
+  expect(within(actions).queryByRole("button", { name: /^Comment/ })).toBeNull();
+  await userEvent.click(within(actions).getByRole("button", { name: /Move comment here/ }));
+  const preview = await screen.findByRole("region", { name: "Repair anchor" });
+  expect(within(within(preview).getByRole("group", { name: "Quote" })).getByText("> interim response")).toBeTruthy();
+  expect(within(preview).getByRole("group", { name: "Your comment, unchanged" }).textContent).toBe(
+    "What does *interim* mean here?  \r\nAnd why?",
+  );
+  // Nothing is sent before the explicit confirmation.
+  expect(posted.filter((p) => p.url.endsWith("/edit"))).toHaveLength(0);
+
+  responses[`${WRITE}/edit`] = JSON.stringify({ comment: { id: OWN } });
+  let sentBody = "";
+  const answer = globalThis.fetch;
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    if (String(input).endsWith("/edit")) {
+      sentBody = JSON.parse(String(init!.body)).body;
+      // What GitHub lists afterwards.
+      damagedComments((c) => (c.body = sentBody));
+    }
+    return answer(input, init);
+  });
+  await userEvent.click(within(preview).getByRole("button", { name: "Update comment" }));
+  await vi.waitFor(() => expect(status.textContent).toContain("Comment anchor updated"));
+
+  expect(posted.at(-1)).toEqual({
+    url: `${WRITE}/edit`,
+    body: {
+      commentType: "review",
+      commentId: OWN,
+      previousBody: DAMAGED_BODY,
+      body: sentBody,
+      expectedHeadOid: HEAD,
+    },
+  });
+  expect(sentBody.startsWith("> interim response\n\nWhat does *interim* mean here?  \r\nAnd why?\n\n<!--")).toBe(true);
+  const decoded = extractAnnotation(sentBody);
+  expect(decoded.status === "ok" && decoded.annotation.target).toMatchObject({
+    path: INDEX,
+    commitOid: HEAD,
+    blobOid: INDEX_BLOB,
+    selectors: expect.arrayContaining([
+      expect.objectContaining({ type: "TextQuoteSelector", exact: "interim response" }),
+    ]),
+  });
+  // Refetched: the card is placed at the new words, with nothing left to repair.
+  expect(await threadCardFor(/^Selected text · L26, by octocat/)).toBeTruthy();
+  expect(screen.queryByRole("region", { name: "Repair anchor" })).toBeNull();
+  expect(repairButton(/octocat/)).toBeNull();
+});
+
+it("refuses a new selection outside a line comment's GitHub lines, and cancels without changing the comment", async () => {
+  responses["/api/auth/viewer"] = JSON.stringify({ login: "octocat", id: ME.id, avatarUrl: null });
+  damagedComments();
+  renderPage();
+  await threadCardFor(/L26, by octocat/);
+  await userEvent.click(repairButton(/octocat/)!);
+  const actions = await select("Responses are grouped", "grouped");
+  await userEvent.click(within(actions).getByRole("button", { name: /Move comment here/ }));
+  const preview = await screen.findByRole("region", { name: "Repair anchor" });
+  expect(preview.textContent).toMatch(/GitHub keeps this comment on L26/);
+  expect(within(preview).getByRole("button", { name: "Update comment" })).toHaveProperty("disabled", true);
+  await userEvent.click(within(preview).getByRole("button", { name: "Cancel" }));
+  expect(screen.queryByRole("region", { name: "Repair anchor" })).toBeNull();
+  expect(screen.getByRole("status", { name: "Publishing status" }).textContent).not.toMatch(/Select the text/);
+  // Back to commenting: the selection toolbar offers Comment again.
+  const again = await select("Responses are grouped", "grouped");
+  expect(within(again).getByRole("button", { name: /^Comment/ })).toBeTruthy();
+  expect(posted.filter((p) => p.url.endsWith("/edit"))).toHaveLength(0);
+});
+
+const threadCardFor = async (name: RegExp) =>
+  within(await screen.findByRole("complementary", { name: /Comments/ })).findByRole("region", { name });

@@ -17,10 +17,11 @@ import {
   originalRevision,
   placementState,
   relativeTime,
+  repairTarget,
   suggestionOriginal,
   threadState,
 } from "./model";
-import { appThread, HEAD } from "./fixtures";
+import { annotation, appThread, comment, HEAD, issueComment, lineAnchor, thread as nativeThread } from "./fixtures";
 
 const line = (type: "current" | "outdated", startLine: number, endLine: number, side: "LEFT" | "RIGHT" = "RIGHT") =>
   ({ type, kind: "github-line", side, startLine, endLine, commitOid: "a".repeat(40) }) as NativeAnchor;
@@ -153,5 +154,72 @@ describe("connectorPath", () => {
 
   it("keeps the lane right of the anchor dot", () => {
     expect(connectorPath({ id: "t", cardX: 310, cardY: 0, anchorX: 300, anchorY: 50 }, 4)).toBe("M310 0H305V50H300");
+  });
+});
+
+describe("repairTarget: repairing the anchor of the viewer's own comment", () => {
+  const ME = 1; // alice, the fixtures' author
+  const unplaced = (state: ReanchorState) =>
+    ({ state, evidence: "none", confidence: 0, candidates: [] }) as ThreadPlacement["reanchor"];
+  const damagedMeta = (c: { id: number }) => ({ [c.id]: { state: "damaged" as const, reason: "x", edited: false } });
+
+  it("is offered on the viewer's application thread whose words are not in the current document", () => {
+    for (const state of ["historical-only", "unavailable", "outdated", "ambiguous"] as const) {
+      const t = appThread();
+      const target = repairTarget({ thread: t, blocks: [], reanchor: unplaced(state) }, ME);
+      expect(target).toMatchObject({ comment: t.comments[0], commentType: "issue", location: "conversation" });
+      expect(target?.annotation).toEqual(annotation());
+    }
+  });
+
+  it("is offered when the annotation doesn't match the document it names", () => {
+    expect(repairTarget({ thread: appThread(), blocks: [], damaged: "The quote doesn't match" }, ME)).toBeDefined();
+  });
+
+  it("is offered on the viewer's current line comment with damaged or unsupported metadata, within its GitHub lines", () => {
+    const c = comment({ body: "> old\n\nText\n\n<!-- rendered-review:v1:!! -->" });
+    const t = { ...nativeThread("n", lineAnchor(2, 3), "unresolved", [c]), metadata: damagedMeta(c) };
+    expect(repairTarget({ thread: t, blocks: [] }, ME)).toEqual({
+      comment: c,
+      commentType: "review",
+      location: "review-line",
+      lines: { startLine: 2, endLine: 3 },
+    });
+    const v2 = comment({ body: "> old\n\nText\n\n<!-- rendered-review:v2:e30= -->" });
+    const unsupported = { state: "unsupported" as const, edited: false };
+    const t2 = { ...nativeThread("n", lineAnchor(3), "unresolved", [v2]), metadata: { [v2.id]: unsupported } };
+    expect(repairTarget({ thread: t2, blocks: [] }, ME)).toBeDefined();
+    // An unsupported version without a quote: nothing this version knows how to rewrite.
+    const bare = comment({ body: "Text\n\n<!-- rendered-review:v2:e30= -->" });
+    const t3 = { ...nativeThread("n", lineAnchor(3), "unresolved", [bare]), metadata: { [bare.id]: unsupported } };
+    expect(repairTarget({ thread: t3, blocks: [] }, ME)).toBeUndefined();
+  });
+
+  it("is not offered on someone else's comment, even with the same login", () => {
+    const other = issueComment("Needs a limit.", { author: { login: "alice", id: 2, nodeId: "U2", type: "User" } });
+    expect(
+      repairTarget({ thread: appThread([other]), blocks: [], reanchor: unplaced("historical-only") }, ME),
+    ).toBeUndefined();
+    expect(
+      repairTarget({ thread: appThread(), blocks: [], reanchor: unplaced("historical-only") }, undefined),
+    ).toBeUndefined();
+  });
+
+  it("is not offered when the anchor is fine, or on a GitHub line comment without metadata", () => {
+    const placed = appThread();
+    expect(repairTarget({ thread: placed, blocks: [], range: {} as ThreadPlacement["range"] }, ME)).toBeUndefined();
+    expect(repairTarget({ thread: nativeThread("n", lineAnchor(3)), blocks: [] }, ME)).toBeUndefined();
+  });
+
+  it("is not offered where a new annotation would not move the comment: file, outdated or base-side comments", () => {
+    for (const anchor of [
+      { type: "file" } as const,
+      lineAnchor(3, 3, "outdated"),
+      { ...lineAnchor(3), side: "LEFT" as const },
+    ]) {
+      const c = comment({ body: "Text\n\n<!-- rendered-review:v1:!! -->" });
+      const t = { ...nativeThread("n", anchor, "unresolved", [c]), metadata: damagedMeta(c) };
+      expect(repairTarget({ thread: t, blocks: [] }, ME)).toBeUndefined();
+    }
   });
 });

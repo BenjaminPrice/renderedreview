@@ -4,7 +4,11 @@
 // annotation target, representation) and publishes with the least-privileged credential. It does
 // not rerun rendering: GitHub is the final authority on native locations. Server only; bodies and
 // tokens are never logged. Web Request/Response/fetch only.
-import { extractAnnotation, type RenderedReviewAnnotationV1 } from "@rendered-review/annotation-domain";
+import {
+  extractAnnotation,
+  type RenderedReviewAnnotationV1,
+  repairCommentBody,
+} from "@rendered-review/annotation-domain";
 import {
   createGitHubClient,
   ForbiddenError,
@@ -15,6 +19,7 @@ import {
   RateLimitError,
 } from "@rendered-review/github-integration";
 import type { Identity } from "@rendered-review/identity";
+import { anchorLines } from "@rendered-review/review-domain";
 import { log, readBodyCapped } from "@rendered-review/runtime";
 import { forRepository, type WriteOperation } from "./broker";
 import type { InstallationCheck } from "./installation";
@@ -47,13 +52,16 @@ export type PublishErrorCode =
   | "invalid-annotation"
   | "annotation-mismatch"
   | "thread-mismatch"
+  | "not-author"
+  | "comment-changed"
+  | "invalid-repair"
   | "rate-limited"
   | "oauth-org-restricted"
   | "github-rejected"
   | "github-error";
 
 const PATH = new RegExp(
-  String.raw`^(${REPO_SEGMENT})/(${REPO_SEGMENT})/pulls/(\d{1,10})/(comment|review|reply|resolve)$`,
+  String.raw`^(${REPO_SEGMENT})/(${REPO_SEGMENT})/pulls/(\d{1,10})/(comment|review|reply|resolve|edit)$`,
 );
 const OID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 const PRIVATE = { "cache-control": "private, no-store", vary: "Cookie" };
@@ -441,6 +449,53 @@ async function handle(request: Request, deps: Deps): Promise<Result> {
         throw e instanceof Refusal ? e : fromGitHub(e, deps.approvalUrl);
       });
       return { status: 200, body: { thread } };
+    }
+    case "edit": {
+      // Moves the signed-in user's own comment to a new anchor: only the body changes.
+      const { commentType, previousBody } = input;
+      if (commentType !== "issue" && commentType !== "review") invalid("commentType must be issue or review");
+      const commentId = line(input.commentId, "commentId");
+      if (typeof previousBody !== "string" || previousBody.length > MAX_BODY_LENGTH)
+        invalid("previousBody must be the comment's current body");
+      const { body, annotation } = commentBody(input.body);
+      if (!annotation) return refuse(400, "invalid-annotation", "A repaired comment needs its annotation");
+      // Only the quote, permalink and marker may change; the rest is the previous body's, byte for byte.
+      // (Re-encoding a decoded annotation is byte-stable: compact JSON parses and stringifies back unchanged.)
+      const location = commentType === "issue" ? "conversation" : "review-line";
+      if (repairCommentBody({ body: previousBody as string, annotation, location }).body !== body)
+        refuse(400, "invalid-repair", "A repair may change only the comment's quote, link and metadata");
+      const expected = oid(input.expectedHeadOid, "expectedHeadOid");
+      const { client, pr } = await connect(t, "comment", deps);
+      checkHead(pr, expected);
+      checkTarget(annotation, t.host, pr);
+      const comment = await (async () => {
+        // Collaborators may edit others' comments on GitHub; here only the author may, by account id.
+        const me = await client.getAuthenticatedUser();
+        const review = commentType === "review" ? await client.getReviewComment(t.owner, t.repo, commentId) : undefined;
+        const current = review ?? (await client.getIssueComment(t.owner, t.repo, commentId));
+        if (current.pullRequest !== pr.number) refuse(404, "not-found", "Comment not found on this pull request");
+        if (review) {
+          if (review.path !== annotation.target.path)
+            refuse(400, "annotation-mismatch", "The annotation names another file than the comment");
+          // GitHub keeps a review comment on its lines; an annotation elsewhere would never place it.
+          const selected = anchorLines({ type: "annotation", annotation })!;
+          const { line, side, startLine, startSide } = review;
+          const start = (startSide ?? "RIGHT") === "RIGHT" && startLine ? startLine : line;
+          if (line === null || side !== "RIGHT" || selected.endLine < start! || selected.startLine > line)
+            refuse(400, "invalid-repair", "The new selection must be on the comment's lines in the current head");
+        }
+        if (current.author?.id !== me.id) refuse(403, "not-author", "Only the comment's author can repair its anchor");
+        // Sent again after it landed: nothing to do. Changed since the preview: never overwrite it.
+        if (current.body === body) return current;
+        if (current.body !== previousBody)
+          refuse(409, "comment-changed", "The comment changed on GitHub since this page loaded");
+        return commentType === "issue"
+          ? client.updateIssueComment(t.owner, t.repo, commentId, body)
+          : client.updateReviewComment(t.owner, t.repo, commentId, body);
+      })().catch((e: unknown) => {
+        throw e instanceof Refusal ? e : fromGitHub(e, deps.approvalUrl);
+      });
+      return { status: 200, body: { comment } };
     }
     case "review": {
       const expected = oid(input.expectedHeadOid, "expectedHeadOid");

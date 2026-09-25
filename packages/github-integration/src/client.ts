@@ -2,6 +2,8 @@
 // GitHub REST/GraphQL client built on `fetch` alone, so the same code runs in browsers,
 // Node and Workers.
 import {
+  type Actor,
+  actor,
   type ChangedFile,
   type IssueComment,
   type PullRequest,
@@ -177,7 +179,7 @@ export function createGitHubClient(options: GitHubClientOptions = {}) {
   let rateLimit: RateLimit | undefined;
 
   async function send(
-    method: "GET" | "POST",
+    method: "GET" | "POST" | "PATCH",
     url: string,
     accept = JSON_MEDIA,
     body?: string,
@@ -295,6 +297,10 @@ export function createGitHubClient(options: GitHubClientOptions = {}) {
   const repo = (owner: string, name: string) => `/repos/${seg(owner)}/${seg(name)}`;
   const post = async (path: string, payload: object) =>
     (await send("POST", restBase + path, JSON_MEDIA, JSON.stringify(payload), 0)).body as Raw;
+  const patch = async (path: string, payload: object) =>
+    (await send("PATCH", restBase + path, JSON_MEDIA, JSON.stringify(payload), 0)).body as Raw;
+  /** The number at the end of a comment's issue or pull request API URL. */
+  const numberIn = (url: unknown) => Number(/\/(\d+)$/.exec(String(url))?.[1] ?? NaN);
   const pull = (owner: string, name: string, number: number) => `${repo(owner, name)}/pulls/${number}`;
   const setResolved = async (mutation: string, id: string) => {
     const { thread } = (
@@ -411,6 +417,37 @@ export function createGitHubClient(options: GitHubClientOptions = {}) {
     /** A PR conversation comment. */
     createIssueComment: async (owner: string, name: string, number: number, body: string): Promise<IssueComment> =>
       toIssueComment(await post(`${repo(owner, name)}/issues/${number}/comments`, { body })),
+
+    /** The user the credential acts for. */
+    getAuthenticatedUser: async (): Promise<Actor> => actor(await get("/user"))!,
+
+    /** A PR conversation comment, with the number of the pull request (issue) it is on. */
+    getIssueComment: async (
+      owner: string,
+      name: string,
+      id: number,
+    ): Promise<IssueComment & { pullRequest: number }> => {
+      const raw = await get(`${repo(owner, name)}/issues/comments/${id}`);
+      return { ...toIssueComment(raw), pullRequest: numberIn(raw.issue_url) };
+    },
+
+    /** A review comment, with the number of the pull request it is on. */
+    getReviewComment: async (
+      owner: string,
+      name: string,
+      id: number,
+    ): Promise<ReviewComment & { pullRequest: number }> => {
+      const raw = await get(`${repo(owner, name)}/pulls/comments/${id}`);
+      return { ...toReviewComment(raw), pullRequest: numberIn(raw.pull_request_url) };
+    },
+
+    /** Replaces a PR conversation comment's body. */
+    updateIssueComment: async (owner: string, name: string, id: number, body: string): Promise<IssueComment> =>
+      toIssueComment(await patch(`${repo(owner, name)}/issues/comments/${id}`, { body })),
+
+    /** Replaces a review comment's body. */
+    updateReviewComment: async (owner: string, name: string, id: number, body: string): Promise<ReviewComment> =>
+      toReviewComment(await patch(`${repo(owner, name)}/pulls/comments/${id}`, { body })),
 
     resolveReviewThread: (threadNodeId: string) => setResolved("resolveReviewThread", threadNodeId),
     unresolveReviewThread: (threadNodeId: string) => setResolved("unresolveReviewThread", threadNodeId),

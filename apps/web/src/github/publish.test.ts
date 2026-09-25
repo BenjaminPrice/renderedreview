@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // The write boundary against a mocked GitHub: nothing here reaches the network.
-import { encodeAnnotation, type RenderedReviewAnnotationV1 } from "@rendered-review/annotation-domain";
+import {
+  encodeAnnotation,
+  type RenderedReviewAnnotationV1,
+  repairCommentBody,
+} from "@rendered-review/annotation-domain";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { captureLogs } from "../test-utils";
 import { publishToGitHub, WRITE_PREFIX } from "./publish";
@@ -699,5 +703,171 @@ describe("resolve", () => {
     const res = await call("resolve", body);
     expect(res.status).toBe(400);
     expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
+describe("edit", () => {
+  const OLD = withMarker("> old quote\n\nPlease clarify", annotation({ commitOid: OTHER }));
+  const repaired = (location: "conversation" | "review-line", a = annotation(), body = OLD) =>
+    repairCommentBody({ body, annotation: a, location }).body;
+  const NEW = repaired("conversation");
+  const NEW_REVIEW = repaired("review-line");
+  const author = { login: "octocat", id: 583231, node_id: "U_1", type: "User" };
+  const stranger = { ...author, login: "mallory", id: 666 };
+  const rawComment = (extra: object = {}) => ({
+    id: 5,
+    node_id: "IC_5",
+    body: OLD,
+    user: author,
+    author_association: "MEMBER",
+    created_at: "2026-01-01T00:00:00Z",
+    updated_at: "2026-01-01T00:00:00Z",
+    html_url: "https://github.com/acme/widgets/pull/7#issuecomment-5",
+    issue_url: "https://api.github.com/repos/acme/widgets/issues/7",
+    ...extra,
+  });
+  const edit = (extra: object = {}) => ({
+    expectedHeadOid: HEAD,
+    commentType: "issue",
+    commentId: 5,
+    previousBody: OLD,
+    body: NEW,
+    ...extra,
+  });
+  const routes = (comment: object = rawComment(), me: object = author) => ({
+    "GET /user": () => Response.json(me),
+    "GET /issues/comments/5": () => Response.json(comment),
+    "PATCH /issues/comments/5": (init: RequestInit) =>
+      Response.json({ ...comment, body: JSON.parse(init.body as string).body }),
+  });
+  const patches = (fetch: ReturnType<typeof setup>["fetch"]) =>
+    fetch.mock.calls.filter(([, init]) => init?.method === "PATCH");
+
+  it("replaces the signed-in author's conversation comment body", async () => {
+    const { call, fetch } = setup({ routes: routes() });
+    const res = await call("edit", edit());
+    expect(res.status).toBe(200);
+    expect(await json(res)).toMatchObject({ comment: { id: 5, body: NEW } });
+    const sent = patches(fetch);
+    expect(sent).toHaveLength(1);
+    expect(String(sent[0]![0])).toMatch(/\/issues\/comments\/5$/);
+    expect(JSON.parse(sent[0]![1]!.body as string)).toEqual({ body: NEW });
+    expect((sent[0]![1]!.headers as Record<string, string>).Authorization).toBe("Bearer app-token");
+  });
+
+  // A review comment on head lines 2–4 of docs/a.md; the annotation selects line 3.
+  const rawReview = (extra: object = {}) => ({
+    ...rawComment({ issue_url: undefined }),
+    path: "docs/a.md",
+    line: 4,
+    start_line: 2,
+    side: "RIGHT",
+    start_side: "RIGHT",
+    pull_request_url: "https://api.github.com/repos/acme/widgets/pulls/7",
+    ...extra,
+  });
+  const reviewRoutes = (review: object = rawReview()) => ({
+    "GET /user": () => Response.json(author),
+    "GET /pulls/comments/5": () => Response.json(review),
+    "PATCH /pulls/comments/5": () => Response.json({ ...review, body: NEW_REVIEW }),
+  });
+
+  it("replaces the signed-in author's review comment body", async () => {
+    const { call, fetch } = setup({ routes: reviewRoutes() });
+    const res = await call("edit", edit({ commentType: "review", body: NEW_REVIEW }));
+    expect(res.status).toBe(200);
+    expect(JSON.parse(patches(fetch)[0]![1]!.body as string)).toEqual({ body: NEW_REVIEW });
+  });
+
+  it("refuses a body that isn't the repair of the previous one, before calling GitHub", async () => {
+    // The same valid marker, but the reviewer's text changed.
+    const { call, fetch } = setup({ routes: routes() });
+    const res = await call("edit", edit({ body: NEW.replace("Please clarify", "Please approve") }));
+    expect(res.status).toBe(400);
+    expect(await json(res)).toMatchObject({ code: "invalid-repair" });
+    expect(patches(fetch)).toHaveLength(0);
+    // Written for the other kind of comment: a permalink added or dropped.
+    const other = await call("edit", edit({ body: NEW_REVIEW }));
+    expect(await json(other)).toMatchObject({ code: "invalid-repair" });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["GitHub lines the new selection doesn't overlap", rawReview({ line: 12, start_line: 10 })],
+    ["an outdated comment, which has no current lines", rawReview({ line: null, start_line: null })],
+    ["a comment on base lines", rawReview({ side: "LEFT", start_side: "LEFT" })],
+  ])("refuses a review comment repair onto %s", async (_, review) => {
+    const { call, fetch } = setup({ routes: reviewRoutes(review) });
+    const res = await call("edit", edit({ commentType: "review", body: NEW_REVIEW }));
+    expect(res.status).toBe(400);
+    expect(await json(res)).toMatchObject({ code: "invalid-repair" });
+    expect(patches(fetch)).toHaveLength(0);
+  });
+
+  it("refuses to edit someone else's comment, by GitHub user id, without editing it", async () => {
+    // Same login, different account: only the id counts.
+    const { call, fetch } = setup({ routes: routes(rawComment({ user: { ...stranger, login: "octocat" } })) });
+    const res = await call("edit", edit());
+    expect(res.status).toBe(403);
+    expect(await json(res)).toMatchObject({ code: "not-author" });
+    expect(patches(fetch)).toHaveLength(0);
+  });
+
+  it("answers 409 stale-head when the PR moved on, without editing", async () => {
+    const { call, fetch } = setup({ head: OTHER, routes: routes() });
+    const res = await call("edit", edit());
+    expect(res.status).toBe(409);
+    expect(await json(res)).toMatchObject({ code: "stale-head", headOid: OTHER });
+    expect(patches(fetch)).toHaveLength(0);
+  });
+
+  it("refuses when the comment changed on GitHub since the preview", async () => {
+    const { call, fetch } = setup({ routes: routes(rawComment({ body: `${OLD}\n\nEdited on GitHub` })) });
+    const res = await call("edit", edit());
+    expect(res.status).toBe(409);
+    expect(await json(res)).toMatchObject({ code: "comment-changed" });
+    expect(patches(fetch)).toHaveLength(0);
+  });
+
+  it("answers a repeated edit that already landed without editing again", async () => {
+    const { call, fetch } = setup({ routes: routes(rawComment({ body: NEW })) });
+    const res = await call("edit", edit());
+    expect(res.status).toBe(200);
+    expect(patches(fetch)).toHaveLength(0);
+  });
+
+  it("refuses a comment from another pull request", async () => {
+    const { call, fetch } = setup({
+      routes: routes(rawComment({ issue_url: "https://api.github.com/repos/acme/widgets/issues/8" })),
+    });
+    const res = await call("edit", edit());
+    expect(res.status).toBe(404);
+    expect(patches(fetch)).toHaveLength(0);
+  });
+
+  it("refuses a review comment whose file isn't the annotation's", async () => {
+    const { call, fetch } = setup({ routes: reviewRoutes(rawReview({ path: "docs/b.md" })) });
+    const res = await call("edit", edit({ commentType: "review", body: NEW_REVIEW }));
+    expect(res.status).toBe(400);
+    expect(await json(res)).toMatchObject({ code: "annotation-mismatch" });
+    expect(patches(fetch)).toHaveLength(0);
+  });
+
+  it.each([
+    ["a body without an annotation", edit({ body: "Please clarify" }), "invalid-annotation"],
+    [
+      "an annotation for another PR",
+      edit({ body: repaired("conversation", annotation({ pullRequest: 9 })) }),
+      "annotation-mismatch",
+    ],
+    ["an unknown comment type", edit({ commentType: "commit" }), "invalid-request"],
+    ["a comment id that is not a number", edit({ commentId: "5/../x" }), "invalid-request"],
+    ["no previous body", edit({ previousBody: undefined }), "invalid-request"],
+  ])("refuses %s", async (_, body, code) => {
+    const { call, fetch } = setup({ routes: routes() });
+    const res = await call("edit", body);
+    expect(res.status).toBe(400);
+    expect(await json(res)).toMatchObject({ code });
+    expect(patches(fetch)).toHaveLength(0);
   });
 });
