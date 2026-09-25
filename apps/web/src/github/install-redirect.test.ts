@@ -101,6 +101,19 @@ describe("installRedirect", () => {
     expect((await install("", app(), config)).status).toBe(302);
   });
 
+  it.each([
+    ["another host", "https://evil.example/apps/rendered-review"],
+    ["a look-alike host", "https://github.com.evil.example/apps/rendered-review"],
+    ["no page", undefined],
+  ])("never redirects to an app page on %s", async (_, html_url) => {
+    const res = await install(
+      "",
+      vi.fn(async () => Response.json({ html_url })),
+    );
+    expect(res.status).toBe(502);
+    expect(res.headers.get("location")).toBeNull();
+  });
+
   it("does not exist without a GitHub App", async () => {
     const res = await install("", app(), loadConfig({ HOSTING_MODE: "community", ACCESS_POLICY: "disabled" }));
     expect(res.status).toBe(404);
