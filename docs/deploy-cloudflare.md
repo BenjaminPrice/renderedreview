@@ -32,6 +32,12 @@ For local development, put secrets in `apps/web/.dev.vars` (git-ignored), one `N
 
 Both hosted environments serve public pull requests only (`HOSTING_MODE=community`, `ACCESS_POLICY=disabled`); neither needs a billing account. Preview needs no secrets. Production also offers GitHub sign-in (see [Enable GitHub sign-in](#enable-github-sign-in)) and commenting on public repositories (see [Enable commenting on public repositories](#enable-commenting-on-public-repositories)), so its `secrets.required` lists the seven sign-in secrets plus `GITHUB_OAUTH_CLIENT_ID` and `GITHUB_OAUTH_CLIENT_SECRET`, and `wrangler deploy` refuses to run while one of them is unset. `wrangler deploy --dry-run` does not check them. Moving to `HOSTING_MODE=hosted` (private repositories) also needs the billing secrets listed at the top of `wrangler.jsonc`; add them to `secrets.required` at that point.
 
+## Rate limits
+
+Guest reads through `/api/github/public/` and sign-in steps are limited per client address (an HMAC of `CF-Connecting-IP`, which Cloudflare sets and clients cannot forge) with the Workers Rate Limiting bindings `GUEST_RATE_LIMIT` (120 a minute) and `AUTH_RATE_LIMIT` (20 a minute) in `apps/web/wrangler.jsonc`. Change a limit there, not with the `RATE_LIMIT_*` vars, which only size the in-memory fallback used without a binding. The bindings count per Cloudflare location and are eventually consistent; their period can only be 10 or 60 seconds, and the Worker tells clients to retry after 60. Each environment has its own `namespace_id`s, since bindings sharing a namespace share counters across Workers in the account. The address hash is keyed by `BETTER_AUTH_SECRET`; without it (preview) each isolate uses its own random key, so there the limits apply per isolate. Publishing (`RATE_LIMIT_WRITES_PER_MINUTE`, per user, counted in each isolate's memory because a review costs one per draft) and daily trial starts (`TRIAL_STARTS_PER_DAY`, counted in D1) are set as `vars`.
+
+These are precise, per-client limits. A Cloudflare rate limiting rule (WAF, **Security > WAF > Rate limiting rules**) in front of the zone is still recommended as the coarse flood guard, for example on requests whose path starts with `/api/`, counted per IP, blocking for a minute above a few hundred requests in ten seconds. It stops a flood before it reaches the Worker, which the bindings cannot.
+
 ## One-time setup
 
 Nothing here is automated; each step needs a Cloudflare account.

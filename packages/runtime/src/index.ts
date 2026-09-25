@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-export type { RequestContext, Scheduler, SecretStore, SqlDatabase, SqlValue } from "./adapters";
+export type { Limiters, RequestContext, Scheduler, SecretStore, SqlDatabase, SqlValue } from "./adapters";
 export {
   ConfigError,
   loadConfig,
@@ -12,4 +12,5 @@ export {
   type LoadConfigOptions,
 } from "./config";
 export { readBodyCapped } from "./body";
+export { memoryLimiters, memoryRateLimiter, type RateLimiter } from "./rate-limit";
 export { errorName, log, type LogFields } from "./log";

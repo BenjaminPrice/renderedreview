@@ -44,7 +44,15 @@ import { usePendingHighlight } from "../document/highlight";
 import { SelectionPopover } from "../document/SelectionPopover";
 import { Sidebar } from "../document/Sidebar";
 import { ExternalLink } from "../ui/ExternalLink";
-import { isPrivateRepoUnsupported, isSignInRequired, isTrialExpired, preferProxy, rateLimit } from "../github/client";
+import {
+  isAppRateLimited,
+  isPrivateRepoUnsupported,
+  isTrialStartLimited,
+  isSignInRequired,
+  isTrialExpired,
+  preferProxy,
+  rateLimit,
+} from "../github/client";
 import { allowedHosts, proxyFirstHosts } from "../github/proxy";
 import {
   blobQuery,
@@ -710,6 +718,21 @@ function ErrorState({
   }
   // Signed in, the viewer's own 5,000/hour limit replaces the shared anonymous one.
   const action = offerSignIn ? <SignInButton /> : undefined;
+  if (isTrialStartLimited(error)) {
+    return (
+      <Message title="Trial limit reached">
+        {error.message} Try again after {error.resetAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.
+      </Message>
+    );
+  }
+  if (isAppRateLimited(error)) {
+    return (
+      <Message title="Too many requests" action={action}>
+        Your network has made many requests in a short time. Try again after{" "}
+        {error.resetAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.
+      </Message>
+    );
+  }
   if (error instanceof RateLimitError) {
     return (
       <Message title="GitHub rate limit reached" action={action}>

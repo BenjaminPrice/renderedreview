@@ -260,6 +260,49 @@ describe("loadConfig", () => {
   });
 });
 
+describe("abuse controls", () => {
+  const base = { HOSTING_MODE: "community", ACCESS_POLICY: "disabled" };
+
+  it("defaults the rate limits and reads no proxy header", () => {
+    const config = loadConfig(base);
+    expect(config.trustedProxyHeader).toBeUndefined();
+    expect(config.limits).toEqual({
+      guestPerMinute: 120,
+      authPerMinute: 20,
+      writesPerMinute: 60,
+      trialStartsPerDay: 3,
+    });
+  });
+
+  it("reads the trusted proxy header (lower-cased) and limit overrides", () => {
+    const config = loadConfig({
+      ...base,
+      TRUSTED_PROXY_HEADER: " X-Forwarded-For ",
+      RATE_LIMIT_GUEST_PER_MINUTE: "600",
+      RATE_LIMIT_AUTH_PER_MINUTE: "5",
+      RATE_LIMIT_WRITES_PER_MINUTE: "30",
+      TRIAL_STARTS_PER_DAY: "1",
+    });
+    expect(config.trustedProxyHeader).toBe("x-forwarded-for");
+    expect(config.limits).toEqual({ guestPerMinute: 600, authPerMinute: 5, writesPerMinute: 30, trialStartsPerDay: 1 });
+  });
+
+  it("rejects a malformed header name and non-positive or non-integer limits", () => {
+    expect(
+      problems({
+        ...base,
+        TRUSTED_PROXY_HEADER: "x forwarded",
+        RATE_LIMIT_GUEST_PER_MINUTE: "0",
+        TRIAL_STARTS_PER_DAY: "2.5",
+      }),
+    ).toEqual([
+      'TRUSTED_PROXY_HEADER must be an HTTP header name (got "x forwarded")',
+      'RATE_LIMIT_GUEST_PER_MINUTE must be a positive integer (got "0")',
+      'TRIAL_STARTS_PER_DAY must be a positive integer (got "2.5")',
+    ]);
+  });
+});
+
 describe("redactConfig", () => {
   it("never includes a secret value", () => {
     const dump = redactConfig(loadConfig(hosted));

@@ -126,6 +126,9 @@ export async function createIdentity({
     secret: config.authSecret,
     database: sqlAdapter(db, cipher),
     telemetry: { enabled: false },
+    // Off in every environment: the app limits sign-in per trusted client address in front of this
+    // (its own would turn on only with NODE_ENV=production and trust a client-set X-Forwarded-For).
+    rateLimit: { enabled: false },
     // Better Auth's messages and arguments can carry codes, tokens or profiles: only their level
     // is logged. Failures are logged by category in `handle`.
     logger: {
@@ -214,6 +217,9 @@ export async function createIdentity({
       // Never let an environment variable switch them off.
       disableOriginCheck: false,
       disableCSRFCheck: false,
+      // Sessions would otherwise store the client's IP address, read from headers a client can set.
+      // Rate limits use the trusted address in the app and keep only a keyed hash of it.
+      ipAddress: { disableIpTracking: true },
     },
   });
 

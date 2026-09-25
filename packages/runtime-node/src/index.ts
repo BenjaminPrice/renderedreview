@@ -2,7 +2,8 @@
 // Node implementations of the runtime adapters. The app's server entry imports this through
 // its `#runtime` import map, so it only ever lands in the Node build.
 import { migrate } from "@rendered-review/control-plane";
-import { errorName, log, type RequestContext, type SqlDatabase } from "@rendered-review/runtime";
+import { errorName, log, memoryLimiters, type RequestContext, type SqlDatabase } from "@rendered-review/runtime";
+import { clientAddress } from "./address";
 import { loadNodeConfig } from "./config";
 import { openDatabase } from "./database";
 
@@ -23,6 +24,8 @@ export function createRequestContext(): RequestContext {
           void work.catch((error: unknown) => log.error("background.failed", { error: errorName(error) })),
       },
       db: config.databaseUrl ? migrated(openDatabase(config.databaseUrl)) : undefined,
+      clientAddress: (request) => clientAddress(request, config.trustedProxyHeader),
+      limiters: memoryLimiters(config.limits),
     };
   }
   return context;

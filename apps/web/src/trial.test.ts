@@ -6,6 +6,8 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { entitlementCheckFor, type Requester } from "./billing";
 import { contributorTrackerFor } from "./contributors";
 import { testDatabases } from "./github/test-databases";
+import { RateLimited } from "./rate-limit";
+import { captureLogs } from "./test-utils";
 import { TRIAL_CONTRIBUTORS, trialSubjectKey } from "./trial";
 
 const secret = "a-better-auth-secret-of-32-chars!";
@@ -60,7 +62,8 @@ describe.each(testDatabases)("private-repository trial on %s", (_, open) => {
   });
   afterAll(() => close());
   beforeEach(async () => {
-    for (const table of ["trial", "billing_account", "github_owner", `"user"`]) await db.run(`DELETE FROM ${table}`);
+    for (const table of ["trial", "billing_account", "github_owner", `"user"`, "usage_counter"])
+      await db.run(`DELETE FROM ${table}`);
     vi.useFakeTimers({ toFake: ["Date"], now: start });
     installed = vi.fn(async () => true);
     check = entitlementCheckFor(hosted, db, installed)!;
@@ -126,6 +129,85 @@ describe.each(testDatabases)("private-repository trial on %s", (_, open) => {
     );
     expect(await check(acme, reader())).toEqual({ allowed: true, reason: "subscription" });
     expect(await ledger()).toEqual([]);
+  });
+
+  describe("trial start limits", () => {
+    const owner = (n: number) => ({ ...acme, owner: `org${n}`, ownerId: String(1000 + n) });
+    const from = (userId: string, clientAddress: string): Requester => ({ userId, operation: "read", clientAddress });
+
+    it("lets one user start at most TRIAL_STARTS_PER_DAY trials a day, then answers when to retry", async () => {
+      const logs = captureLogs();
+      for (let n = 1; n <= 3; n++) expect((await check(owner(n), from("u1", `198.51.100.${n}`))).allowed).toBe(true);
+      const refused = await check(owner(4), from("u1", "198.51.100.4")).catch((e: unknown) => e);
+      expect(refused).toBeInstanceOf(RateLimited);
+      // Retry at the next UTC midnight: the test clock is 12:00.
+      expect(refused).toMatchObject({ limit: "trial-start-user", retryAfter: 12 * 3600 });
+      expect((refused as Error).message).not.toMatch(/network/);
+      expect(await ledger()).toHaveLength(3);
+      expect(logs.events()).toContainEqual({ level: "info", event: "rate.limited", category: "trial-start-user" });
+      // Trials already running are unaffected, and the next day the user may start again.
+      expect((await check(owner(1), from("u1", "198.51.100.1"))).allowed).toBe(true);
+      vi.setSystemTime(days(1));
+      expect((await check(owner(4), from("u1", "198.51.100.4"))).allowed).toBe(true);
+    });
+
+    const userCount = async (userId = "u1") =>
+      Number(
+        (
+          await db.all<{ count: number }>(
+            "SELECT count FROM usage_counter WHERE scope = 'user' AND subject = ? AND metric = 'trial-start'",
+            [userId],
+          )
+        )[0]?.count ?? 0,
+      );
+
+    it("counts only trials actually started: not refusals, not reopening a running trial", async () => {
+      captureLogs();
+      for (let n = 1; n <= 3; n++) await check(owner(n), from("u1", "198.51.100.1"));
+      await expect(check(owner(4), from("u1", "198.51.100.1"))).rejects.toBeInstanceOf(RateLimited);
+      expect(await userCount()).toBe(3);
+      // At the limit, the user's running trials still open, and opening them counts nothing.
+      for (let n = 1; n <= 3; n++) expect((await check(owner(n), from("u1", "198.51.100.1"))).allowed).toBe(true);
+      expect(await userCount()).toBe(3);
+    });
+
+    it("restores an earlier trial at the limit without counting it (recreated billing account)", async () => {
+      captureLogs();
+      for (let n = 1; n <= 3; n++) await check(owner(n), from("u1", "198.51.100.1"));
+      // The owner's entitlement goes with its billing account; the ledger keeps the trial.
+      await db.run("DELETE FROM billing_account");
+      expect((await check(owner(1), from("u1", "198.51.100.1"))).allowed).toBe(true);
+      expect(await userCount()).toBe(3);
+    });
+
+    it("counts one start when two first opens race", async () => {
+      await Promise.all([check(owner(1), from("u1", "198.51.100.1")), check(owner(1), from("u1", "198.51.100.1"))]);
+      expect(await ledger()).toHaveLength(1);
+      expect(await userCount()).toBe(1);
+    });
+
+    it("limits trial starts per client address across users", async () => {
+      for (let n = 1; n <= 3; n++) await check(owner(n), from(`u${n}`, "203.0.113.9"));
+      await expect(check(owner(4), from("u4", "203.0.113.9"))).rejects.toMatchObject({
+        limit: "trial-start-network",
+        message: expect.stringMatching(/network/),
+      });
+      expect((await check(owner(4), from("u4", "203.0.113.10"))).allowed).toBe(true);
+    });
+
+    it("keeps aggregate counters with no raw address, and drops earlier days", async () => {
+      await check(owner(1), from("u1", "203.0.113.9"));
+      const rows = await db.all<Record<string, unknown>>("SELECT * FROM usage_counter");
+      expect(JSON.stringify(rows)).not.toContain("203.0.113.9");
+      expect(rows.map((r) => [r.scope, r.metric, r.window_start, Number(r.count)]).sort()).toEqual([
+        ["network", "trial-start", "2026-09-25", 1],
+        ["user", "trial-start", "2026-09-25", 1],
+      ]);
+      vi.setSystemTime(days(1));
+      await check(owner(2), from("u1", "203.0.113.9"));
+      const windows = await db.all<{ window_start: string }>("SELECT DISTINCT window_start FROM usage_counter");
+      expect(windows).toEqual([{ window_start: "2026-09-26" }]);
+    });
   });
 
   it("starts one trial when two first opens race", async () => {

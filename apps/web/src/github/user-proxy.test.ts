@@ -2,6 +2,7 @@
 import { loadConfig } from "@rendered-review/runtime";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { entitlementCheckFor, type EntitlementCheck } from "../billing";
+import { RateLimited } from "../rate-limit";
 import { captureLogs } from "../test-utils";
 import { proxyUserGitHub, TRIAL_ENDS_HEADER, TRIAL_EXPIRED, USER_PREFIX } from "./user-proxy";
 
@@ -21,6 +22,7 @@ function setup({
   token = "user-token" as string | null,
   upstream = (() => Response.json({}, { headers: { etag: '"e"', "set-cookie": "x=1" } })) as Upstream,
   entitlement = undefined as EntitlementCheck | undefined,
+  clientAddress = undefined as string | undefined,
   /** null: the deployment hides the link. */
   upgradeUrl = PLANS as string | null,
 } = {}) {
@@ -39,6 +41,7 @@ function setup({
       identity,
       fetch,
       entitlement,
+      clientAddress,
       upgradeUrl: upgradeUrl ?? undefined,
     });
   const auth = (i: number) => (fetch.mock.calls[i]![1]?.headers as Record<string, string>).Authorization;
@@ -122,8 +125,12 @@ describe("proxyUserGitHub", () => {
         visibility: "private",
         owner: { id: 100, login: "acme", type: "Organization" },
       });
-    const withPrivate = (entitlement: EntitlementCheck | undefined, upgradeUrl: string | null = PLANS) => {
-      const t = setup({ entitlement, upgradeUrl });
+    const withPrivate = (
+      entitlement: EntitlementCheck | undefined,
+      upgradeUrl: string | null = PLANS,
+      clientAddress?: string,
+    ) => {
+      const t = setup({ entitlement, upgradeUrl, clientAddress });
       const upstream = t.fetch.getMockImplementation()!;
       t.fetch.mockImplementation(async (input, init) =>
         /\/repos\/[^/]+\/[^/]+$/.test(String(input)) ? privateRepo() : upstream(input, init),
@@ -156,6 +163,21 @@ describe("proxyUserGitHub", () => {
         { userId: "u1", operation: "read" },
       );
       expect(res.headers.get(TRIAL_ENDS_HEADER)).toBeNull();
+    });
+
+    it("answer a typed 429 when starting the owner's trial is over the daily limit", async () => {
+      const entitlement = vi.fn<EntitlementCheck>(async () => {
+        throw new RateLimited("trial-start-user", 3600);
+      });
+      const { fetch, call } = withPrivate(entitlement, PLANS, "198.51.100.7");
+      const res = await call("github.com/repos/acme/throwaway/pulls/1");
+      expect(res.status).toBe(429);
+      expect(res.headers.get("retry-after")).toBe("3600");
+      expect(res.headers.get("vary")).toBe("Cookie");
+      expect(await res.json()).toMatchObject({ code: "rate-limited", retryAfter: 3600 });
+      // The trusted address reaches the check (for the per-address limit); nothing is read upstream.
+      expect(entitlement.mock.calls[0]![1]).toEqual({ userId: "u1", operation: "read", clientAddress: "198.51.100.7" });
+      expect(fetch).toHaveBeenCalledOnce();
     });
 
     it("carry a running trial's end for the days-left indicator", async () => {

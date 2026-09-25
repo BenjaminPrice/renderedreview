@@ -3,6 +3,7 @@
 // anonymous rate limit). Forwards only allowlisted read-only REST paths, anonymously or with the
 // operator's public read token, and never serves a private repository. Never an open proxy. Web Request/Response/fetch only, so it runs on Node and Workers alike.
 import type { AppConfig } from "@rendered-review/runtime";
+import { type RateLimited, rateLimitedResponse } from "../rate-limit";
 import { forRepository } from "./broker";
 import { meteredFetch } from "./metrics";
 
@@ -182,13 +183,18 @@ export async function proxyPublicGitHub(
     allowedHosts,
     readToken,
     fetch: unmetered = fetch,
+    limit,
   }: {
     allowedHosts: string[];
     /** Operator token, sent only to its own host. */
     readToken?: { host: string; token: string };
     fetch?: typeof fetch;
+    /** Counts this request against the client's guest limit (it protects the operator token's quota). */
+    limit?: () => Promise<RateLimited | undefined>;
   },
 ): Promise<Response> {
+  const hit = await limit?.();
+  if (hit) return rateLimitedResponse(hit);
   if (request.method !== "GET") return reject(405, "Method not allowed");
   const fetchFn = meteredFetch(unmetered);
   const url = new URL(request.url);

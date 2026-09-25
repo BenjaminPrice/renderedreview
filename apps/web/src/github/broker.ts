@@ -35,7 +35,12 @@ interface Repository {
   repo: string;
 }
 export type ReadOperation = Repository & { userId?: string; operation: "read" };
-export type WriteOperation = Repository & { userId: string; operation: "comment" | "review" | "resolve" };
+export type WriteOperation = Repository & {
+  userId: string;
+  operation: "comment" | "review" | "resolve";
+  /** The trusted client address, for the trial start limit. */
+  clientAddress?: string;
+};
 export type RepositoryOperation = ReadOperation | WriteOperation;
 
 interface BrokerDeps {
@@ -83,7 +88,12 @@ export async function forRepository(
   if (facts.visibility === "private") {
     const repository = privateRepository(host, op.repo, facts);
     if (!repository || !deps.entitlement) return { kind: "private-repo-unsupported" };
-    const decision = await deps.entitlement(repository, { userId: op.userId, operation: "write" });
+    // May throw `RateLimited` when this write would start a trial over the daily limit.
+    const decision = await deps.entitlement(repository, {
+      userId: op.userId,
+      operation: "write",
+      clientAddress: op.clientAddress,
+    });
     // An entitled private repository is written with the GitHub App user token (the app is installed there).
     return decision.allowed ? { kind: "user", token, repository } : { kind: "not-entitled", reason: decision.reason };
   }

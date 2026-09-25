@@ -42,3 +42,20 @@ it("keeps preview public-only, with no required secrets", () => {
   expect(read("preview").secrets).toBeUndefined();
   expect(signInWith("preview", [])).toBe(false);
 });
+
+it("binds the guest and sign-in rate limiters in every environment, each with its own counters", () => {
+  const namespaces = new Set<string>();
+  for (const env of ["", "preview", "production"]) {
+    const limits: { name: string; namespace_id: string; simple: { limit: number; period: number } }[] =
+      read(env).ratelimits ?? [];
+    expect(limits.map((l) => l.name).sort()).toEqual(["AUTH_RATE_LIMIT", "GUEST_RATE_LIMIT"]);
+    for (const limit of limits) {
+      // The Worker reports 60 s as the wait when a binding refuses (runtime-cloudflare context).
+      expect(limit.simple.period).toBe(60);
+      expect(limit.simple.limit).toBeGreaterThan(0);
+      // Bindings sharing a namespace share counters, even across Workers.
+      expect(namespaces.has(limit.namespace_id)).toBe(false);
+      namespaces.add(limit.namespace_id);
+    }
+  }
+});

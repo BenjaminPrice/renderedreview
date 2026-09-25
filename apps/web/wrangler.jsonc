@@ -9,6 +9,12 @@
 // Bindings:
 //   DB       D1 database for the control plane. Its schema is packages/control-plane/migrations,
 //            applied with `wrangler d1 migrations apply DB [--env <env>] --local|--remote`.
+//   GUEST_RATE_LIMIT, AUTH_RATE_LIMIT
+//            Workers Rate Limiting bindings: guest proxy reads and sign-in steps per client address
+//            (an HMAC of CF-Connecting-IP), per minute. Counted per Cloudflare location and eventually
+//            consistent; the period must be 10 or 60 s and the Worker assumes 60. `namespace_id` is
+//            unique per account (bindings sharing one share counters). Writes and daily trial starts are
+//            limited by the app itself (RATE_LIMIT_WRITES_PER_MINUTE, TRIAL_STARTS_PER_DAY vars).
 //   vars     Non-secret configuration, the same variables the Node build reads from its environment.
 //   secrets  Set with `wrangler secret put NAME --env <env>` (locally: apps/web/.dev.vars). Listing a
 //            name under `secrets.required` makes `wrangler deploy` refuse to run while it is unset.
@@ -31,6 +37,10 @@
   "compatibility_date": "2026-09-20",
   "observability": { "enabled": true },
   "vars": { "HOSTING_MODE": "community", "ACCESS_POLICY": "disabled" },
+  "ratelimits": [
+    { "name": "GUEST_RATE_LIMIT", "namespace_id": "1001", "simple": { "limit": 120, "period": 60 } },
+    { "name": "AUTH_RATE_LIMIT", "namespace_id": "1002", "simple": { "limit": 20, "period": 60 } },
+  ],
   // Local only: workerd keeps this database under .wrangler/state.
   "d1_databases": [
     {
@@ -46,6 +56,10 @@
       "name": "rendered-review-preview",
       "workers_dev": true,
       "vars": { "HOSTING_MODE": "community", "ACCESS_POLICY": "disabled" },
+      "ratelimits": [
+        { "name": "GUEST_RATE_LIMIT", "namespace_id": "2001", "simple": { "limit": 120, "period": 60 } },
+        { "name": "AUTH_RATE_LIMIT", "namespace_id": "2002", "simple": { "limit": 20, "period": 60 } },
+      ],
       "d1_databases": [
         {
           "binding": "DB",
@@ -60,6 +74,10 @@
       // Served from renderedreview.dev, a custom domain attached in the dashboard.
       "workers_dev": false,
       "vars": { "HOSTING_MODE": "community", "ACCESS_POLICY": "disabled" },
+      "ratelimits": [
+        { "name": "GUEST_RATE_LIMIT", "namespace_id": "3001", "simple": { "limit": 120, "period": 60 } },
+        { "name": "AUTH_RATE_LIMIT", "namespace_id": "3002", "simple": { "limit": 20, "period": 60 } },
+      ],
       // GitHub sign-in and public-repository commenting. `wrangler deploy` refuses while any is unset.
       "secrets": {
         "required": [

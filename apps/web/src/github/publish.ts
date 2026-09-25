@@ -20,9 +20,10 @@ import {
 } from "@rendered-review/github-integration";
 import type { Identity } from "@rendered-review/identity";
 import { anchorLines } from "@rendered-review/review-domain";
-import { log, readBodyCapped } from "@rendered-review/runtime";
+import { log, type RateLimiter, readBodyCapped } from "@rendered-review/runtime";
 import type { EntitlementCheck, PrivateRepository } from "../billing";
 import type { ContributorTracker } from "../contributors";
+import { checkLimit, RateLimited } from "../rate-limit";
 import { forRepository, type WriteOperation } from "./broker";
 import type { InstallationCheck } from "./installation";
 import { meteredFetch } from "./metrics";
@@ -103,6 +104,7 @@ function fromGitHub(error: unknown, approvalUrl?: string, representation?: Repre
   if (error instanceof RateLimitError)
     return new Refusal(429, "rate-limited", "GitHub's rate limit was reached", {
       resetAt: error.resetAt.toISOString(),
+      retryAfter: Math.max(1, Math.ceil((error.resetAt.getTime() - Date.now()) / 1000)),
     });
   if (error.status === 401) return new Refusal(401, "reauth", "Sign in with GitHub again");
   // REST answers 403; GraphQL (resolve) answers 200 with a FORBIDDEN error.
@@ -122,23 +124,10 @@ function fromGitHub(error: unknown, approvalUrl?: string, representation?: Repre
   return new Refusal(502, "github-error", "GitHub request failed");
 }
 
-// ponytail: per-process fixed window per user; hosted abuse controls (shared store, per-repository
-// limits) replace it when there is more than one instance.
-const WINDOW_MS = 60_000;
-const WRITES_PER_WINDOW = 60;
-const windows = new Map<string, { count: number; until: number }>();
-/** Counts `cost` writes against the user's window: a review costs one per draft. */
-function limitRate(userId: string, cost = 1) {
-  const now = Date.now();
-  let window = windows.get(userId);
-  if (!window || window.until <= now) {
-    if (windows.size >= 10_000) windows.clear();
-    windows.set(userId, (window = { count: 0, until: now + WINDOW_MS }));
-  }
-  if ((window.count += cost) > WRITES_PER_WINDOW)
-    refuse(429, "rate-limited", "Too many comments at once; try again in a minute", {
-      resetAt: new Date(window.until).toISOString(),
-    });
+/** Counts `cost` writes against the user's limit: a review costs one per draft. */
+async function limitRate(deps: Deps, userId: string, cost = 1) {
+  const hit = await checkLimit(deps.limiter, "writes", userId, cost);
+  if (hit) refuse(429, hit.body.code, hit.message, { retryAfter: hit.retryAfter });
 }
 
 // Input checks. Everything from the browser is untrusted.
@@ -222,6 +211,10 @@ interface Deps {
   fetch?: typeof fetch;
   /** The OAuth App's page on GitHub, where users ask an organization to approve it. */
   approvalUrl?: string;
+  /** Writes per user per minute. */
+  limiter: RateLimiter;
+  /** The trusted client address: starting a trial is limited per address. */
+  clientAddress?: string;
   /** Where an ended trial points (deployment config); left out of the refusal when unset. */
   upgradeUrl?: string;
 }
@@ -237,9 +230,13 @@ interface Target {
 /** Rechecks access (the least-privileged write credential) and reads the PR with it. */
 async function connect(t: Target, operation: WriteOperation["operation"], deps: Deps) {
   const credential = await forRepository(
-    { userId: t.userId, host: t.host, owner: t.owner, repo: t.repo, operation },
+    { userId: t.userId, host: t.host, owner: t.owner, repo: t.repo, operation, clientAddress: deps.clientAddress },
     { identity: deps.identity, installed: deps.installed, fetch: deps.fetch, entitlement: deps.entitlement },
-  );
+  ).catch((error: unknown) => {
+    // Publishing would start the owner's trial, over this user's or network's daily limit.
+    if (error instanceof RateLimited) refuse(429, "rate-limited", error.message, { retryAfter: error.retryAfter });
+    throw error;
+  });
   switch (credential.kind) {
     case "reauth":
       return refuse(401, "reauth", "Sign in with GitHub again");
@@ -398,7 +395,9 @@ export async function publishToGitHub(request: Request, deps: Deps): Promise<Res
   } catch (error) {
     if (!(error instanceof Refusal)) throw error;
     log.info("github.publish", { category: error.code, status: error.status });
-    return Response.json(error.body, { status: error.status, headers: PRIVATE });
+    const { retryAfter } = error.extra;
+    const headers = typeof retryAfter === "number" ? { ...PRIVATE, "retry-after": String(retryAfter) } : PRIVATE;
+    return Response.json(error.body, { status: error.status, headers });
   }
 }
 
@@ -423,7 +422,7 @@ async function handle(request: Request, deps: Deps): Promise<Result> {
 
   const user = await identity.getSessionUser(request.headers);
   if (!user) return refuse(401, "unauthenticated", "Sign in with GitHub");
-  limitRate(user.id);
+  await limitRate(deps, user.id);
 
   const bytes = await readBodyCapped(request, MAX_REQUEST_BYTES);
   if (!bytes) return refuse(413, "request-too-large", "Request too large");
@@ -539,7 +538,7 @@ async function handle(request: Request, deps: Deps): Promise<Result> {
       if (!Array.isArray(drafts) || drafts.length > MAX_DRAFTS)
         invalid(`drafts must list at most ${MAX_DRAFTS} drafts`);
       // The request itself already counted once.
-      limitRate(t.userId, Math.max(0, (drafts as unknown[]).length - 1));
+      await limitRate(deps, t.userId, Math.max(0, (drafts as unknown[]).length - 1));
       const ids = new Set<string>();
       const checked = (drafts as unknown[]).map((v) => {
         if (!isObject(v) || typeof v.id !== "string" || !SUBMISSION_ID.test(v.id))

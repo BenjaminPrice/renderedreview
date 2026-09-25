@@ -6,6 +6,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useRef } from "react";
 import { type CommentInput, commentMutation, PublishError, reviewMutation } from "../github/mutations";
 import type { PrIdentity } from "../github/queries";
+import { RATE_LIMITED } from "../rate-limit";
 
 /** One comment to publish, against the head it was checked against. */
 export type CommentIntent = CommentInput & { expectedHeadOid: string };
@@ -28,7 +29,12 @@ export interface Publisher {
 }
 
 /** What to tell the reviewer about a refused publish. */
-export function publishErrorMessage(error: { code?: string; message: string; resetAt?: string }): string {
+export function publishErrorMessage(error: {
+  code?: string;
+  message: string;
+  resetAt?: string;
+  retryAfter?: number;
+}): string {
   switch (error.code) {
     case "stale-head":
       return "The pull request has new commits since this page loaded. Your text is kept; reload to comment on the latest version.";
@@ -46,10 +52,22 @@ export function publishErrorMessage(error: { code?: string; message: string; res
     case "unauthenticated":
       return "Your GitHub sign-in has expired. Sign in again, then retry.";
     case "rate-limited":
+      // This app's own limits send only the wait; GitHub's send its reset time.
+      if (!error.resetAt && error.retryAfter) {
+        // A daily trial limit names whose limit it is; the per-minute ones read the same for everyone.
+        const what = error.message === RATE_LIMITED ? "Too many requests right now." : error.message;
+        return `${what} Your text is kept; try again ${wait(error.retryAfter)}.`;
+      }
       return `GitHub's rate limit was reached. Try again${error.resetAt ? ` after ${new Date(error.resetAt).toLocaleTimeString()}` : " later"}.`;
     default:
       return error.message;
   }
+}
+
+/** "in 42 seconds", or "after 14:05" for longer waits. */
+export function wait(seconds: number) {
+  if (seconds < 120) return `in ${seconds} second${seconds === 1 ? "" : "s"}`;
+  return `after ${new Date(Date.now() + seconds * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
 }
 
 /** Publishes through the app's write boundary for the PR `id`. */

@@ -6,6 +6,7 @@ import { createHmac } from "node:crypto";
 import { migrate } from "@rendered-review/control-plane";
 import { loadConfig, type RequestContext, type SqlDatabase } from "@rendered-review/runtime";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { serverContext } from "../test-utils";
 import { testDatabases } from "./test-databases";
 import { receiveWebhook } from "./webhook";
 
@@ -48,15 +49,12 @@ function delivery(
   });
 }
 
-const noScheduler = { waitUntil: () => {} };
-const noSecrets = { get: async () => undefined };
-
 describe("receiveWebhook without a webhook secret or database", () => {
   it("is disabled: every request answers 404", async () => {
     const community = loadConfig({ HOSTING_MODE: "community", ACCESS_POLICY: "disabled" });
-    const bare: RequestContext = { config: community, secrets: noSecrets, scheduler: noScheduler };
+    const bare: RequestContext = serverContext(community);
     expect((await receiveWebhook(delivery("ping"), bare)).status).toBe(404);
-    const noDb: RequestContext = { config, secrets: noSecrets, scheduler: noScheduler };
+    const noDb: RequestContext = serverContext(config);
     expect((await receiveWebhook(delivery("ping"), noDb)).status).toBe(404);
   });
 });
@@ -73,7 +71,7 @@ describe.each(testDatabases)("receiveWebhook on %s", (_, open) => {
   beforeAll(async () => {
     ({ db, close } = await open());
     await migrate(db);
-    context = { config, secrets: noSecrets, scheduler: noScheduler, db };
+    context = serverContext(config, { db });
   });
   afterAll(() => close?.());
   beforeEach(async () => {

@@ -105,6 +105,15 @@ await serve([], async (origin) => {
   const sw = await fetch(`${origin}/sw.js`);
   assert.equal(sw.status, 200);
   console.log("ok: /sw.js served from static assets");
+
+  // The GUEST_RATE_LIMIT binding (120 a minute) trips; a refused path costs no GitHub request.
+  let guest: Response | undefined;
+  for (let i = 0; i < 130 && guest?.status !== 429; i++)
+    guest = await fetch(`${origin}/api/github/public/github.com/not-allowed`);
+  assert.equal(guest?.status, 429);
+  assert.equal(guest.headers.get("retry-after"), "60");
+  assert.equal(((await guest.json()) as { code: string }).code, "rate-limited");
+  console.log("ok: the guest proxy is rate limited through the Workers binding");
 });
 
 // 2. With the sign-in secrets production requires. Obviously fake values, passed as --var to this

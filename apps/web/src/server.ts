@@ -20,7 +20,11 @@ const CSP_HEADER = import.meta.env.DEV ? "Content-Security-Policy-Report-Only" :
 
 export default createServerEntry({
   fetch: async (incoming) => {
-    const context = createRequestContext();
+    const shared = createRequestContext();
+    // Read the client address from the request as the runtime delivered it: pinning the origin
+    // rebuilds the request, which drops Node's socket address.
+    const address = shared.clientAddress(incoming);
+    const context = { ...shared, clientAddress: () => address };
     const request = atPublicOrigin(incoming, context.config.publicUrl);
     const nonce = createNonce();
     const response = await withErrorLog(request, () => handler.fetch(request, { context: { ...context, nonce } }));

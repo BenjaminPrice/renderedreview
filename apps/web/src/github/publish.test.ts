@@ -5,9 +5,11 @@ import {
   type RenderedReviewAnnotationV1,
   repairCommentBody,
 } from "@rendered-review/annotation-domain";
+import { memoryRateLimiter } from "@rendered-review/runtime";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { EntitlementCheck } from "../billing";
 import type { ContributorTracker } from "../contributors";
+import { RateLimited } from "../rate-limit";
 import { captureLogs } from "../test-utils";
 import { publishToGitHub, WRITE_PREFIX } from "./publish";
 
@@ -63,6 +65,8 @@ function setup({
   approvalUrl = undefined as string | undefined,
   entitlement = undefined as EntitlementCheck | undefined,
   contributors = undefined as ContributorTracker | undefined,
+  limiter = memoryRateLimiter({ limit: 60, periodSeconds: 60 }),
+  clientAddress = undefined as string | undefined,
   /** null: the deployment hides the link. */
   upgradeUrl = "https://renderedreview.com/pricing" as string | null,
 } = {}) {
@@ -112,6 +116,8 @@ function setup({
         approvalUrl,
         entitlement,
         contributors,
+        limiter,
+        clientAddress,
         upgradeUrl: upgradeUrl ?? undefined,
       },
     );
@@ -144,6 +150,7 @@ describe("request guards", () => {
       new Request(`${origin}${WRITE_PREFIX}github.com/a/b/pulls/1/comment`, { method: "POST" }),
       {
         allowedHosts: ["github.com"],
+        limiter: memoryRateLimiter({ limit: 60, periodSeconds: 60 }),
         identity: undefined,
       },
     );
@@ -186,7 +193,11 @@ describe("request guards", () => {
         headers: { "x-requested-with": "rendered-review", "content-type": "application/json", origin },
         body: "{}",
       }),
-      { allowedHosts: ["github.com"], identity: setup().identity },
+      {
+        allowedHosts: ["github.com"],
+        identity: setup().identity,
+        limiter: memoryRateLimiter({ limit: 60, periodSeconds: 60 }),
+      },
     );
     expect(res.status).toBe(403);
   });
@@ -258,6 +269,19 @@ describe("credential selection", () => {
     const body = (await json(res)) as { code: string; message: string; upgradeUrl: string };
     expect(body).toMatchObject({ code: reason, upgradeUrl: "https://renderedreview.com/pricing" });
     expect(body.message).toMatch(message);
+    expect(writes()).toHaveLength(0);
+  });
+
+  it("answers a typed 429 when publishing would start a trial over the daily limit", async () => {
+    const entitlement = vi.fn<EntitlementCheck>(async () => {
+      throw new RateLimited("trial-start-user", 600);
+    });
+    const { call, writes } = setup({ visibility: "private", entitlement, clientAddress: "198.51.100.7" });
+    const res = await call("comment", comment());
+    expect(res.status).toBe(429);
+    expect(res.headers.get("retry-after")).toBe("600");
+    expect(await json(res)).toMatchObject({ code: "rate-limited", retryAfter: 600 });
+    expect(entitlement.mock.calls[0]![1]).toMatchObject({ operation: "write", clientAddress: "198.51.100.7" });
     expect(writes()).toHaveLength(0);
   });
 
@@ -479,16 +503,38 @@ describe("comment", () => {
     });
     const res = await call("comment", { expectedHeadOid: HEAD, representation: "conversation", body: "b" });
     expect(res.status).toBe(429);
-    expect(await json(res)).toMatchObject({ code: "rate-limited", resetAt: expect.any(String) });
+    expect(await json(res)).toMatchObject({ code: "rate-limited", resetAt: expect.any(String), retryAfter: 60 });
+    expect(res.headers.get("retry-after")).toBe("60");
   });
 
-  it("limits how fast one user can publish", async () => {
+  it("limits how fast one user can publish, with a typed 429 and Retry-After", async () => {
+    const logs = captureLogs();
     const { call } = setup({ routes: { "POST /issues/7/comments": created() } });
     const body = { expectedHeadOid: HEAD, representation: "conversation", body: "b" };
     const statuses: number[] = [];
-    for (let i = 0; i < 61; i++) statuses.push((await call("comment", body)).status);
-    expect(statuses.slice(0, 60).every((s) => s === 201)).toBe(true);
-    expect(statuses[60]).toBe(429);
+    for (let i = 0; i < 60; i++) statuses.push((await call("comment", body)).status);
+    expect(statuses.every((s) => s === 201)).toBe(true);
+    const limited = await call("comment", body);
+    expect(limited.status).toBe(429);
+    expect(Number(limited.headers.get("retry-after"))).toBeGreaterThan(0);
+    expect(limited.headers.get("cache-control")).toBe("private, no-store");
+    expect(await json(limited)).toEqual({
+      code: "rate-limited",
+      message: expect.stringMatching(/^Too many requests/),
+      retryAfter: Number(limited.headers.get("retry-after")),
+    });
+    expect(logs.events()).toContainEqual({ level: "info", event: "rate.limited", category: "writes" });
+    expect(logs.raw()).not.toMatch(/user-\d/);
+  });
+
+  it("counts writes per user", async () => {
+    const limiter = memoryRateLimiter({ limit: 1, periodSeconds: 60 });
+    const body = { expectedHeadOid: HEAD, representation: "conversation", body: "b" };
+    const first = setup({ limiter, routes: { "POST /issues/7/comments": created() } });
+    const second = setup({ limiter, routes: { "POST /issues/7/comments": created() } });
+    expect((await first.call("comment", body)).status).toBe(201);
+    expect((await first.call("comment", body)).status).toBe(429);
+    expect((await second.call("comment", body)).status).toBe(201);
   });
 
   it("counts each draft of a review against the limit", async () => {

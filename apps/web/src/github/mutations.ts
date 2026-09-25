@@ -31,6 +31,7 @@ type ErrorBody = {
   retryAs?: "review-file";
   headOid?: string;
   resetAt?: string;
+  retryAfter?: number;
   org?: string;
   approvalUrl?: string;
 };
@@ -51,8 +52,10 @@ export class PublishError extends Error {
   readonly retryAs?: "review-file";
   /** `stale-head`: the PR's current head. */
   readonly headOid?: string;
-  /** `rate-limited`: when to try again (ISO time). */
+  /** `rate-limited` by GitHub: when to try again (ISO time). */
   readonly resetAt?: string;
+  /** `rate-limited` by this app: seconds to wait. */
+  readonly retryAfter?: number;
   /** `oauth-org-restricted`: the organization, and where users ask it to approve the OAuth App. */
   readonly org?: string;
   readonly approvalUrl?: string;

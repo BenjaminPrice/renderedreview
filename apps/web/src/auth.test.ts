@@ -4,14 +4,11 @@ import { loadConfig, type RequestContext } from "@rendered-review/runtime";
 import { openDatabase } from "@rendered-review/runtime-node";
 import { describe, expect, it } from "vitest";
 import { atPublicOrigin, handleAuthRequest, identityFor } from "./auth";
+import { captureLogs, serverContext } from "./test-utils";
 
-const base = { secrets: { get: async () => undefined }, scheduler: { waitUntil: () => {} } };
-const publicOnly: RequestContext = {
-  ...base,
-  config: loadConfig({ HOSTING_MODE: "community", ACCESS_POLICY: "disabled" }),
-};
+const publicOnly = serverContext(loadConfig({ HOSTING_MODE: "community", ACCESS_POLICY: "disabled" }));
 
-async function signInContext(): Promise<RequestContext> {
+async function signInContext(env: Record<string, string> = {}): Promise<RequestContext> {
   const db = openDatabase("sqlite::memory:");
   await migrate(db);
   const config = loadConfig({
@@ -25,8 +22,9 @@ async function signInContext(): Promise<RequestContext> {
     ENCRYPTION_KEY: btoa("k".repeat(32)),
     BETTER_AUTH_SECRET: "s".repeat(32),
     DATABASE_URL: "sqlite::memory:",
+    ...env,
   });
-  return { ...base, config, db };
+  return serverContext(config, { db });
 }
 
 it("answers 404 for every auth route when sign-in is not configured", async () => {
@@ -45,6 +43,49 @@ it("serves auth routes for this request's origin when the GitHub App is configur
   expect(await identityFor(context, "https://rr.example")).not.toBe(
     await identityFor(context, "http://localhost:3000"),
   );
+});
+
+it("limits sign-in starts and callbacks per client address, with a typed 429, but not the viewer", async () => {
+  captureLogs();
+  const context = await signInContext({ RATE_LIMIT_AUTH_PER_MINUTE: "2" });
+  const start = (client: string) =>
+    handleAuthRequest(
+      new Request("http://localhost:3000/api/auth/sign-in/social", {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: "http://localhost:3000", "x-test-client": client },
+        body: JSON.stringify({ provider: "github", callbackURL: "/" }),
+      }),
+      context,
+    );
+  const callback = (client: string) =>
+    handleAuthRequest(
+      new Request("http://localhost:3000/api/auth/callback/github?code=c&state=s", {
+        headers: { "x-test-client": client },
+      }),
+      context,
+    );
+  expect((await start("198.51.100.1")).status).toBe(200);
+  expect((await callback("198.51.100.1")).status).not.toBe(429);
+  const limited = await start("198.51.100.1");
+  expect(limited.status).toBe(429);
+  expect(limited.headers.get("retry-after")).toMatch(/^\d+$/);
+  expect(await limited.json()).toMatchObject({ code: "rate-limited", retryAfter: expect.any(Number) });
+  // The browser arrives at the callback from GitHub: send it to a page that explains, not raw JSON.
+  const refused = await callback("198.51.100.1");
+  expect(refused.status).toBe(302);
+  expect(refused.headers.get("cache-control")).toBe("no-store");
+  const location = new URL(refused.headers.get("location")!, "http://localhost:3000");
+  expect(location.pathname).toBe("/");
+  expect(location.searchParams.get("error")).toBe("too_many_requests");
+  expect(Number(location.searchParams.get("retry_after"))).toBeGreaterThan(0);
+  // Another address has its own budget; the viewer lookup on every page load is not counted.
+  expect((await start("198.51.100.2")).status).toBe(200);
+  for (let i = 0; i < 3; i++) {
+    const viewer = new Request("http://localhost:3000/api/auth/viewer", {
+      headers: { "x-test-client": "198.51.100.1" },
+    });
+    expect((await handleAuthRequest(viewer, context)).status).toBe(200);
+  }
 });
 
 describe("atPublicOrigin", () => {

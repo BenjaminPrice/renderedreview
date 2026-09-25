@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { loadConfig } from "@rendered-review/runtime";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { RateLimited } from "../rate-limit";
 import { captureLogs } from "../test-utils";
 import { allowedHosts, proxyFirstHosts, proxyPublicGitHub } from "./proxy";
 
@@ -144,6 +145,40 @@ describe("proxyPublicGitHub", () => {
     const res = await call(`github.com/repos/acme/widgets/git/blobs/${OID}`);
     expect(res.status).toBe(404);
     expect(res.headers.get("cache-control")).toBe("no-store");
+  });
+});
+
+describe("proxyPublicGitHub guest limit", () => {
+  it("answers a typed 429 with Retry-After before reaching GitHub once the client is over its limit", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>();
+    const res = await proxyPublicGitHub(
+      new Request(`${origin}/api/github/public/github.com/repos/acme/widgets/pulls/1`),
+      {
+        allowedHosts: ["github.com"],
+        fetch,
+        limit: async () => new RateLimited("guest", 30),
+      },
+    );
+    expect(res.status).toBe(429);
+    expect(res.headers.get("retry-after")).toBe("30");
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(await res.json()).toMatchObject({ code: "rate-limited", retryAfter: 30 });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("forwards while the client is under its limit", async () => {
+    const limit = vi.fn(async () => undefined);
+    const fetch = vi.fn<typeof globalThis.fetch>(async () => Response.json({}));
+    const res = await proxyPublicGitHub(
+      new Request(`${origin}/api/github/public/github.com/repos/acme/widgets/pulls/1`),
+      {
+        allowedHosts: ["github.com"],
+        fetch,
+        limit,
+      },
+    );
+    expect(res.status).toBe(200);
+    expect(limit).toHaveBeenCalledOnce();
   });
 });
 
