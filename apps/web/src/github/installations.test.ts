@@ -63,7 +63,6 @@ async function deliver(context: RequestContext, event: string, payload: object) 
   return (await res.json()) as { outcome: string };
 }
 
-
 describe.each(testDatabases)("installation tracking on %s", (_, open) => {
   let db: SqlDatabase;
   let close: () => Promise<void>;

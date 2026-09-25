@@ -74,7 +74,9 @@ it("limits sign-in starts and callbacks per client address, with a typed 429, bu
   // Another address has its own budget; the viewer lookup on every page load is not counted.
   expect((await start("198.51.100.2")).status).toBe(200);
   for (let i = 0; i < 3; i++) {
-    const viewer = new Request("http://localhost:3000/api/auth/viewer", { headers: { "x-test-client": "198.51.100.1" } });
+    const viewer = new Request("http://localhost:3000/api/auth/viewer", {
+      headers: { "x-test-client": "198.51.100.1" },
+    });
     expect((await handleAuthRequest(viewer, context)).status).toBe(200);
   }
 });

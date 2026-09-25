@@ -151,11 +151,14 @@ describe("proxyPublicGitHub", () => {
 describe("proxyPublicGitHub guest limit", () => {
   it("answers a typed 429 with Retry-After before reaching GitHub once the client is over its limit", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>();
-    const res = await proxyPublicGitHub(new Request(`${origin}/api/github/public/github.com/repos/acme/widgets/pulls/1`), {
-      allowedHosts: ["github.com"],
-      fetch,
-      limit: async () => new RateLimited("guest", 30),
-    });
+    const res = await proxyPublicGitHub(
+      new Request(`${origin}/api/github/public/github.com/repos/acme/widgets/pulls/1`),
+      {
+        allowedHosts: ["github.com"],
+        fetch,
+        limit: async () => new RateLimited("guest", 30),
+      },
+    );
     expect(res.status).toBe(429);
     expect(res.headers.get("retry-after")).toBe("30");
     expect(res.headers.get("cache-control")).toBe("no-store");
@@ -166,11 +169,14 @@ describe("proxyPublicGitHub guest limit", () => {
   it("forwards while the client is under its limit", async () => {
     const limit = vi.fn(async () => undefined);
     const fetch = vi.fn<typeof globalThis.fetch>(async () => Response.json({}));
-    const res = await proxyPublicGitHub(new Request(`${origin}/api/github/public/github.com/repos/acme/widgets/pulls/1`), {
-      allowedHosts: ["github.com"],
-      fetch,
-      limit,
-    });
+    const res = await proxyPublicGitHub(
+      new Request(`${origin}/api/github/public/github.com/repos/acme/widgets/pulls/1`),
+      {
+        allowedHosts: ["github.com"],
+        fetch,
+        limit,
+      },
+    );
     expect(res.status).toBe(200);
     expect(limit).toHaveBeenCalledOnce();
   });

@@ -49,7 +49,6 @@ function delivery(
   });
 }
 
-
 describe("receiveWebhook without a webhook secret or database", () => {
   it("is disabled: every request answers 404", async () => {
     const community = loadConfig({ HOSTING_MODE: "community", ACCESS_POLICY: "disabled" });

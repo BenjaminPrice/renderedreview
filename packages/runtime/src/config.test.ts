@@ -218,7 +218,12 @@ describe("abuse controls", () => {
   it("defaults the rate limits and reads no proxy header", () => {
     const config = loadConfig(base);
     expect(config.trustedProxyHeader).toBeUndefined();
-    expect(config.limits).toEqual({ guestPerMinute: 120, authPerMinute: 20, writesPerMinute: 60, trialStartsPerDay: 3 });
+    expect(config.limits).toEqual({
+      guestPerMinute: 120,
+      authPerMinute: 20,
+      writesPerMinute: 60,
+      trialStartsPerDay: 3,
+    });
   });
 
   it("reads the trusted proxy header (lower-cased) and limit overrides", () => {
@@ -236,7 +241,12 @@ describe("abuse controls", () => {
 
   it("rejects a malformed header name and non-positive or non-integer limits", () => {
     expect(
-      problems({ ...base, TRUSTED_PROXY_HEADER: "x forwarded", RATE_LIMIT_GUEST_PER_MINUTE: "0", TRIAL_STARTS_PER_DAY: "2.5" }),
+      problems({
+        ...base,
+        TRUSTED_PROXY_HEADER: "x forwarded",
+        RATE_LIMIT_GUEST_PER_MINUTE: "0",
+        TRIAL_STARTS_PER_DAY: "2.5",
+      }),
     ).toEqual([
       'TRUSTED_PROXY_HEADER must be an HTTP header name (got "x forwarded")',
       'RATE_LIMIT_GUEST_PER_MINUTE must be a positive integer (got "0")',

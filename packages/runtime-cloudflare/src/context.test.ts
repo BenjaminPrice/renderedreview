@@ -57,7 +57,10 @@ describe("buildRequestContext", () => {
   it("limits guests and sign-ins with the Rate Limiting bindings when configured", async () => {
     const guest = { limit: vi.fn(async () => ({ success: false })) };
     const auth = { limit: vi.fn(async () => ({ success: true })) };
-    const { limiters } = buildRequestContext({ ...publicOnly, GUEST_RATE_LIMIT: guest, AUTH_RATE_LIMIT: auth }, () => {});
+    const { limiters } = buildRequestContext(
+      { ...publicOnly, GUEST_RATE_LIMIT: guest, AUTH_RATE_LIMIT: auth },
+      () => {},
+    );
     expect(await limiters.guest.limit("k1")).toBe(60);
     expect(guest.limit).toHaveBeenCalledWith({ key: "k1" });
     expect(await limiters.auth.limit("k2")).toBe(0);
