@@ -143,7 +143,8 @@ export async function repoFacts(
 ): Promise<RepoFacts | Response> {
   const key = `${host}/${repo.toLowerCase()}`;
   const hit = visibility.get(key);
-  if (hit && hit.until > Date.now() && (privateFromCache || hit.visibility === "public")) return { visibility: hit.visibility, name: hit.name, owner: hit.owner };
+  if (hit && hit.until > Date.now() && (privateFromCache || hit.visibility === "public"))
+    return { visibility: hit.visibility, name: hit.name, owner: hit.owner };
   const res = await fetchFn(`${apiBase(host)}/${repo}`, {
     headers: { ...headers, Accept: "application/vnd.github+json" },
   }).catch(() => undefined);
