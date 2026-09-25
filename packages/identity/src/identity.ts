@@ -3,7 +3,7 @@
 // only, so the same code runs on Node and Workers; the runtime supplies the SqlDatabase.
 import { betterAuth } from "better-auth/minimal";
 import { genericOAuth } from "better-auth/plugins/generic-oauth";
-import { type AppConfig, log, type SqlDatabase } from "@rendered-review/runtime";
+import { type AppConfig, log, readBodyCapped, type SqlDatabase } from "@rendered-review/runtime";
 import { sqlAdapter } from "./sql-adapter";
 import { createTokenCipher } from "./token-cipher";
 
@@ -59,6 +59,8 @@ const BROWSER_ROUTES = new Set(["/sign-in/social", `/callback/${PROVIDER}`, "/si
 const START_ROUTES: Record<string, string> = { "/sign-in/social": PROVIDER, "/link-social": PUBLIC_PROVIDER };
 // Refresh this long before expiry, so a token handed out still works for the request using it.
 const REFRESH_MARGIN_MS = 5 * 60 * 1000;
+// Auth requests carry at most a provider and a callback URL; anyone can send them, signed in or not.
+const MAX_BODY_BYTES = 16 * 1024;
 
 /** Sign-in is available when the GitHub App, its secrets and a database are configured. */
 export function authEnabled(config: AppConfig, hasDatabase: boolean): boolean {
@@ -273,6 +275,11 @@ export async function createIdentity({
   async function handle(request: Request): Promise<Response> {
     const path = new URL(request.url).pathname.replace(/^\/api\/auth/, "");
     let response: Response;
+    if (request.body) {
+      const body = await readBodyCapped(request, MAX_BODY_BYTES);
+      if (!body) return new Response("Request too large", { status: 413, headers: { "cache-control": "no-store" } });
+      request = new Request(request, { body });
+    }
     if (path === "/viewer" && request.method === "GET") {
       const user = await getSessionUser(request.headers);
       const viewer: Viewer | null = user && { login: user.login, avatarUrl: user.avatarUrl };

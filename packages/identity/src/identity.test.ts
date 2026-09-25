@@ -288,6 +288,30 @@ describe.each(databases)("GitHub sign-in on %s", (_, open) => {
     }
   });
 
+  it("stops reading an oversized request body, before anyone is signed in", async () => {
+    for (const path of ["sign-in/social", "sign-out"]) {
+      // 4 MiB in 64 KiB chunks, with no Content-Length to go by.
+      let pulled = 0;
+      const body = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          if (++pulled > 64) return controller.close();
+          controller.enqueue(new Uint8Array(64 * 1024).fill(32));
+        },
+      });
+      const response = await identity.handle(
+        new Request(`${BASE}/api/auth/${path}`, {
+          method: "POST",
+          headers: { origin: BASE, "content-type": "application/json" },
+          body,
+          duplex: "half",
+        } as RequestInit),
+      );
+      expect(response.status, path).toBe(413);
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      expect(pulled, path).toBeLessThan(4);
+    }
+  });
+
   it("rejects cross-site sign-out (CSRF) and signs out same-site", async () => {
     const { cookie } = await signIn(identity, "/");
     const signOut = (origin: string) =>
