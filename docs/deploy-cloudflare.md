@@ -59,7 +59,7 @@ Signed-in readers use their own GitHub token: 5,000 requests an hour instead of 
    - **GitHub App name:** `Rendered Review`. **Homepage URL:** `https://<domain>`.
    - **Callback URL:** `https://<domain>/api/auth/callback/github`. You can add more, for example the `workers.dev` URL.
    - **Expire user authorization tokens:** on. **Request user authorization (OAuth) during installation:** off.
-   - **Webhook:** **Active**, **Webhook URL** `https://<domain>/api/github/webhook`, **Webhook secret** the value you set as `GITHUB_APP_WEBHOOK_SECRET` below (generate it now with `openssl rand -hex 32`). No events need subscribing yet; GitHub sends a ping when you save.
+   - **Webhook:** **Active**, **Webhook URL** `https://<domain>/api/github/webhook`, **Webhook secret** the value you set as `GITHUB_APP_WEBHOOK_SECRET` below (generate it now with `openssl rand -hex 32`). No events need subscribing yet. GitHub pings the URL when you save, before the Worker has its secrets, so that first ping fails; you redeliver it in step 5.
    - **Repository permissions:** Contents, Issues, Metadata and Pull requests, all **Read-only**. **Account permissions:** Email addresses, **Read-only**.
    - **Where can this GitHub App be installed?** Start with **Only on this account**.
    - After creating the app, generate a client secret and a private key (a `.pem` download).
@@ -84,8 +84,17 @@ Signed-in readers use their own GitHub token: 5,000 requests an hour instead of 
    - Signing in from a pull request brings you back to the same pull request, and your avatar shows.
    - `/api/github/user/...` responses (browser devtools) carry `x-ratelimit-limit: 5000`.
    - Signing out works.
-   - Under the app's **Advanced** tab, **Recent Deliveries** shows the ping answered `200`. A `401` means the webhook secret on GitHub and in the Worker differ.
+   - Webhooks: on the app's **Advanced** tab, open the ping under **Recent Deliveries** and click **Redeliver**. It needs the secrets from step 3 and a deployment that includes the webhook endpoint. The redelivery should answer `200`. A `401` means the webhook secret on GitHub and in the Worker differ; a `404` means the Worker is missing a GitHub App secret or runs a version without the endpoint.
    - A second GitHub account can sign in. An app installable **Only on this account** may refuse other users. If it does, switch it to **Any account** under the app's **Advanced → Make public**. Private repositories need that later anyway.
+
+### Turn on webhooks for an existing app
+
+An app set up before the webhook endpoint existed has its webhook inactive, and its `GITHUB_APP_WEBHOOK_SECRET` can't be read back from Wrangler, so set a new one:
+
+1. Deploy a version that includes the endpoint (`/api/github/webhook`). Earlier deployments don't have it.
+2. Generate a new secret (`openssl rand -hex 32`) and store it, from `apps/web`: `pnpm exec wrangler secret put GITHUB_APP_WEBHOOK_SECRET --env production`.
+3. In the GitHub App's settings, enter the same value as **Webhook secret**, set **Webhook URL** to `https://<domain>/api/github/webhook`, and turn **Active** on. Save.
+4. On the **Advanced** tab, **Redeliver** the ping under **Recent Deliveries** and check that it answers `200`.
 
 `pnpm --filter @rendered-review/web smoke:workers` checks the same wiring locally. It runs the built Worker with fake app credentials and a throwaway local D1, then checks that `/api/auth/viewer` answers and sign-in redirects to GitHub with the right callback URL.
 
