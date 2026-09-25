@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Server only: the GitHub App's webhook endpoint. A delivery is checked in order (size, content
 // type, headers, then its HMAC-SHA256 signature over the raw body, verified with Web Crypto) before
-// its JSON is parsed or anything is written. Deliveries are deduplicated by delivery ID in the
-// control-plane database, then dispatched to a handler by event name. Payloads and signatures are
+// its JSON is parsed or anything is written. It is dispatched to a handler by event name, and its
+// delivery ID is recorded in the control-plane database once the handler succeeds, so a replay of
+// a processed delivery is a no-op and a failed one runs again when GitHub redelivers it. Payloads and signatures are
 // never logged. Web Request/Response/crypto only, so Node and Workers run the same code.
 import { errorName, log, type LogFields, type RequestContext, type SqlDatabase } from "@rendered-review/runtime";
 
@@ -17,6 +18,11 @@ export interface WebhookDelivery {
   payload: unknown;
 }
 
+/**
+ * Handles one event. Must be idempotent: a delivery is recorded only after its handler succeeds, so
+ * a failure, a crash before the record, or concurrent copies of one delivery can each run it again.
+ * Throwing answers 500 and leaves the delivery for a redelivery to retry.
+ */
 export type WebhookHandler = (
   delivery: WebhookDelivery,
   context: RequestContext & { db: SqlDatabase },
@@ -25,7 +31,7 @@ export type WebhookHandler = (
 /** Handlers keyed by `event.action` (preferred) or `event`. Events without a handler are ignored. */
 export type WebhookHandlers = Readonly<Record<string, WebhookHandler>>;
 
-/** The deployment's handlers. Register new events here. */
+/** The deployment's handlers. Register new events here; each must be idempotent (see `WebhookHandler`). */
 export const webhookHandlers: WebhookHandlers = {
   // GitHub sends a ping when the webhook is created or its settings change; nothing to do.
   ping: async () => {},
@@ -64,9 +70,9 @@ export async function receiveWebhook(
     return reject(415, "unsupported-media-type");
   const event = request.headers.get("x-github-event") ?? "";
   const id = request.headers.get("x-github-delivery") ?? "";
-  // The logger drops values that fail its own checks, so unvalidated headers are safe to pass.
-  Object.assign(fields, { deliveryId: id, githubEvent: event });
   if (!EVENT.test(event) || !DELIVERY_ID.test(id)) return reject(400, "missing-headers");
+  // Well-formed, but still unverified until the signature check: rejected lines may carry made-up IDs.
+  Object.assign(fields, { deliveryId: id, githubEvent: event });
 
   const body = await readCapped(request, MAX_WEBHOOK_BYTES);
   if (!body) return reject(413, "too-large");
@@ -85,19 +91,19 @@ export async function receiveWebhook(
   const handler = pick(handlers, `${event}.${delivery.action}`) ?? pick(handlers, event);
   if (!handler) return reply(200, "ignored");
 
-  // Claim the delivery first: the primary key lets exactly one concurrent copy through.
-  const { changes } = await db.run(
-    "INSERT INTO processed_webhook_event (source, delivery_id, processed_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING",
-    ["github", id, new Date().toISOString()],
+  const processed = await db.all(
+    "SELECT 1 AS found FROM processed_webhook_event WHERE source = ? AND delivery_id = ?",
+    ["github", id],
   );
-  if (changes === 0) return reply(200, "duplicate");
+  if (processed.length > 0) return reply(200, "duplicate");
   try {
     await handler(delivery, { ...context, db });
+    // Recorded only now: a failure or crash before this line leaves the delivery retryable.
+    await db.run(
+      "INSERT INTO processed_webhook_event (source, delivery_id, processed_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING",
+      ["github", id, new Date().toISOString()],
+    );
   } catch (error) {
-    // Release the claim so a redelivery (GitHub does not retry by itself) runs the handler again.
-    // Handlers must therefore be idempotent. ponytail: a crash between claim and release leaves the
-    // delivery marked processed; add a status column and a stale-claim sweep if that shows up.
-    await db.run("DELETE FROM processed_webhook_event WHERE source = ? AND delivery_id = ?", ["github", id]);
     return reply(500, "failed", { error: errorName(error) });
   }
   return reply(200, "accepted");

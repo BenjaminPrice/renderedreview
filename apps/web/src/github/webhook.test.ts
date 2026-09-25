@@ -394,6 +394,14 @@ describe.each(databases)("receiveWebhook on %s", (_, open) => {
       expect(events).toHaveLength(5);
     });
 
+    it("leaves the delivery ID and event out of lines for malformed headers", async () => {
+      await receiveWebhook(delivery("Not-An-Event", PING, { id: "h-1" }), context);
+      const [line] = logged().filter((e) => e.event === "github.webhook");
+      expect(line).toMatchObject({ outcome: "rejected", category: "missing-headers" });
+      expect(line).not.toHaveProperty("deliveryId");
+      expect(line).not.toHaveProperty("githubEvent");
+    });
+
     it("never logs the payload, the signature or the secret", async () => {
       const body = JSON.stringify({ action: "created", secretMarker: "payload-body-marker" });
       await receiveWebhook(delivery("installation", body), context, { installation: async () => {} });
