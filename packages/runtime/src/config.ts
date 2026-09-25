@@ -43,6 +43,7 @@ export interface AppConfig {
   trustedProxyHeader?: string;
   /** Abuse limits. On Workers the guest and auth limits come from the Rate Limiting bindings instead. */
   limits: { guestPerMinute: number; authPerMinute: number; writesPerMinute: number; trialStartsPerDay: number };
+  /**
    * The public origin (`https://host[:port]`, or `http://localhost[:port]`). When set, every request
    * is treated as addressed to it, whatever its Host header: auth callbacks, redirects and CSRF
    * origin checks follow it.

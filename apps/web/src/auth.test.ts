@@ -79,6 +79,7 @@ it("limits sign-in starts and callbacks per client address, with a typed 429, bu
     });
     expect((await handleAuthRequest(viewer, context)).status).toBe(200);
   }
+});
 
 describe("atPublicOrigin", () => {
   it("treats a request as addressed to the pinned origin, whatever its Host, keeping everything else", async () => {
