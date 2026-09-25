@@ -3,6 +3,8 @@
 import axe from "axe-core";
 import { JSDOM } from "jsdom";
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { docPages } from "../src/docs-nav";
 import { annualPrice, formatUsd, plans } from "../src/pricing";
 import { fileFor, page, pages, read } from "./dist";
 
@@ -70,6 +72,37 @@ describe("links", () => {
         }
       }
     }
+  });
+});
+
+describe("docs", () => {
+  const source = (slug: string) => readFileSync(new URL(`../../../docs/${slug}.md`, import.meta.url), "utf8");
+
+  it.each(docPages.map((p) => p.slug))("publishes docs/%s.md at /docs/<slug>/ with its own heading", (slug) => {
+    const doc = page(`/docs/${slug}/`);
+    const heading = source(slug).match(/^# (.+)$/m)![1]!;
+    expect(doc.querySelector("article h1")?.textContent).toBe(heading);
+    expect(doc.title).toBe(`${heading} · Rendered Review docs`);
+    const current = doc.querySelectorAll('nav[aria-label="Docs"] a[aria-current="page"]');
+    expect([...current].map((a) => a.getAttribute("href"))).toEqual([`/docs/${slug}/`]);
+    expect(doc.querySelector("a.edit")?.getAttribute("href")).toBe(
+      `https://github.com/BenjaminPrice/renderedreview/blob/main/docs/${slug}.md`,
+    );
+  });
+
+  it("lists every published doc on the docs home, and the site links to it", () => {
+    const hrefs = [...page("/docs/").querySelectorAll("main a")].map((a) => a.getAttribute("href"));
+    for (const { slug } of docPages) expect(hrefs).toContain(`/docs/${slug}/`);
+    expect([...page("/").querySelectorAll("header a")].map((a) => a.getAttribute("href"))).toContain("/docs/");
+  });
+
+  it("publishes only the docs in the navigation", () => {
+    const built = pages().filter((p) => p.startsWith("/docs/") && p !== "/docs/");
+    expect(built.sort()).toEqual(docPages.map((p) => `/docs/${p.slug}/`).sort());
+  });
+
+  it("renders code blocks without inline highlighting styles", () => {
+    expect(page("/docs/annotation-format/").querySelector("pre code")).toBeTruthy();
   });
 });
 
