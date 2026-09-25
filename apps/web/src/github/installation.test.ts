@@ -121,7 +121,7 @@ describe("withLocalInstallations", () => {
     await db.run("INSERT INTO github_installation_repository (installation_id, repository_id) VALUES ('i', 'r')");
     const live = vi.fn(async () => false);
     expect(await withLocalInstallations(db, live)("github.com", "acme", "widgets")).toBe(true);
-    await db.run("UPDATE github_installation SET deleted_at = ?", [now]);
+    await db.run("UPDATE github_installation SET suspended_at = ?", [now]);
     expect(await withLocalInstallations(db, live)("github.com", "acme", "widgets")).toBe(false);
     expect(live).not.toHaveBeenCalled();
     await db.close();
@@ -135,8 +135,12 @@ describe("withLocalInstallations", () => {
     expect(await installed("github.com", "acme", "widgets")).toBe(true);
     await install(db);
     expect(await installed("github.com", "acme", "widgets")).toBe(true);
+    // An owner whose installations are all deleted may have reinstalled without us hearing of it.
+    await db.run("UPDATE github_installation SET deleted_at = ?", [now]);
+    expect(await installed("github.com", "acme", "widgets")).toBe(true);
     expect(live.mock.calls).toEqual([
       ["github.com", "octo", "widgets"],
+      ["github.com", "acme", "widgets"],
       ["github.com", "acme", "widgets"],
       ["github.com", "acme", "widgets"],
     ]);

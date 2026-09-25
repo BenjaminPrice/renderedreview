@@ -220,12 +220,42 @@ describe.each(testDatabases)("installation tracking on %s", (_, open) => {
       expect(after.grants).toEqual(["42:1002"]);
     });
 
-    it("switching from all to selected drops grants that were only there because of all", async () => {
+    it("switching from all to selected stores the new selection", async () => {
       await created(installation({ repository_selection: "all" }), [widgets, gadgets]);
-      await change([], [], "selected");
+      await change([gadgets], [], "selected");
       const after = await state();
       expect(after.installations).toEqual([expect.objectContaining({ repository_selection: "selected" })]);
+      expect(after.grants).toEqual(["42:1002"]);
+    });
+
+    it("switching from selected to all clears the grants", async () => {
+      await created();
+      await change([gadgets], [], "all");
+      const after = await state();
+      expect(after.installations).toEqual([expect.objectContaining({ repository_selection: "all" })]);
       expect(after.grants).toEqual([]);
+    });
+  });
+
+  describe("all-repositories installations", () => {
+    it("store no per-repository grants, so a large installation costs the same few queries", async () => {
+      const queries = async (count: number) => {
+        await db.run("DELETE FROM github_installation");
+        let n = 0;
+        const counting: SqlDatabase = {
+          all: (sql, params) => (n++, db.all(sql, params)),
+          run: (sql, params) => (n++, db.run(sql, params)),
+        };
+        const repos = Array.from({ length: count }, (_, i) => ({ ...widgets, id: 5000 + i, name: `repo-${i}` }));
+        await deliver({ ...context, db: counting }, "installation", {
+          action: "created",
+          installation: installation({ repository_selection: "all" }),
+          repositories: repos,
+        });
+        return n;
+      };
+      expect(await queries(50)).toBe(await queries(2));
+      expect((await state()).grants).toEqual([]);
     });
   });
 
@@ -295,11 +325,15 @@ describe.each(testDatabases)("installation tracking on %s", (_, open) => {
       expect(await check("acme", "anything")).toBe(true);
     });
 
-    it("is not installed once the installation is deleted or while it is suspended", async () => {
+    it("is not installed while the owner's only live installation is suspended", async () => {
       await created(installation({ suspended_at: "2026-09-25T08:00:00Z" }));
       expect(await check("acme", "widgets")).toBe(false);
+    });
+
+    it("is unknown once every installation it knows for the owner is deleted, since a reinstall may have been missed", async () => {
+      await created();
       await send("installation", { action: "deleted", installation: installation() });
-      expect(await check("acme", "widgets")).toBe(false);
+      expect(await check("acme", "widgets")).toBeUndefined();
     });
 
     it("does not count a grant for a repository that moved to another owner", async () => {
