@@ -10,6 +10,7 @@
 import type { LocalEntitlement, OwnerType } from "@rendered-review/control-plane";
 import type { SqlDatabase } from "@rendered-review/runtime";
 import { billingAccountFor } from "./billing";
+import { activeContributors } from "./contributors";
 import type { Account } from "./github/installations";
 
 export const TRIAL_DAYS = 30;
@@ -73,21 +74,19 @@ export async function ownerTrial(db: SqlDatabase, secret: string, host: string, 
 }
 
 /**
- * Would this user be one active private contributor too many for the owner's trial? Contributors
- * already counted keep publishing. Reads the `active_contributor` rows that publishing records; a
- * trial account has no earlier records, so every row counts, whatever its period.
+ * Would this user be one active private contributor too many for the owner's trial in the current
+ * billing period? Contributors already counted keep publishing. Counts what publishing records
+ * (`activeContributors`), so the trial and the paid plans share one definition of "active".
  */
 export async function trialContributorCapReached(db: SqlDatabase, host: string, ownerId: string, userId: string) {
-  const [row] = await db.all<{ limit: number | null; count: number; known: number }>(
-    `SELECT e.contributor_limit AS "limit",
-       (SELECT COUNT(DISTINCT c.github_user_id) FROM active_contributor c
-        WHERE c.billing_account_id = e.billing_account_id) AS "count",
-       (SELECT COUNT(*) FROM active_contributor c JOIN account a ON a."accountId" = c.github_user_id
-        WHERE c.billing_account_id = e.billing_account_id AND a."userId" = ? AND a."providerId" = 'github') AS "known"
+  const [row] = await db.all<{ account: string; limit: number | null; githubUserId: string | null }>(
+    `SELECT e.billing_account_id AS "account", e.contributor_limit AS "limit",
+       (SELECT a."accountId" FROM account a WHERE a."userId" = ? AND a."providerId" = 'github') AS "githubUserId"
      FROM github_owner o JOIN entitlement e ON e.billing_account_id = o.billing_account_id
      WHERE o.host = ? AND o.github_id = ?`,
     [userId, host, ownerId],
   );
-  if (!row || row.limit === null || Number(row.known) > 0) return false;
-  return Number(row.count) >= row.limit;
+  if (!row || row.limit === null) return false;
+  const { count, contributors } = await activeContributors(db, row.account);
+  return !contributors.some((c) => c.githubUserId === row.githubUserId) && count >= row.limit;
 }

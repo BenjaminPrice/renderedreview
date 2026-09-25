@@ -4,6 +4,7 @@ import { migrate } from "@rendered-review/control-plane";
 import { loadConfig, type SqlDatabase } from "@rendered-review/runtime";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { entitlementCheckFor, type Requester } from "./billing";
+import { contributorTrackerFor } from "./contributors";
 import { testDatabases } from "./github/test-databases";
 import { TRIAL_CONTRIBUTORS, trialSubjectKey } from "./trial";
 
@@ -193,17 +194,10 @@ describe.each(testDatabases)("private-repository trial on %s", (_, open) => {
       );
       return userId;
     };
-    // What publishing records for each contributor (the active-contributor tracking).
+    // What a successful publish records for each contributor.
     const active = async (userIds: string[]) => {
-      const [{ id }] = (await db.all<{ id: string }>("SELECT billing_account_id AS id FROM github_owner")) as [
-        { id: string },
-      ];
-      for (const userId of userIds)
-        await db.run(
-          `INSERT INTO active_contributor (billing_account_id, period_start, github_user_id, first_active_at)
-           SELECT ?, ?, "accountId", ? FROM account WHERE "userId" = ?`,
-          [id, "2026-09-01T00:00:00.000Z", start.toISOString(), userId],
-        );
+      const track = contributorTrackerFor(hosted, db)!;
+      for (const userId of userIds) await track(acme, userId);
     };
 
     it("refuses an eleventh new contributor's publish; the first ten keep publishing", async () => {
@@ -218,6 +212,14 @@ describe.each(testDatabases)("private-repository trial on %s", (_, open) => {
       });
       // Reading is never capped.
       expect((await check(acme, reader(users[10]))).allowed).toBe(true);
+    });
+
+    it("counts active contributors per billing period, like the paid plans", async () => {
+      const users = await Promise.all(Array.from({ length: 11 }, (_, i) => contributor(i + 1)));
+      await check(acme, reader(users[0]));
+      await active(users.slice(0, 10)); // in September
+      vi.setSystemTime(new Date("2026-10-05T00:00:00.000Z"));
+      expect((await check(acme, writer(users[10]))).allowed).toBe(true);
     });
 
     it("follows a larger, sales-approved limit set on the ledger and entitlement", async () => {
