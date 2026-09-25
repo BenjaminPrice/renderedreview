@@ -45,7 +45,6 @@ import { SelectionPopover } from "../document/SelectionPopover";
 import { Sidebar } from "../document/Sidebar";
 import { ExternalLink } from "../ui/ExternalLink";
 import { isPrivateRepoUnsupported, isSignInRequired, isTrialExpired, preferProxy, rateLimit } from "../github/client";
-import { UPGRADE_URL } from "../github/user-proxy";
 import { allowedHosts, proxyFirstHosts } from "../github/proxy";
 import {
   blobQuery,
@@ -67,7 +66,7 @@ import { relativeTime } from "../review/model";
 import { useReviewMode } from "../review/ReviewMode";
 import { AppShell } from "../ui/AppShell";
 import { GuestNotice } from "../ui/GuestNotice";
-import { TrialDaysLeft, TrialEndedDrafts, TrialStarted } from "../ui/Trial";
+import { TrialDaysLeft, TrialEndedDrafts, TrialEndedPlans, TrialStarted } from "../ui/Trial";
 import { signIn } from "../ui/Viewer";
 import { parsePrParams, validatePrSearch } from "../pr-url";
 
@@ -704,7 +703,7 @@ function ErrorState({
     return (
       <Message title="Private-repository trial ended" action={<TrialEndedDrafts {...pr} />}>
         The 30-day trial for {pr.owner} has ended. Choose a plan to keep reviewing its private pull requests here.
-        Comments already on GitHub are unaffected. <a href={UPGRADE_URL}>See plans</a>
+        Comments already on GitHub are unaffected. <TrialEndedPlans {...pr} />
       </Message>
     );
   }
