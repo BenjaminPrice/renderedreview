@@ -2272,6 +2272,13 @@ samp {
 .rr-draft-body {
   margin: 8px 12px;
 }
+/* The comment text a repair keeps, shown raw: exactly what stays on GitHub. */
+.rr-repair-text {
+  margin: 8px 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: var(--rr-text-sm);
+}
 .rr-composer-note {
   margin: 0 12px 8px;
   font-size: var(--rr-text-xs);
