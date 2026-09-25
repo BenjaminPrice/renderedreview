@@ -3,7 +3,7 @@
 // returns must never reach the browser or a log.
 import type { EntitlementDecision } from "@rendered-review/control-plane";
 import type { Identity } from "@rendered-review/identity";
-import type { EntitlementCheck } from "../billing";
+import type { EntitlementCheck, PrivateRepository } from "../billing";
 import type { InstallationCheck } from "./installation";
 import { type RepoFacts, repoFacts } from "./proxy";
 
@@ -15,8 +15,8 @@ export type GitHubCredential =
   | { kind: "anonymous" };
 
 export type WriteCredential =
-  /** The user's GitHub App token: the app is installed on the repository. */
-  | { kind: "user"; token: string }
+  /** The user's GitHub App token: the app is installed on the repository. `repository`: an entitled private one. */
+  | { kind: "user"; token: string; repository?: PrivateRepository }
   /** The user's OAuth App token (`public_repo`): a public repository without the app. */
   | { kind: "public-oauth"; token: string }
   /** Public repository, app not installed, OAuth App not linked: offer `authorizePublicComments`. */
@@ -81,10 +81,11 @@ export async function forRepository(
     return facts.status === 401 ? { kind: "reauth" } : { kind: "unavailable", status: facts.status };
   }
   if (facts.visibility === "private") {
-    const decision = await privateAccess(host, op.repo, facts, deps.entitlement);
-    if (!decision) return { kind: "private-repo-unsupported" };
+    const repository = privateRepository(host, op.repo, facts);
+    if (!repository || !deps.entitlement) return { kind: "private-repo-unsupported" };
+    const decision = await deps.entitlement(repository);
     // An entitled private repository is written with the GitHub App user token (the app is installed there).
-    return decision.allowed ? { kind: "user", token } : { kind: "not-entitled", reason: decision.reason };
+    return decision.allowed ? { kind: "user", token, repository } : { kind: "not-entitled", reason: decision.reason };
   }
   if (await deps.installed?.(host, op.owner, op.repo)) return { kind: "user", token };
   const publicToken = await deps.identity?.getUserPublicWriteToken?.(op.userId, host);
@@ -100,9 +101,14 @@ export async function privateAccess(
   facts: RepoFacts,
   entitlement: EntitlementCheck | undefined,
 ): Promise<EntitlementDecision | undefined> {
+  const repository = privateRepository(host, name, facts);
+  return entitlement && repository ? entitlement(repository) : undefined;
+}
+
+function privateRepository(host: string, name: string | undefined, facts: RepoFacts): PrivateRepository | undefined {
   // GitHub's current name wins over the requested path's (which may be a pre-rename redirect).
   name = facts.name ?? name;
-  if (!entitlement || !facts.owner || !name) return undefined;
+  if (!facts.owner || !name) return undefined;
   const { id, login, type } = facts.owner;
-  return entitlement({ host, owner: login, name, ownerId: id, ownerType: type });
+  return { host, owner: login, name, ownerId: id, ownerType: type };
 }
