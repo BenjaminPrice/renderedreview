@@ -12,4 +12,5 @@ export {
   type LoadConfigOptions,
 } from "./config";
 export { readBodyCapped } from "./body";
+export { memoryRateLimiter, type RateLimiter } from "./rate-limit";
 export { errorName, log, type LogFields } from "./log";
