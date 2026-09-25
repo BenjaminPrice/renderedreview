@@ -56,6 +56,8 @@ export interface CommentRailProps {
   extras?: { id: string; blockId: number; element: ReactNode }[];
   /** Reply and resolve controls for every thread card. */
   threadActions?: ThreadActions;
+  /** Starts repairing a thread's anchor, when the viewer may (their own comment, anchor broken). */
+  repairFor?: (placement: ThreadPlacement) => (() => void) | undefined;
   /** In-app link to the revision a thread was written on, for threads not shown as written. */
   originalLink?: (thread: NativeThread, commitOid: string) => ThreadCardProps["original"];
 }
@@ -273,6 +275,7 @@ export function CommentRail(props: CommentRailProps) {
         original={commitOid ? props.originalLink?.(p.thread, commitOid) : undefined}
         onActivate={() => p.thread.id !== active && activate(p.thread.id)}
         actions={props.threadActions}
+        onRepair={props.repairFor?.(p)}
       />
     );
   };
