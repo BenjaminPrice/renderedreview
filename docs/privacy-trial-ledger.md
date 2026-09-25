@@ -16,10 +16,12 @@ The subject key is pseudonymous: it holds no login, name or email, and without t
 
 The ledger stores no repository content, comments or GitHub tokens.
 
+Active private contributors are counted per calendar month, as for paid plans, so a trial that spans two months can take up to 10 new contributors in each.
+
 ## Purpose and retention
 
 The ledger's only purpose is to stop the same owner from starting a second trial. Entries have no expiry: an entry is kept for as long as the hosted service offers this trial, because deleting it would let the owner start another. When the redeeming billing account is deleted, the entry loses its link to that account (the billing account field is cleared) and the pseudonymous entry stays.
 
 ## After the trial
 
-When the trial ends, Rendered Review stops opening new private pull request pages for that owner and stops publishing comments to its private repositories. Comments already on GitHub are unaffected. Drafts still on the page can be copied.
+When the trial ends, Rendered Review stops opening new private pull request pages for that owner and stops publishing comments to its private repositories. Comments already on GitHub are unaffected. Drafts still in the browser can be copied, from the open page or from the trial-ended page. Private drafts are kept only in the tab's memory unless you chose to keep private content in the browser, so copy them before closing the tab.

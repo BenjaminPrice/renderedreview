@@ -34,7 +34,17 @@ export function TrialDaysLeft({ endsAt }: { endsAt: string }) {
  * An ended trial's page: the PR's drafts still in this browser (this tab's memory, or IndexedDB when
  * the user opted in to keeping private content), to copy. Nothing when there are none.
  */
-export function TrialEndedDrafts({ host, owner, repo, number }: { host: string; owner: string; repo: string; number: number }) {
+export function TrialEndedDrafts({
+  host,
+  owner,
+  repo,
+  number,
+}: {
+  host: string;
+  owner: string;
+  repo: string;
+  number: number;
+}) {
   const repositoryId = useQuery(trialEndedRepositoryQuery(host, owner, repo)).data;
   return repositoryId ? <StoredDrafts host={host} repositoryId={repositoryId} number={number} /> : null;
 }

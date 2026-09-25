@@ -126,13 +126,7 @@ function PullRequestPage() {
   // Data already loaded stays on screen when a refetch fails (e.g. rate-limited).
   const error = pr.error ?? files.error;
   if ((!pr.data || !files.data) && error)
-    return (
-      <ErrorState
-        error={error}
-        pr={params}
-        offerSignIn={viewer.data?.signInEnabled && !viewer.data.signedIn}
-      />
-    );
+    return <ErrorState error={error} pr={params} offerSignIn={viewer.data?.signInEnabled && !viewer.data.signedIn} />;
   if (!pr.data || !identity || !files.data) return <Message title="Loading…" />;
   return <ReviewPage pr={pr.data} id={identity} files={files.data} />;
 }
@@ -709,8 +703,8 @@ function ErrorState({
   if (isTrialExpired(error)) {
     return (
       <Message title="Private-repository trial ended" action={<TrialEndedDrafts {...pr} />}>
-        The 30-day trial for {pr.owner} has ended. Choose a plan to keep reviewing its private pull requests here. Comments
-        already on GitHub are unaffected. <a href={UPGRADE_URL}>See plans</a>
+        The 30-day trial for {pr.owner} has ended. Choose a plan to keep reviewing its private pull requests here.
+        Comments already on GitHub are unaffected. <a href={UPGRADE_URL}>See plans</a>
       </Message>
     );
   }
