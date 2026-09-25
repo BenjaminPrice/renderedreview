@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Server only: picks the least-privileged GitHub credential for a repository operation. Tokens it
 // returns must never reach the browser or a log.
+import type { EntitlementDecision } from "@rendered-review/control-plane";
 import type { Identity } from "@rendered-review/identity";
+import type { EntitlementCheck } from "../billing";
 import type { InstallationCheck } from "./installation";
-import { repoVisibility } from "./proxy";
+import { type RepoFacts, repoFacts } from "./proxy";
 
 export type GitHubCredential =
   /** The signed-in user's own token: their access, their 5,000/hour limit. */
@@ -20,6 +22,8 @@ export type WriteCredential =
   /** Public repository, app not installed, OAuth App not linked: offer `authorizePublicComments`. */
   | { kind: "needs-public-authorization" }
   | { kind: "private-repo-unsupported" }
+  /** Private repository whose owner's plan (or the local access policy) does not allow it. */
+  | { kind: "not-entitled"; reason: NotEntitled }
   /** No usable GitHub App token (signed out elsewhere, refresh rejected): sign in again. */
   | { kind: "reauth" }
   /** GitHub would not show the repository to the user (for example 404, 403). */
@@ -40,6 +44,8 @@ interface BrokerDeps {
   readToken?: { host: string; token: string };
   /** Undefined without a GitHub App private key: the app then counts as not installed. */
   installed?: InstallationCheck;
+  /** Undefined in community mode: private repositories are then refused. */
+  entitlement?: EntitlementCheck;
   fetch?: typeof fetch;
 }
 
@@ -64,18 +70,37 @@ export async function forRepository(
   }
 
   if (!token) return { kind: "reauth" };
-  const visibility = await repoVisibility(
+  const facts = await repoFacts(
     host,
     `repos/${op.owner}/${op.repo}`,
     { Authorization: `Bearer ${token}`, "User-Agent": "rendered-review", "X-GitHub-Api-Version": "2022-11-28" },
     deps.fetch ?? fetch,
   );
-  if (visibility instanceof Response) {
-    return visibility.status === 401 ? { kind: "reauth" } : { kind: "unavailable", status: visibility.status };
+  if (facts instanceof Response) {
+    return facts.status === 401 ? { kind: "reauth" } : { kind: "unavailable", status: facts.status };
   }
-  // Private repositories need an entitlement check before anything is served or written.
-  if (visibility === "private") return { kind: "private-repo-unsupported" };
+  if (facts.visibility === "private") {
+    const decision = await privateAccess(host, op.repo, facts, deps.entitlement);
+    if (!decision) return { kind: "private-repo-unsupported" };
+    // An entitled private repository is written with the GitHub App user token (the app is installed there).
+    return decision.allowed ? { kind: "user", token } : { kind: "not-entitled", reason: decision.reason };
+  }
   if (await deps.installed?.(host, op.owner, op.repo)) return { kind: "user", token };
   const publicToken = await deps.identity?.getUserPublicWriteToken?.(op.userId, host);
   return publicToken ? { kind: "public-oauth", token: publicToken } : { kind: "needs-public-authorization" };
+}
+
+export type NotEntitled = Extract<EntitlementDecision, { allowed: false }>["reason"];
+
+/** Entitlement for a private repository, judged by its current owner; undefined when this deployment refuses them all. */
+export async function privateAccess(
+  host: string,
+  name: string | undefined,
+  facts: RepoFacts,
+  entitlement: EntitlementCheck | undefined,
+): Promise<EntitlementDecision | undefined> {
+  name ??= facts.name;
+  if (!entitlement || !facts.owner || !name) return undefined;
+  const { id, login, type } = facts.owner;
+  return entitlement({ host, owner: login, name, ownerId: id, ownerType: type });
 }

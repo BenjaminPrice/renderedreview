@@ -6,6 +6,7 @@ import {
   repairCommentBody,
 } from "@rendered-review/annotation-domain";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { EntitlementCheck } from "../billing";
 import { captureLogs } from "../test-utils";
 import { publishToGitHub, WRITE_PREFIX } from "./publish";
 
@@ -59,6 +60,7 @@ function setup({
   head = HEAD,
   routes = {} as Record<string, Route>,
   approvalUrl = undefined as string | undefined,
+  entitlement = undefined as EntitlementCheck | undefined,
 } = {}) {
   const repo = `widgets-${++repoCounter}`;
   // Its own user too: the per-user publish limit is process-wide.
@@ -67,7 +69,12 @@ function setup({
   const fetch = vi.fn<typeof globalThis.fetch>(async (input, init = {}) => {
     const url = String(input);
     const key = `${init.method ?? "GET"} ${url.replace(base, "").replace("https://api.github.com", "")}`;
-    if (key === "GET ") return Response.json({ private: visibility === "private", visibility });
+    if (key === "GET ")
+      return Response.json({
+        private: visibility === "private",
+        visibility,
+        owner: { id: 2, login: "acme", type: "Organization" },
+      });
     if (key === "GET /pulls/7") return Response.json(rawPull(head));
     const route = routes[key];
     if (!route) throw new Error(`unexpected GitHub request: ${key}`);
@@ -93,7 +100,7 @@ function setup({
           duplex: "half",
         }),
       } as RequestInit),
-      { allowedHosts: ["github.com"], identity, installed: async () => installed, fetch, approvalUrl },
+      { allowedHosts: ["github.com"], identity, installed: async () => installed, fetch, approvalUrl, entitlement },
     );
   const writes = () => fetch.mock.calls.filter(([, init]) => init?.method === "POST");
   const sent = (i: number) => JSON.parse(writes()[i]![1]!.body as string) as Record<string, unknown>;
@@ -208,12 +215,31 @@ describe("credential selection", () => {
     ["the user must link the OAuth App", { installed: false, publicToken: null }, 403, "needs-public-authorization"],
     ["the repository is private", { visibility: "private" as const }, 403, "private-repo-unsupported"],
     ["the GitHub token is gone", { appToken: null }, 401, "reauth"],
+    [
+      "the owner's plan does not cover the private repository",
+      {
+        visibility: "private" as const,
+        entitlement: async () => ({ allowed: false, reason: "no-entitlement" }) as const,
+      },
+      403,
+      "not-entitled",
+    ],
   ])("answers a typed error when %s", async (_, options, status, code) => {
     const { call, writes } = setup(options);
     const res = await call("comment", comment());
     expect(res.status).toBe(status);
     expect(await json(res)).toMatchObject({ code });
     expect(writes()).toHaveLength(0);
+  });
+
+  it("publishes to a private repository its owner's plan covers, with the GitHub App user token", async () => {
+    const { call, auth } = setup({
+      visibility: "private",
+      entitlement: async () => ({ allowed: true, reason: "subscription" }),
+      routes: { "POST /pulls/7/comments": created() },
+    });
+    expect((await call("comment", comment())).status).toBe(201);
+    expect(auth(0)).toBe("Bearer app-token");
   });
 
   it("publishes with the OAuth App token on a public repository without the app", async () => {

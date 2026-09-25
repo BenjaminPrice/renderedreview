@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { createFileRoute } from "@tanstack/react-router";
 import { identityFor } from "../../../../auth";
+import { entitlementCheckFor } from "../../../../billing";
 import { installationCheckFor } from "../../../../github/installation";
 import { allowedHosts } from "../../../../github/proxy";
 import { publishToGitHub } from "../../../../github/publish";
@@ -11,10 +12,12 @@ export const Route = createFileRoute("/api/github/write/$")({
     handlers: {
       ANY: async ({ request, context }) => {
         const { github } = context.config;
+        const installed = installationCheckFor(context.config, context.db);
         return publishToGitHub(request, {
           allowedHosts: allowedHosts(context.config),
           identity: await identityFor(context, new URL(request.url).origin),
-          installed: installationCheckFor(context.config, context.db),
+          installed,
+          entitlement: entitlementCheckFor(context.config, context.db, installed),
           approvalUrl: github.oauth && `${github.url}/settings/connections/applications/${github.oauth.clientId}`,
         });
       },

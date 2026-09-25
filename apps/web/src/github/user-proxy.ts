@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Signed-in GitHub reads: the same strict path allowlist as the public proxy, read with the
 // user's own token (their access and rate limit). Responses are per user, so never
-// shared-cacheable. Public repositories only for now. Web Request/Response/fetch only.
+// shared-cacheable. Private repositories only where the deployment's entitlement check allows them
+// (never in community mode). Web Request/Response/fetch only.
 import { createGitHubClient, GitHubError } from "@rendered-review/github-integration";
 import type { Identity } from "@rendered-review/identity";
 import { log } from "@rendered-review/runtime";
-import { forRepository } from "./broker";
+import type { EntitlementCheck } from "../billing";
+import { forRepository, privateAccess } from "./broker";
 import { meteredFetch } from "./metrics";
 import {
   ACCEPT,
@@ -16,7 +18,7 @@ import {
   REPO_PREFIX,
   REPO_SEGMENT,
   reject,
-  repoVisibility,
+  repoFacts,
 } from "./proxy";
 
 export const USER_PREFIX = "/api/github/user/";
@@ -24,6 +26,8 @@ export const USER_PREFIX = "/api/github/user/";
 export const REQUESTED_WITH = "rendered-review";
 /** Body of the 403 for a private repository; the client matches on it. */
 export const PRIVATE_REPO_UNSUPPORTED = "Private repositories aren't supported yet";
+/** Body of the 403 for a private repository no plan or policy covers. */
+export const NOT_ENTITLED = "This private repository isn't covered by a Rendered Review plan";
 
 // Largest response passed through; GitHub's own pages are far smaller, blobs can be huge.
 const MAX_BYTES = 10 * 1024 * 1024;
@@ -40,6 +44,13 @@ const deny = (status: number, category: string, message: string) => {
   return res;
 };
 const reauth = () => deny(401, "reauth", "Sign in with GitHub again");
+const notEntitled = (reason: string) => {
+  log.info("github.user_proxy", { category: "not-entitled", status: 403 });
+  return Response.json(
+    { message: NOT_ENTITLED, code: "not-entitled", reason },
+    { status: 403, headers: { "cache-control": "no-store", vary: "Cookie" } },
+  );
+};
 
 export async function proxyUserGitHub(
   request: Request,
@@ -47,11 +58,14 @@ export async function proxyUserGitHub(
     allowedHosts,
     identity,
     fetch: unmetered = fetch,
+    entitlement,
   }: {
     allowedHosts: string[];
     /** Undefined when this deployment has no sign-in. */
     identity: Pick<Identity, "getSessionUser" | "getUserGitHubToken"> | undefined;
     fetch?: typeof fetch;
+    /** Undefined in community mode: private repositories are then refused. */
+    entitlement?: EntitlementCheck;
   },
 ): Promise<Response> {
   if (request.method !== "GET") return reject(405, "Method not allowed");
@@ -81,11 +95,17 @@ export async function proxyUserGitHub(
     "User-Agent": "rendered-review",
     Authorization: `Bearer ${credential.token}`,
   };
-  // The repository-authorization seam: private repositories need an installation and entitlement
-  // check before they can be served; until then they are refused.
-  const visibility = await repoVisibility(host, REPO_PREFIX.exec(path)![0], headers, fetchFn);
-  if (visibility === "private") return deny(403, "private-repo-unsupported", PRIVATE_REPO_UNSUPPORTED);
-  if (visibility instanceof Response) return visibility.status === 401 ? reauth() : passError(visibility);
+  // The repository-authorization seam: a private repository is served only when the entitlement
+  // check (local access policy, installation and, when hosted, the owner's plan) allows it.
+  const repoPath = REPO_PREFIX.exec(path)![0];
+  const facts = await repoFacts(host, repoPath, headers, fetchFn);
+  if (facts instanceof Response) return facts.status === 401 ? reauth() : passError(facts);
+  if (facts.visibility === "private") {
+    const [, , name] = repoPath.split("/");
+    const decision = await privateAccess(host, repoPath.startsWith("repos/") ? name : undefined, facts, entitlement);
+    if (!decision) return deny(403, "private-repo-unsupported", PRIVATE_REPO_UNSUPPORTED);
+    if (!decision.allowed) return notEntitled(decision.reason);
+  }
 
   if (threads) {
     const [, owner, repo, number] = threads;

@@ -138,7 +138,7 @@ describe.each(testDatabases)("billing accounts on %s", (_, open) => {
     });
 
     it("in dedicated mode follows the installation and never reads billing tables", async () => {
-      const spy = { all: vi.fn(db.all.bind(db)), run: vi.fn(db.run.bind(db)) };
+      const spy = { all: vi.fn(), run: vi.fn() };
       const installed = vi.fn(async () => false);
       const check = entitlementCheckFor(loadConfig({ ...env, HOSTING_MODE: "dedicated" }), spy, installed)!;
       expect(await check(repo(acme))).toEqual({ allowed: false, reason: "not-installed" });
@@ -151,7 +151,7 @@ describe.each(testDatabases)("billing accounts on %s", (_, open) => {
 
 describe("githubOwnerRole", () => {
   const respond = (status: number, body: unknown = {}) =>
-    vi.fn(async (_: RequestInfo | URL, __?: RequestInit) => Response.json(body, { status }));
+    vi.fn<typeof fetch>(async () => Response.json(body, { status }));
 
   it("makes a personal owner the admin of their own account", async () => {
     const fetch = respond(200, { id: 200, login: "octo" });

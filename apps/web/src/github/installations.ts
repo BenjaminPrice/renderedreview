@@ -244,8 +244,8 @@ const onAccountRenamed = logged(async ({ payload }, store) => {
   return { outcome: "applied", installationId };
 });
 
-// Renamed or transferred: the repository keeps its ID. A transfer can move it to an owner with a
-// different plan; re-evaluating entitlement for that belongs to billing, not here.
+// Renamed or transferred: the repository keeps its ID. Entitlement needs nothing from here: it is
+// judged by the owner GitHub reports for the repository on each request (see billing.ts).
 const onRepositoryMoved = logged(async ({ payload }, store) => {
   const p = obj(payload);
   const r = obj(p?.repository);

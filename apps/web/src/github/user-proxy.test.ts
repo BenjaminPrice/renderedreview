@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
+import { loadConfig } from "@rendered-review/runtime";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { entitlementCheckFor, type EntitlementCheck } from "../billing";
 import { captureLogs } from "../test-utils";
 import { proxyUserGitHub, USER_PREFIX } from "./user-proxy";
 
@@ -16,6 +18,7 @@ function setup({
   session = user as typeof user | null,
   token = "user-token" as string | null,
   upstream = (() => Response.json({}, { headers: { etag: '"e"', "set-cookie": "x=1" } })) as Upstream,
+  entitlement = undefined as EntitlementCheck | undefined,
 } = {}) {
   const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
     const url = String(input);
@@ -31,6 +34,7 @@ function setup({
       allowedHosts: ["github.com"],
       identity,
       fetch,
+      entitlement,
     });
   const auth = (i: number) => (fetch.mock.calls[i]![1]?.headers as Record<string, string>).Authorization;
   return { fetch, identity, call, auth };
@@ -103,6 +107,55 @@ describe("proxyUserGitHub", () => {
     expect(await body(res)).toMatchObject({ code: "private-repo-unsupported" });
     expect(fetch).toHaveBeenCalledOnce();
     expect(identity.getUserGitHubToken).toHaveBeenCalledWith("u1", "github.com");
+  });
+
+  describe("private repositories", () => {
+    const privateRepo = () =>
+      Response.json({ private: true, visibility: "private", owner: { id: 100, login: "acme", type: "Organization" } });
+    const withPrivate = (entitlement: EntitlementCheck | undefined) => {
+      const t = setup({ entitlement });
+      const upstream = t.fetch.getMockImplementation()!;
+      t.fetch.mockImplementation(async (input, init) =>
+        /\/repos\/[^/]+\/[^/]+$/.test(String(input)) ? privateRepo() : upstream(input, init),
+      );
+      return t;
+    };
+
+    it("stay refused in community mode, and billing tables are never read", async () => {
+      const db = { all: vi.fn(), run: vi.fn() };
+      const config = loadConfig({ HOSTING_MODE: "community", ACCESS_POLICY: "disabled" });
+      const { fetch, call } = withPrivate(entitlementCheckFor(config, db, async () => true));
+      const res = await call("github.com/repos/acme/community/pulls/1");
+      expect(res.status).toBe(403);
+      expect(await body(res)).toMatchObject({ code: "private-repo-unsupported" });
+      expect(fetch).toHaveBeenCalledOnce();
+      expect(db.all).not.toHaveBeenCalled();
+      expect(db.run).not.toHaveBeenCalled();
+    });
+
+    it("are served when the owner's plan covers them", async () => {
+      const entitlement = vi.fn<EntitlementCheck>(async () => ({ allowed: true, reason: "subscription" }));
+      const { fetch, call } = withPrivate(entitlement);
+      const res = await call("github.com/repos/acme/covered/pulls/1");
+      expect(res.status).toBe(200);
+      expect(res.headers.get("cache-control")).toBe("private, no-store");
+      expect(fetch.mock.calls.at(-1)![0]).toBe("https://api.github.com/repos/acme/covered/pulls/1");
+      expect(entitlement).toHaveBeenCalledWith({
+        host: "github.com",
+        owner: "acme",
+        name: "covered",
+        ownerId: "100",
+        ownerType: "Organization",
+      });
+    });
+
+    it("are refused with the reason when the owner's plan does not cover them", async () => {
+      const { fetch, call } = withPrivate(async () => ({ allowed: false, reason: "no-entitlement" }));
+      const res = await call("github.com/repos/acme/uncovered/pulls/1");
+      expect(res.status).toBe(403);
+      expect(await body(res)).toMatchObject({ code: "not-entitled", reason: "no-entitlement" });
+      expect(fetch).toHaveBeenCalledOnce();
+    });
   });
 
   it("passes GitHub's answer through when the repository lookup fails", async () => {
