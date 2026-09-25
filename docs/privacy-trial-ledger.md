@@ -22,6 +22,10 @@ Active private contributors are counted per calendar month, as for paid plans, s
 
 The ledger's only purpose is to stop the same owner from starting a second trial. Entries have no expiry: an entry is kept for as long as the hosted service offers this trial, because deleting it would let the owner start another. When the redeeming billing account is deleted, the entry loses its link to that account (the billing account field is cleared) and the pseudonymous entry stays.
 
+## Trial start limits
+
+To stop one person or network from starting trials for many throwaway organizations, starting a trial also adds one to two daily counters in `usage_counter`: one for the signed-in user's internal ID and one for the client's network address. The address is stored only as an HMAC (keyed by a subkey of `BETTER_AUTH_SECRET`) over the address and the day, so it can't be read back and one day's row can't be linked to another's. A counter holds a count and the UTC day, nothing about the owner or repository, and is not linked to the ledger. Earlier days' counters are deleted the next time a trial starts.
+
 ## After the trial
 
 When the trial ends, Rendered Review stops opening new private pull request pages for that owner and stops publishing comments to its private repositories. Comments already on GitHub are unaffected. Drafts still in the browser can be copied, from the open page or from the trial-ended page. Private drafts are kept only in the tab's memory unless you chose to keep private content in the browser, so copy them before closing the tab.

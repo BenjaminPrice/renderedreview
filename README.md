@@ -48,12 +48,31 @@ All builds read the same environment variables (`packages/runtime/src/config.ts`
 | `BILLING_PROVIDER` (`polar`, `stripe`), `BILLING_API_KEY`, `BILLING_WEBHOOK_SECRET`                                        | Hosted only; ignored otherwise                                               |
 | `PORT`                                                                                                                     | Node server listen port (default 3000)                                       |
 | `GITHUB_PUBLIC_READ_TOKEN`                                                                                                 | Optional, any mode; meant for local development and self-hosting (see below) |
+| `TRUSTED_PROXY_HEADER` (such as `x-forwarded-for`, `x-real-ip`)                                                            | Node build behind a reverse proxy; see [Rate limits](#rate-limits)           |
+| `RATE_LIMIT_GUEST_PER_MINUTE`, `RATE_LIMIT_AUTH_PER_MINUTE`, `RATE_LIMIT_WRITES_PER_MINUTE`, `TRIAL_STARTS_PER_DAY`        | Optional; see [Rate limits](#rate-limits)                                    |
 
 ### Public read token
 
 Without sign-in, public pull requests are read anonymously, which GitHub limits to 60 requests an hour per IP address. Set `GITHUB_PUBLIC_READ_TOKEN` to have the server read public repositories with your token instead (5,000 requests an hour). Browsers then send public reads through the server's `/api/github/public/` proxy; the token never leaves the server and is redacted from logs.
 
 Use a [fine-grained token](https://github.com/settings/personal-access-tokens/new) with **Public repositories (read-only)** access, or a classic token with no scopes. The token only goes to the host in `GITHUB_URL`. Because a token may be able to read private repositories, the proxy first checks that each repository is public (cached for a few minutes) and answers "not found" for private, internal or unverifiable repositories.
+
+### Rate limits
+
+The server limits how fast one client can use it. Over a limit, it answers `429` with a `Retry-After` header and `{ "code": "rate-limited", "message": "…", "retryAfter": <seconds> }`, and logs a `rate.limited` event naming the limit (never the address or user).
+
+| Limit                                             | Counted per                          | Variable (default)                  |
+| ------------------------------------------------- | ------------------------------------ | ----------------------------------- |
+| Guest reads through `/api/github/public/`         | Client address, per minute           | `RATE_LIMIT_GUEST_PER_MINUTE` (120) |
+| Sign-in and linking starts, and their callbacks   | Client address, per minute           | `RATE_LIMIT_AUTH_PER_MINUTE` (20)   |
+| Publishing (a review counts one per draft)        | Signed-in user, per minute           | `RATE_LIMIT_WRITES_PER_MINUTE` (60) |
+| Starting a private-repository trial (hosted mode) | User and client address, per UTC day | `TRIAL_STARTS_PER_DAY` (3)          |
+
+Client addresses are only used as an HMAC under a key derived from `BETTER_AUTH_SECRET` (a random per-process key without it), so no counter or log holds one. The per-minute counters live in memory: each instance counts on its own, so running several multiplies the limits. Trial starts are counted in the database (`usage_counter`), which every instance shares.
+
+On Node the client address is the connection's peer address. Behind a reverse proxy that is the proxy itself, so every client would share one budget: set `TRUSTED_PROXY_HEADER` to the header your proxy sets, and the server takes its **right-most** value, the hop your proxy appended (`X-Forwarded-For` with nginx `$proxy_add_x_forwarded_for`, Caddy or Traefik) or set (`X-Real-IP`). Values a client sends are to the left of it and are ignored. This assumes exactly one proxy in front of the server; with a chain (for example a CDN in front of nginx), use a header the outermost proxy sets and the inner one passes unchanged, such as `CF-Connecting-IP` behind Cloudflare. Only set it when a proxy is always in front: otherwise clients can choose their own address. Without the header on a request, the peer address is used.
+
+On Cloudflare Workers the address is always `CF-Connecting-IP` and `TRUSTED_PROXY_HEADER` is ignored; the guest and sign-in limits come from the Rate Limiting bindings in `apps/web/wrangler.jsonc` (see [docs/deploy-cloudflare.md](docs/deploy-cloudflare.md#rate-limits)).
 
 ### Sign in with GitHub
 
