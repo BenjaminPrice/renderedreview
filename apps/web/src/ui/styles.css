@@ -1,79 +1,17 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 
+@import "@rendered-review/design-tokens/tokens.css";
+
 /* =====================================================================
-   DESIGN TOKENS
-   Colours are light-dark(light, dark) pairs of opaque hex (WCAG AA checked in the
-   approved design). The active side follows color-scheme: the OS preference by default,
-   or <html data-theme="light|dark"> when the user picks one.
+   APP LAYOUT TOKENS
+   Shared colours, type and shape come from @rendered-review/design-tokens.
    ===================================================================== */
 :root {
-  color-scheme: light dark;
-
-  /* Surfaces */
-  --rr-bg: light-dark(#ffffff, #0d1117);
-  --rr-surface: light-dark(#ffffff, #0d1117);
-  --rr-surface-sunken: light-dark(#f6f8fa, #151b23);
-  --rr-surface-raised: light-dark(#ffffff, #1c222b);
-  --rr-surface-hover: light-dark(#eef1f4, #212830);
-  /* Borders (strong = inputs/markers, 3:1) */
-  --rr-border: light-dark(#d1d9e0, #3d444d);
-  --rr-border-muted: light-dark(#e4e8ec, #262c34);
-  --rr-border-strong: light-dark(#818b98, #6e7681);
-  /* Text */
-  --rr-text: light-dark(#1f2328, #f0f6fc);
-  --rr-text-muted: light-dark(#59636e, #9198a1);
-  /* Accent */
-  --rr-accent: light-dark(#0969da, #1f6feb);
-  --rr-accent-hover: light-dark(#0757b8, #1158c7);
-  --rr-accent-fg: #ffffff;
-  --rr-accent-text: light-dark(#0969da, #4493f8);
-  --rr-accent-subtle: light-dark(#ddf4ff, #122543);
-  --rr-focus: light-dark(#0969da, #4493f8);
-  /* Semantic */
-  --rr-added-fg: light-dark(#1a7f37, #3fb950);
-  --rr-added-bg: light-dark(#dafbe1, #12261e);
-  --rr-modified-fg: light-dark(#9a6700, #d29922);
-  --rr-modified-bg: light-dark(#fff8c5, #272115);
-  --rr-deleted-fg: light-dark(#d1242f, #f85149);
-  --rr-deleted-bg: light-dark(#ffebe9, #2d1517);
-  --rr-renamed-fg: light-dark(#8250df, #ab7df8);
-  --rr-renamed-bg: light-dark(#fbefff, #231a36);
-  /* Review */
-  --rr-hl-comment: light-dark(#ddf4ff, #122543);
-  --rr-hl-comment-line: light-dark(#218bff, #388bfd);
-  --rr-hl-comment-active: light-dark(#b6e3ff, #1a3b6b);
-  --rr-hl-block: light-dark(#f6f8fa, #151b23);
-  --rr-connector: light-dark(#818b98, #6e7681);
-  --rr-connector-active: light-dark(#0969da, #4493f8);
-  /* Elevation */
-  --rr-shadow: 0 1px 2px light-dark(#1f232814, #01040966), 0 8px 24px light-dark(#1f23281f, #010409b3);
-
-  /* Typography */
-  --rr-font-ui: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
-  --rr-font-doc: var(--rr-font-ui);
-  --rr-font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
-  --rr-text-ui: 14px;
-  --rr-text-sm: 13px;
-  --rr-text-xs: 12px;
-  --rr-text-doc: 17px;
-  --rr-leading-doc: 1.65;
-  --rr-measure: 70ch;
-
-  /* Shape and layout */
-  --rr-radius-sm: 4px;
-  --rr-radius: 6px;
-  --rr-radius-lg: 8px;
   --rr-topbar-h: 52px;
   --rr-toolbar-h: 44px;
   --rr-sidebar-w: 272px;
   --rr-rail-w: 360px;
   --rr-gutter: 56px; /* document side padding; the right one holds margin markers */
-}
-:root[data-theme="light"] {
-  color-scheme: light;
-}
-:root[data-theme="dark"] {
-  color-scheme: dark;
 }
 
 /* =====================================================================

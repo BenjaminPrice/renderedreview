@@ -24,6 +24,7 @@
     "@hpcc-js/wasm-graphviz": "^1.29.1",
     "@rendered-review/annotation-domain": "workspace:*",
     "@rendered-review/browser-cache": "workspace:*",
+    "@rendered-review/design-tokens": "workspace:*",
     "@rendered-review/diagram-domain": "workspace:*",
     "@rendered-review/github-integration": "workspace:*",
     "@rendered-review/identity": "workspace:*",
