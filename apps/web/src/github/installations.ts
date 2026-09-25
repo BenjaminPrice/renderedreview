@@ -16,7 +16,7 @@
 import { log, type LogFields, type SqlDatabase } from "@rendered-review/runtime";
 import type { WebhookDelivery, WebhookHandler, WebhookHandlers } from "./webhook";
 
-interface Account {
+export interface Account {
   id: string;
   login: string;
   type: "User" | "Organization";
@@ -80,6 +80,15 @@ function repositories(value: unknown): Repository[] | undefined {
   return repos;
 }
 
+/** Creates or refreshes the owner row, keyed by host and stable ID: a rename updates its login. */
+export function upsertOwner(db: SqlDatabase, host: string, a: Account, now = new Date().toISOString()) {
+  return db.run(
+    `INSERT INTO github_owner (id, host, github_id, type, login, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT (host, github_id) DO UPDATE SET type = excluded.type, login = excluded.login, updated_at = excluded.updated_at`,
+    [crypto.randomUUID(), host, a.id, a.type, a.login, now, now],
+  );
+}
+
 const OWNER = "(SELECT id FROM github_owner WHERE host = ? AND github_id = ?)";
 const INSTALLATION = "(SELECT id FROM github_installation WHERE host = ? AND github_id = ?)";
 const REPOSITORY = "(SELECT id FROM github_repository WHERE host = ? AND github_id = ?)";
@@ -93,11 +102,7 @@ class Store {
   ) {}
 
   owner(a: Account) {
-    return this.db.run(
-      `INSERT INTO github_owner (id, host, github_id, type, login, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT (host, github_id) DO UPDATE SET type = excluded.type, login = excluded.login, updated_at = excluded.updated_at`,
-      [crypto.randomUUID(), this.host, a.id, a.type, a.login, this.now, this.now],
-    );
+    return upsertOwner(this.db, this.host, a, this.now);
   }
 
   /** Upserts the installation unless it is a tombstone; true when the row was written. */
