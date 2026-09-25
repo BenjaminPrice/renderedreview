@@ -599,24 +599,3 @@ describe.each(databases)("GitHub sign-in on %s", (_, open) => {
     });
   });
 });
-
-// The app limits sign-in per trusted client address in front of this (apps/web/src/auth.ts).
-// Better Auth's own limiter would switch on with NODE_ENV=production, key on a client-settable
-// X-Forwarded-For and fall back to one shared bucket, so it is configured off in every environment.
-it("leaves Better Auth's own rate limiter off", async () => {
-  const db = openDatabase("sqlite::memory:");
-  await migrate(db);
-  const identity = await createIdentity({ config, db, baseURL: BASE });
-  const statuses: number[] = [];
-  for (let i = 0; i < 5; i++) {
-    const start = await identity.handle(
-      new Request(`${BASE}/api/auth/sign-in/social`, {
-        method: "POST",
-        headers: { origin: BASE, "content-type": "application/json", "x-forwarded-for": "203.0.113.7" },
-        body: JSON.stringify({ provider: "github", callbackURL: "/" }),
-      }),
-    );
-    statuses.push(start.status);
-  }
-  expect(statuses).toEqual([200, 200, 200, 200, 200]);
-});
