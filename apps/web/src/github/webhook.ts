@@ -6,6 +6,7 @@
 // a processed delivery is a no-op and a failed one runs again when GitHub redelivers it. Payloads and signatures are
 // never logged. Web Request/Response/crypto only, so Node and Workers run the same code.
 import { errorName, log, type LogFields, type RequestContext, type SqlDatabase } from "@rendered-review/runtime";
+import { installationHandlers } from "./installations";
 
 /** A verified, parsed delivery, as handlers receive it. */
 export interface WebhookDelivery {
@@ -35,6 +36,7 @@ export type WebhookHandlers = Readonly<Record<string, WebhookHandler>>;
 export const webhookHandlers: WebhookHandlers = {
   // GitHub sends a ping when the webhook is created or its settings change; nothing to do.
   ping: async () => {},
+  ...installationHandlers,
 };
 
 // GitHub caps payloads at 25 MB, but the events the app subscribes to are far smaller.
