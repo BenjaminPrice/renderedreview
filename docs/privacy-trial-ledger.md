@@ -24,7 +24,7 @@ The ledger's only purpose is to stop the same owner from starting a second trial
 
 ## Trial start limits
 
-To stop one person or network from starting trials for many throwaway organizations, starting a trial also adds one to two daily counters in `usage_counter`: one for the signed-in user's internal ID and one for the client's network address. The address is stored only as an HMAC (keyed by a subkey of `BETTER_AUTH_SECRET`) over the address and the day, so it can't be read back and one day's row can't be linked to another's. A counter holds a count and the UTC day, nothing about the owner or repository, and is not linked to the ledger. Earlier days' counters are deleted the next time a trial starts.
+To stop one person or network from starting trials for many throwaway organizations, starting a trial (only once its ledger entry is actually created, never for a refused or duplicate start) also adds one to two daily counters in `usage_counter`: one for the signed-in user's internal ID and one for the client's network address (an IPv6 address counts per /64). The address is stored only as an HMAC (keyed by a subkey of `BETTER_AUTH_SECRET`) over the address and the day, so it can't be read back and one day's row can't be linked to another's. A counter holds a count and the UTC day, nothing about the owner or repository, and is not linked to the ledger. Earlier days' counters are deleted the next time a trial starts.
 
 ## After the trial
 
