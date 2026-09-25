@@ -1,0 +1,41 @@
+---
+// SPDX-License-Identifier: AGPL-3.0-only
+import { getCollection } from "astro:content";
+import Docs from "../../layouts/Docs.astro";
+import { docsNav } from "../../docs-nav";
+import { summary } from "../../docs-summary";
+
+const docs = new Map((await getCollection("docs")).map((entry) => [entry.id, entry.body ?? ""]));
+---
+
+<Docs
+  title="Docs · Rendered Review"
+  description="Rendered Review documentation: self-hosting and deploying, observability, the annotation format, and privacy."
+>
+  <article class="doc">
+    <h1>Documentation</h1>
+    <p class="lead">
+      How to run Rendered Review yourself, what it logs, how comments record their place in a document, and what it does
+      with your data. These pages are the <code>docs/</code> folder of the repository.
+    </p>
+    <div class="doc-groups">
+      {
+        docsNav.map((group) => (
+          <section aria-labelledby={`home-${group.id}`}>
+            <h2 id={`home-${group.id}`}>{group.title}</h2>
+            <ul>
+              {group.items.map((item) => (
+                <li>
+                  <a href={`/docs/${item.slug}/`}>
+                    <b>{item.label}</b>
+                    <span>{summary(docs.get(item.slug) ?? "", 140)}</span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))
+      }
+    </div>
+  </article>
+</Docs>

@@ -230,7 +230,7 @@ it("keeps drafts copyable when an ended trial refuses the review, and points to 
     {
       code: "trial-expired",
       message: "The private-repository trial for this owner has ended",
-      upgradeUrl: "/pricing",
+      upgradeUrl: "https://renderedreview.com/pricing",
     },
     { status: 403 },
   );
@@ -248,7 +248,7 @@ it("keeps drafts copyable when an ended trial refuses the review, and points to 
     within(alert)
       .getByRole("link", { name: /See plans/ })
       .getAttribute("href"),
-  ).toBe("/pricing");
+  ).toBe("https://renderedreview.com/pricing");
 
   await userEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
   const draft = screen.getByRole("region", { name: "Draft comment on line 10" });

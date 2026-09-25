@@ -32,23 +32,24 @@ ACCESS_POLICY=disabled
 
 All builds read the same environment variables (`packages/runtime/src/config.ts`). Only what the chosen mode needs is required. Startup reports every problem at once and logs the effective configuration with secrets redacted. What the server logs, and what it never logs, is in [docs/observability.md](docs/observability.md).
 
-| Variable                                                                                                                   | Required                                                                     |
-| -------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| `HOSTING_MODE` (`hosted`, `dedicated`, `community`)                                                                        | Always                                                                       |
-| `ACCESS_POLICY` (`disabled`, `allowlist`, `installed`, `all-accessible`)                                                   | Defaults to `allowlist` in community, `installed` otherwise                  |
-| `ACCESS_ALLOWLIST` (comma-separated `owner` or `owner/repo`)                                                               | When the policy is `allowlist`                                               |
-| `GITHUB_URL`                                                                                                               | Defaults to `https://github.com`; set it to a GitHub Enterprise Server URL   |
-| `GITHUB_APP_ID`, `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_APP_WEBHOOK_SECRET` | Hosted and dedicated; community unless the policy is `disabled`              |
-| `GITHUB_APP_PRIVATE_KEY_FILE` (path to the `.pem`)                                                                         | Node build: instead of `GITHUB_APP_PRIVATE_KEY`; set one, not both           |
-| `GITHUB_OAUTH_CLIENT_ID`, `GITHUB_OAUTH_CLIENT_SECRET`                                                                     | Hosted; optional elsewhere                                                   |
-| `ENCRYPTION_KEY` (`openssl rand -base64 32`)                                                                               | Whenever GitHub credentials are set                                          |
-| `ENCRYPTION_KEY_PREVIOUS`                                                                                                  | Optional: the key being rotated out (see below)                              |
-| `BETTER_AUTH_SECRET` (`openssl rand -base64 32`)                                                                           | Whenever GitHub App credentials are set; signs sessions and OAuth state      |
-| `DATABASE_URL` (`postgres://…`, `sqlite:./relative.db`, `sqlite:///absolute.db`)                                           | Node build, when GitHub credentials are set or the mode is not `community`   |
-| `BILLING_PROVIDER` (`polar`, `stripe`), `BILLING_API_KEY`, `BILLING_WEBHOOK_SECRET`                                        | Hosted only; ignored otherwise                                               |
-| `PORT`                                                                                                                     | Node server listen port (default 3000)                                       |
-| `PUBLIC_URL` (`https://review.example.com`, or `http://localhost:3000` for development)                                    | Node build, hosted and dedicated; optional elsewhere (see below)             |
-| `GITHUB_PUBLIC_READ_TOKEN`                                                                                                 | Optional, any mode; meant for local development and self-hosting (see below) |
+| Variable                                                                                                                   | Required                                                                                                                   |
+| -------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `HOSTING_MODE` (`hosted`, `dedicated`, `community`)                                                                        | Always                                                                                                                     |
+| `ACCESS_POLICY` (`disabled`, `allowlist`, `installed`, `all-accessible`)                                                   | Defaults to `allowlist` in community, `installed` otherwise                                                                |
+| `ACCESS_ALLOWLIST` (comma-separated `owner` or `owner/repo`)                                                               | When the policy is `allowlist`                                                                                             |
+| `GITHUB_URL`                                                                                                               | Defaults to `https://github.com`; set it to a GitHub Enterprise Server URL                                                 |
+| `GITHUB_APP_ID`, `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_APP_WEBHOOK_SECRET` | Hosted and dedicated; community unless the policy is `disabled`                                                            |
+| `GITHUB_APP_PRIVATE_KEY_FILE` (path to the `.pem`)                                                                         | Node build: instead of `GITHUB_APP_PRIVATE_KEY`; set one, not both                                                         |
+| `GITHUB_OAUTH_CLIENT_ID`, `GITHUB_OAUTH_CLIENT_SECRET`                                                                     | Hosted; optional elsewhere                                                                                                 |
+| `ENCRYPTION_KEY` (`openssl rand -base64 32`)                                                                               | Whenever GitHub credentials are set                                                                                        |
+| `ENCRYPTION_KEY_PREVIOUS`                                                                                                  | Optional: the key being rotated out (see below)                                                                            |
+| `BETTER_AUTH_SECRET` (`openssl rand -base64 32`)                                                                           | Whenever GitHub App credentials are set; signs sessions and OAuth state                                                    |
+| `DATABASE_URL` (`postgres://…`, `sqlite:./relative.db`, `sqlite:///absolute.db`)                                           | Node build, when GitHub credentials are set or the mode is not `community`                                                 |
+| `BILLING_PROVIDER` (`polar`, `stripe`), `BILLING_API_KEY`, `BILLING_WEBHOOK_SECRET`                                        | Hosted only; ignored otherwise                                                                                             |
+| `PORT`                                                                                                                     | Node server listen port (default 3000)                                                                                     |
+| `PUBLIC_URL` (`https://review.example.com`, or `http://localhost:3000` for development)                                    | Node build, hosted and dedicated; optional elsewhere (see below)                                                           |
+| `GITHUB_PUBLIC_READ_TOKEN`                                                                                                 | Optional, any mode; meant for local development and self-hosting (see below)                                               |
+| `UPGRADE_URL` (URL, `/path`, or `none`)                                                                                    | Optional: where "See plans" points when a trial ends (default `https://renderedreview.com/pricing`); `none` hides the link |
 
 ### Public read token
 
@@ -113,12 +114,15 @@ OAuth App tokens do not expire unless you enable expiring tokens in the OAuth Ap
 
 CI (`.github/workflows/ci.yml`) runs the same commands inside devbox.
 
+The marketing site in `apps/site` builds and tests on its own (`pnpm --filter @rendered-review/site build|test`) and has its own CI and manual deploy workflows: [docs/deploy-site.md](docs/deploy-site.md).
+
 On Cloudflare Workers, configuration comes from `vars` and secrets in `apps/web/wrangler.jsonc` instead of the process environment, and the database is the D1 binding `DB` rather than `DATABASE_URL`. Deploying and rolling back: [docs/deploy-cloudflare.md](docs/deploy-cloudflare.md).
 
 ## Repository layout
 
 ```text
 apps/web                        TanStack Start app (Router + Query)
+apps/site                       Marketing site for renderedreview.com (Astro, static)
 packages/review-domain          PR/file models, comment mapping, threads, re-anchoring
 packages/markdown-domain        Parsing, sanitization, source mapping, selection
 packages/diagram-domain         Fenced diagram registry and renderers

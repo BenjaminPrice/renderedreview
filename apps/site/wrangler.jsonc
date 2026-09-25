@@ -1,0 +1,27 @@
+// Marketing site (renderedreview.com): the Astro build in ./dist, served as Cloudflare Workers static
+// assets with no Worker script. Headers (CSP, caching) come from public/_headers.
+// Setup and deploy: docs/deploy-site.md. Deployed only by the manual "Deploy site" workflow.
+//
+// Environments: the top level is local (`pnpm --filter @rendered-review/site preview`).
+// `preview` serves on workers.dev; `production` also binds the renderedreview.com custom domain.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "rendered-review-site-local",
+  "compatibility_date": "2026-09-20",
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "404-page",
+    "html_handling": "auto-trailing-slash",
+  },
+  "env": {
+    "preview": {
+      "name": "rendered-review-site-preview",
+      "workers_dev": true,
+    },
+    "production": {
+      "name": "rendered-review-site",
+      "workers_dev": false,
+      "routes": [{ "pattern": "renderedreview.com", "custom_domain": true }],
+    },
+  },
+}

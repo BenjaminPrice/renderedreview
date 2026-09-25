@@ -1,0 +1,37 @@
+---
+// SPDX-License-Identifier: AGPL-3.0-only
+import { APP_URL, REPO_URL } from "../site";
+import Ext from "./Ext.astro";
+import Logo from "./Logo.astro";
+import ThemeToggle from "./ThemeToggle.astro";
+
+const links = [
+  { href: "/#how", label: "How it works" },
+  { href: "/#features", label: "Features" },
+  { href: "/#pricing", label: "Pricing" },
+  { href: "/docs/", label: "Docs" },
+];
+---
+
+<header class="nav">
+  <div class="wrap">
+    <a class="wordmark" href="/" aria-label="Rendered Review home"><Logo />Rendered Review</a>
+    <nav class="nav-links" aria-label="Main">
+      {links.map((l) => <a href={l.href}>{l.label}</a>)}
+      <Ext href={REPO_URL} arrow>GitHub</Ext>
+    </nav>
+    <div class="nav-right">
+      <ThemeToggle />
+      <Ext class="btn btn-sm hide-sm" href={APP_URL}>Sign in</Ext>
+      <Ext class="btn btn-sm btn-primary hide-sm" href={APP_URL}>Open a pull request</Ext>
+      <details class="menu">
+        <summary class="btn btn-sm">Menu</summary>
+        <nav class="menu-panel" aria-label="Main (small screens)">
+          {links.map((l) => <a href={l.href}>{l.label}</a>)}
+              <Ext href={REPO_URL} arrow>GitHub</Ext>
+          <Ext href={APP_URL} arrow>Open the app</Ext>
+        </nav>
+      </details>
+    </div>
+  </div>
+</header>

@@ -20,6 +20,7 @@ export const Route = createFileRoute("/api/github/write/$")({
           entitlement: entitlementCheckFor(context.config, context.db),
           contributors: contributorTrackerFor(context.config, context.db),
           approvalUrl: github.oauth && `${github.url}/settings/connections/applications/${github.oauth.clientId}`,
+          upgradeUrl: context.config.upgradeUrl,
         });
       },
     },

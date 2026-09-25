@@ -223,6 +223,20 @@ describe("loadConfig", () => {
     expect(() => loadConfig(community, { requirePublicUrl: true })).not.toThrow();
   });
 
+  it("points ended trials at the public pricing page unless UPGRADE_URL overrides or hides it", () => {
+    const base = { HOSTING_MODE: "community", ACCESS_POLICY: "disabled" };
+    expect(loadConfig(base).upgradeUrl).toBe("https://renderedreview.com/pricing");
+    expect(loadConfig({ ...base, UPGRADE_URL: "https://docs.example.com/plans" }).upgradeUrl).toBe(
+      "https://docs.example.com/plans",
+    );
+    expect(loadConfig({ ...base, UPGRADE_URL: "/pricing" }).upgradeUrl).toBe("/pricing");
+    expect(loadConfig({ ...base, UPGRADE_URL: "none" }).upgradeUrl).toBeUndefined();
+    expect(problems({ ...base, UPGRADE_URL: "javascript:alert(1)" })).toEqual([
+      'UPGRADE_URL must be an http(s) URL, a path starting with /, or "none" (got "javascript:alert(1)")',
+    ]);
+    expect(problems({ ...base, UPGRADE_URL: "//evil.example" })).toHaveLength(1);
+  });
+
   it("rejects malformed values", () => {
     expect(
       problems({

@@ -1,0 +1,30 @@
+Rendered Review marketing site: content license
+
+This directory holds two kinds of material under different terms.
+
+1. Code
+
+   The site's source code (Astro components, TypeScript, JavaScript, CSS and configuration) is
+   licensed under the GNU Affero General Public License, version 3 only (AGPL-3.0-only), like the
+   rest of this repository. See the LICENSE file at the repository root.
+
+2. Site content
+
+   The marketing copy, pricing text and plan descriptions, and the rendered brand assets in
+   public/ (the hero videos and their posters, and the favicon) are "Site content".
+
+   Copyright (c) 2026 Rendered Review. All rights reserved.
+
+   Site content is not licensed under the AGPL. You may view it and link to it, and quote short
+   excerpts with attribution for commentary or review. Any other use needs written permission.
+
+   The final terms for Site content are under legal review and may later be replaced by a more
+   permissive license. Any such license will exclude trademarks (below).
+
+3. Trademarks
+
+   "Rendered Review" and the Rendered Review logo are trademarks of Rendered Review. Neither this
+   license nor the AGPL grants any right to use them, except as needed to describe the origin of the
+   software truthfully.
+
+Rendered Review is not affiliated with GitHub.

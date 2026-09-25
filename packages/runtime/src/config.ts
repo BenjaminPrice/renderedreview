@@ -32,6 +32,8 @@ export interface AppConfig {
   /** Signs sessions and OAuth state (Better Auth). Present whenever the GitHub App is. */
   authSecret?: string;
   databaseUrl?: string;
+  /** Where an ended trial points ("See plans"). Undefined hides the link. */
+  upgradeUrl?: string;
   /** Only in hosted mode. */
   billing?: { provider: BillingProviderName; apiKey: string; webhookSecret: string };
   /**
@@ -220,6 +222,8 @@ export function loadConfig(env: Env, options: LoadConfigOptions = {}): AppConfig
     );
   }
 
+  const upgradeUrl = parseUpgradeUrl(read("UPGRADE_URL") ?? DEFAULT_UPGRADE_URL, problems);
+
   if (problems.length > 0) {
     throw new ConfigError(
       problems,
@@ -235,6 +239,7 @@ export function loadConfig(env: Env, options: LoadConfigOptions = {}): AppConfig
     previousEncryptionKey,
     authSecret,
     databaseUrl,
+    upgradeUrl,
     billing,
     publicUrl: publicUrl || undefined,
   };
@@ -281,6 +286,17 @@ function githubUrls(raw: string, problems: string[]) {
   const base = `${url.origin}${url.pathname}`.replace(/\/+$/, "");
   // github.com serves its API from a separate host; Enterprise Server serves it under /api/v3.
   return { url: base, apiUrl: url.hostname === "github.com" ? "https://api.github.com" : `${base}/api/v3` };
+}
+
+const DEFAULT_UPGRADE_URL = "https://renderedreview.com/pricing";
+
+// "none" hides the link; otherwise an absolute http(s) URL or a same-origin path (never protocol-relative).
+function parseUpgradeUrl(raw: string, problems: string[]): string | undefined {
+  if (raw === "none") return undefined;
+  const protocol = parseUrl(raw)?.protocol;
+  if (protocol === "https:" || protocol === "http:" || /^\/(?!\/)/.test(raw)) return raw;
+  problems.push(`UPGRADE_URL must be an http(s) URL, a path starting with /, or "none" (got "${raw}")`);
+  return undefined;
 }
 
 function parseUrl(value: string): URL | undefined {

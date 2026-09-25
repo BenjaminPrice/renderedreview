@@ -63,6 +63,8 @@ function setup({
   approvalUrl = undefined as string | undefined,
   entitlement = undefined as EntitlementCheck | undefined,
   contributors = undefined as ContributorTracker | undefined,
+  /** null: the deployment hides the link. */
+  upgradeUrl = "https://renderedreview.com/pricing" as string | null,
 } = {}) {
   const repo = `widgets-${++repoCounter}`;
   // Its own user too: the per-user publish limit is process-wide.
@@ -110,6 +112,7 @@ function setup({
         approvalUrl,
         entitlement,
         contributors,
+        upgradeUrl: upgradeUrl ?? undefined,
       },
     );
   const writes = () => fetch.mock.calls.filter(([, init]) => init?.method === "POST");
@@ -253,9 +256,20 @@ describe("credential selection", () => {
     const res = await call("comment", comment());
     expect(res.status).toBe(403);
     const body = (await json(res)) as { code: string; message: string; upgradeUrl: string };
-    expect(body).toMatchObject({ code: reason, upgradeUrl: "/pricing" });
+    expect(body).toMatchObject({ code: reason, upgradeUrl: "https://renderedreview.com/pricing" });
     expect(body.message).toMatch(message);
     expect(writes()).toHaveLength(0);
+  });
+
+  it("leaves the upgrade path out of a trial refusal when the deployment hides it", async () => {
+    const { call } = setup({
+      visibility: "private",
+      entitlement: async () => ({ allowed: false, reason: "trial-expired" }),
+      upgradeUrl: null,
+    });
+    const res = await call("comment", comment());
+    expect(res.status).toBe(403);
+    expect(await json(res)).not.toHaveProperty("upgradeUrl");
   });
 
   it("publishes to a private repository its owner's plan covers, with the GitHub App user token", async () => {
