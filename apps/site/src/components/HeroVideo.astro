@@ -1,0 +1,42 @@
+---
+// SPDX-License-Identifier: AGPL-3.0-only
+// The 18-second product demo, 900px and wider only. The markup has no src or poster: the script adds
+// them when the width matches, so phones (and pages without JavaScript) never download the video.
+---
+
+<figure class="visual hero-video">
+  <div class="vwrap">
+    <video
+      id="hero-video"
+      muted
+      loop
+      playsinline
+      preload="none"
+      width="1280"
+      height="720"
+      aria-label="Product demo video, no sound"
+      aria-describedby="hero-video-desc"
+    >
+      <source data-src="/video/hero.webm" type="video/webm" />
+      <source data-src="/video/hero.mp4" type="video/mp4" />
+    </video>
+    <button class="vbtn" type="button" id="hero-video-btn" aria-controls="hero-video"
+      ><svg class="icon i-pause" viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 3.5v9M10.5 3.5v9"></path></svg><svg
+        class="icon i-play"
+        viewBox="0 0 16 16"
+        aria-hidden="true"><path d="M5 3l8 5-8 5z"></path></svg
+      ><span class="vlabel">Pause video</span></button
+    >
+  </div>
+  <p id="hero-video-desc" class="sr-only">
+    An 18-second loop. A reviewer selects "retries failed deliveries indefinitely" in a rendered RFD and comments:
+    "Indefinitely? The proposal caps it at 8 tries. Should the summary say until the cap?" They publish it, and the
+    thread appears in the comment rail, joined to the phrase by a connector line. Then the same comment is shown on the
+    pull request in GitHub as a review comment on line 12.
+  </p>
+</figure>
+
+<script>
+  import { startHeroVideo } from "../scripts/hero-video";
+  startHeroVideo();
+</script>

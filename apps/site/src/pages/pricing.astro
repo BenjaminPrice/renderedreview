@@ -1,0 +1,15 @@
+---
+// SPDX-License-Identifier: AGPL-3.0-only
+// Standalone pricing: where the app sends owners whose trial has ended.
+import Pricing from "../components/Pricing.astro";
+import Base from "../layouts/Base.astro";
+// After the layout, so these rules follow the base styles in the cascade.
+import "../styles/home.css";
+---
+
+<Base
+  title="Pricing · Rendered Review"
+  description="Rendered Review is free for public repositories. Private repositories are priced by active private contributors, with a 30-day trial and no credit card."
+>
+  <Pricing heading="h1" />
+</Base>

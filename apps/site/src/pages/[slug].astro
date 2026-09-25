@@ -1,0 +1,47 @@
+---
+// SPDX-License-Identifier: AGPL-3.0-only
+// Pages linked from the site that aren't written yet: each says what it will hold and where to go meanwhile.
+import Base from "../layouts/Base.astro";
+import Ext from "../components/Ext.astro";
+import { REPO_URL } from "../site";
+
+export function getStaticPaths() {
+  return [
+    {
+      params: { slug: "commercial" },
+      props: {
+        title: "Commercial options",
+        body: "This page will compare every way to run Rendered Review: the hosted plans, AGPL self-hosting, commercial licenses and managed instances, with who operates what and which terms apply.",
+      },
+    },
+    {
+      params: { slug: "programs" },
+      props: {
+        title: "Startups & Education",
+        body: "Discounts for early-stage startups and for education are planned, with a short application form. Applications aren't open yet.",
+      },
+    },
+    {
+      params: { slug: "contact" },
+      props: {
+        title: "Contact",
+        body: "A contact address for sales, Enterprise plans and support is being set up.",
+      },
+    },
+  ];
+}
+const { title, body } = Astro.props;
+---
+
+<Base title={`${title} · Rendered Review`} description={`${title}: coming soon. ${body}`} noindex>
+  <div class="wrap plain">
+    <div class="kicker">Coming soon</div>
+    <h1>{title}</h1>
+    <p>{body}</p>
+    <p>Until then, questions and requests are welcome as issues on GitHub.</p>
+    <div class="ctas">
+      <a class="btn btn-primary" href="/pricing/">See pricing</a>
+      <Ext class="btn" href={`${REPO_URL}/issues`}>Open an issue on GitHub</Ext>
+    </div>
+  </div>
+</Base>

@@ -18,3 +18,4 @@ coverage/
 .claude/
 .serena/
 !packages/github-action/dist/
+.astro/
