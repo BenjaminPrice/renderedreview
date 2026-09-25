@@ -1006,7 +1006,12 @@ describe("active private contributor counting", () => {
   });
 
   it.each([
-    ["GitHub rejects the write", comment(), {}, { "POST /pulls/7/comments": () => new Response("{}", { status: 422 }) }],
+    [
+      "GitHub rejects the write",
+      comment(),
+      {},
+      { "POST /pulls/7/comments": () => new Response("{}", { status: 422 }) },
+    ],
     ["the head moved (nothing is written)", comment({ expectedHeadOid: OTHER }), {}, {}],
     ["the body is invalid (nothing is written)", comment({ body: "" }), {}, {}],
     [

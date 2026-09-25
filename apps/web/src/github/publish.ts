@@ -257,7 +257,7 @@ async function connect(t: Target, operation: WriteOperation["operation"], deps: 
   const pr = await client.getPullRequest(t.owner, t.repo, t.number).catch((e: unknown) => {
     throw fromGitHub(e, deps.approvalUrl);
   });
-  return { client, pr, repository: credential.repository };
+  return { client, pr, repository: credential.kind === "user" ? credential.repository : undefined };
 }
 
 /**
