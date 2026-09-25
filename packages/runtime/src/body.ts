@@ -22,5 +22,11 @@ export async function readBodyCapped(request: Request, max: number): Promise<Uin
     }
     chunks.push(chunk.value);
   }
-  return new Uint8Array(await new Blob(chunks as BlobPart[]).arrayBuffer());
+  const body = new Uint8Array(size);
+  let at = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, at);
+    at += chunk.byteLength;
+  }
+  return body;
 }
