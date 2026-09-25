@@ -674,3 +674,142 @@ describe("resolve", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 });
+
+describe("edit", () => {
+  const OLD = withMarker("> old quote\n\nPlease clarify", annotation({ commitOid: OTHER }));
+  const NEW = withMarker("> retries\n\nPlease clarify");
+  const author = { login: "octocat", id: 583231, node_id: "U_1", type: "User" };
+  const stranger = { ...author, login: "mallory", id: 666 };
+  const rawComment = (extra: object = {}) => ({
+    id: 5,
+    node_id: "IC_5",
+    body: OLD,
+    user: author,
+    author_association: "MEMBER",
+    created_at: "2026-01-01T00:00:00Z",
+    updated_at: "2026-01-01T00:00:00Z",
+    html_url: "https://github.com/acme/widgets/pull/7#issuecomment-5",
+    issue_url: "https://api.github.com/repos/acme/widgets/issues/7",
+    ...extra,
+  });
+  const edit = (extra: object = {}) => ({
+    expectedHeadOid: HEAD,
+    commentType: "issue",
+    commentId: 5,
+    previousBody: OLD,
+    body: NEW,
+    ...extra,
+  });
+  const routes = (comment: object = rawComment(), me: object = author) => ({
+    "GET /user": () => Response.json(me),
+    "GET /issues/comments/5": () => Response.json(comment),
+    "PATCH /issues/comments/5": (init: RequestInit) =>
+      Response.json({ ...comment, body: JSON.parse(init.body as string).body }),
+  });
+  const patches = (fetch: ReturnType<typeof setup>["fetch"]) =>
+    fetch.mock.calls.filter(([, init]) => init?.method === "PATCH");
+
+  it("replaces the signed-in author's conversation comment body", async () => {
+    const { call, fetch } = setup({ routes: routes() });
+    const res = await call("edit", edit());
+    expect(res.status).toBe(200);
+    expect(await json(res)).toMatchObject({ comment: { id: 5, body: NEW } });
+    const sent = patches(fetch);
+    expect(sent).toHaveLength(1);
+    expect(String(sent[0]![0])).toMatch(/\/issues\/comments\/5$/);
+    expect(JSON.parse(sent[0]![1]!.body as string)).toEqual({ body: NEW });
+    expect((sent[0]![1]!.headers as Record<string, string>).Authorization).toBe("Bearer app-token");
+  });
+
+  it("replaces the signed-in author's review comment body", async () => {
+    const review = {
+      ...rawComment({ issue_url: undefined }),
+      path: "docs/a.md",
+      pull_request_url: "https://api.github.com/repos/acme/widgets/pulls/7",
+    };
+    const { call, fetch } = setup({
+      routes: {
+        "GET /user": () => Response.json(author),
+        "GET /pulls/comments/5": () => Response.json(review),
+        "PATCH /pulls/comments/5": () => Response.json({ ...review, body: NEW }),
+      },
+    });
+    const res = await call("edit", edit({ commentType: "review" }));
+    expect(res.status).toBe(200);
+    expect(JSON.parse(patches(fetch)[0]![1]!.body as string)).toEqual({ body: NEW });
+  });
+
+  it("refuses to edit someone else's comment, by GitHub user id, without editing it", async () => {
+    // Same login, different account: only the id counts.
+    const { call, fetch } = setup({ routes: routes(rawComment({ user: { ...stranger, login: "octocat" } })) });
+    const res = await call("edit", edit());
+    expect(res.status).toBe(403);
+    expect(await json(res)).toMatchObject({ code: "not-author" });
+    expect(patches(fetch)).toHaveLength(0);
+  });
+
+  it("answers 409 stale-head when the PR moved on, without editing", async () => {
+    const { call, fetch } = setup({ head: OTHER, routes: routes() });
+    const res = await call("edit", edit());
+    expect(res.status).toBe(409);
+    expect(await json(res)).toMatchObject({ code: "stale-head", headOid: OTHER });
+    expect(patches(fetch)).toHaveLength(0);
+  });
+
+  it("refuses when the comment changed on GitHub since the preview", async () => {
+    const { call, fetch } = setup({ routes: routes(rawComment({ body: `${OLD}\n\nEdited on GitHub` })) });
+    const res = await call("edit", edit());
+    expect(res.status).toBe(409);
+    expect(await json(res)).toMatchObject({ code: "comment-changed" });
+    expect(patches(fetch)).toHaveLength(0);
+  });
+
+  it("answers a repeated edit that already landed without editing again", async () => {
+    const { call, fetch } = setup({ routes: routes(rawComment({ body: NEW })) });
+    const res = await call("edit", edit());
+    expect(res.status).toBe(200);
+    expect(patches(fetch)).toHaveLength(0);
+  });
+
+  it("refuses a comment from another pull request", async () => {
+    const { call, fetch } = setup({
+      routes: routes(rawComment({ issue_url: "https://api.github.com/repos/acme/widgets/issues/8" })),
+    });
+    const res = await call("edit", edit());
+    expect(res.status).toBe(404);
+    expect(patches(fetch)).toHaveLength(0);
+  });
+
+  it("refuses a review comment whose file isn't the annotation's", async () => {
+    const review = {
+      ...rawComment(),
+      path: "docs/b.md",
+      pull_request_url: "https://api.github.com/repos/acme/widgets/pulls/7",
+    };
+    const { call, fetch } = setup({
+      routes: { "GET /user": () => Response.json(author), "GET /pulls/comments/5": () => Response.json(review) },
+    });
+    const res = await call("edit", edit({ commentType: "review" }));
+    expect(res.status).toBe(400);
+    expect(await json(res)).toMatchObject({ code: "annotation-mismatch" });
+    expect(patches(fetch)).toHaveLength(0);
+  });
+
+  it.each([
+    ["a body without an annotation", edit({ body: "Please clarify" }), "invalid-annotation"],
+    [
+      "an annotation for another PR",
+      edit({ body: withMarker("x", annotation({ pullRequest: 9 })) }),
+      "annotation-mismatch",
+    ],
+    ["an unknown comment type", edit({ commentType: "commit" }), "invalid-request"],
+    ["a comment id that is not a number", edit({ commentId: "5/../x" }), "invalid-request"],
+    ["no previous body", edit({ previousBody: undefined }), "invalid-request"],
+  ])("refuses %s", async (_, body, code) => {
+    const { call, fetch } = setup({ routes: routes() });
+    const res = await call("edit", body);
+    expect(res.status).toBe(400);
+    expect(await json(res)).toMatchObject({ code });
+    expect(patches(fetch)).toHaveLength(0);
+  });
+});
