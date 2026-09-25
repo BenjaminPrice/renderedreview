@@ -33,12 +33,21 @@ it("reflows to one column on narrow viewports and at 200% zoom (WCAG 1.4.10)", (
 
 it("takes the shared design tokens from @rendered-review/design-tokens and defines every other token it uses", () => {
   const css = readFileSync(`${import.meta.dirname}/styles.css`, "utf8");
-  const tokens = readFileSync(createRequire(import.meta.url).resolve("@rendered-review/design-tokens/tokens.css"), "utf8");
+  const tokens = readFileSync(
+    createRequire(import.meta.url).resolve("@rendered-review/design-tokens/tokens.css"),
+    "utf8",
+  );
   expect(css).toMatch(/^(\/\*[\s\S]*?\*\/\s*)*@import "@rendered-review\/design-tokens\/tokens\.css";/);
   const defined = (source: string) => new Set([...source.matchAll(/(--rr-[\w-]+)\s*:/g)].map(([, name]) => name!));
   const shared = defined(tokens);
   const local = defined(css);
-  expect([...local].filter((name) => shared.has(name)), "redefined shared tokens").toEqual([]);
+  expect(
+    [...local].filter((name) => shared.has(name)),
+    "redefined shared tokens",
+  ).toEqual([]);
   const used = [...(css + tokens).matchAll(/var\((--rr-[\w-]+)/g)].map(([, name]) => name!);
-  expect([...new Set(used)].filter((name) => !shared.has(name) && !local.has(name)), "undefined tokens").toEqual([]);
+  expect(
+    [...new Set(used)].filter((name) => !shared.has(name) && !local.has(name)),
+    "undefined tokens",
+  ).toEqual([]);
 });
