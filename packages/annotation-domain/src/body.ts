@@ -92,6 +92,71 @@ export function composeCommentBody(input: {
   );
 }
 
+// The parts of an application comment around the reviewer's own text.
+const MARKER_OPEN = "<!-- rendered-review:v";
+const LEADING_QUOTE = /^(?:>[^\r\n]*(?:\r?\n|$))+/;
+const TRAILING_PERMALINK =
+  /(?:^|\r?\n[ \t]*\r?\n)(Document: \[`[^\r\n]+`\]\(https:\/\/\S+\/blob\/[0-9a-f]{40,64}\/\S+\?plain=1#L\d+-L\d+\))$/;
+
+export interface RepairedBody {
+  body: string;
+  /** The reviewer's text, byte for byte as it was in the old body. */
+  comment: string;
+  /** What the repair takes out of the old body. */
+  removed: { quote?: string; permalink?: string; marker?: string };
+  /** What it writes instead. */
+  added: { quote: string; permalink?: string; marker: string };
+}
+
+/**
+ * Moves an existing comment to a new selection: its leading quote, trailing permalink line and
+ * last marker (damaged, unsupported or valid) are replaced for `annotation`, and everything else
+ * is kept byte for byte, including GitHub's CRLF line endings. A body without a quote (a native
+ * suggestion) gets one. Text after the marker stays after it. An unclosed marker ends at its line.
+ */
+export function repairCommentBody(input: {
+  body: string;
+  annotation: RenderedReviewAnnotationV1;
+  location: CommentLocation;
+}): RepairedBody {
+  const { body, annotation, location } = input;
+  const removed: RepairedBody["removed"] = {};
+  let head = body;
+  let tail = "";
+  const start = body.lastIndexOf(MARKER_OPEN);
+  if (start >= 0) {
+    const close = body.indexOf("-->", start);
+    const lineEnd = body.slice(start).search(/\r?\n/);
+    const end = close >= 0 ? close + 3 : lineEnd >= 0 ? start + lineEnd : body.length;
+    removed.marker = body.slice(start, end);
+    head = body.slice(0, start);
+    tail = body.slice(end).trim();
+  }
+  head = head.trimEnd();
+  const link = TRAILING_PERMALINK.exec(head);
+  if (link) {
+    removed.permalink = link[1];
+    head = head.slice(0, link.index);
+  }
+  const quote = LEADING_QUOTE.exec(head);
+  if (quote) {
+    removed.quote = quote[0].trimEnd();
+    head = head.slice(quote[0].length);
+  }
+  const comment = head.replace(/^(?:[ \t]*\r?\n)+/, "").trimEnd();
+  const added: RepairedBody["added"] = {
+    quote: quoteBlock(annotation),
+    ...(location !== "review-line" && { permalink: permalinkLine(annotation) }),
+    marker: encodeAnnotation(annotation),
+  };
+  return {
+    body: join(added.quote, comment, added.permalink ?? "", added.marker, tail),
+    comment,
+    removed,
+    added,
+  };
+}
+
 function assertSuggesting(annotation: RenderedReviewAnnotationV1) {
   if (annotation.motivation !== "suggesting") throw new TypeError('Suggestions need motivation "suggesting"');
 }

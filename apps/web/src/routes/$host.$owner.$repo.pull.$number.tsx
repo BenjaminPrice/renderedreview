@@ -408,6 +408,7 @@ function ReviewPage({ pr, id, files }: { pr: PullRequest; id: PrIdentity; files:
                 onActiveThreadChange={setActive}
                 extras={historical ? undefined : reviewMode.extras}
                 threadActions={reviewMode.threadActions}
+                repairFor={historical ? undefined : reviewMode.repairFor}
                 originalLink={originalLink}
               />
               {!historical && reviewMode.unplacedDrafts}
@@ -490,6 +491,7 @@ function ReviewPage({ pr, id, files }: { pr: PullRequest; id: PrIdentity; files:
                   rendered={doc.rendered}
                   source={doc.source}
                   onCompose={(selection, suggest) => reviewMode.compose(entry.path, selection, suggest)}
+                  onRepair={reviewMode.repairing ? reviewMode.chooseRepair : undefined}
                 />
               )}
             </>

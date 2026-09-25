@@ -154,7 +154,7 @@ export interface ReviewThread {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type Raw = any;
 
-const actor = (u: Raw): Actor | null => u && { login: u.login, id: u.id, nodeId: u.node_id, type: u.type };
+export const actor = (u: Raw): Actor | null => u && { login: u.login, id: u.id, nodeId: u.node_id, type: u.type };
 
 const repository = (r: Raw): Repository | null =>
   r && {
