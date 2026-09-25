@@ -9,6 +9,7 @@ import { memoryRateLimiter } from "@rendered-review/runtime";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { EntitlementCheck } from "../billing";
 import type { ContributorTracker } from "../contributors";
+import { RateLimited } from "../rate-limit";
 import { captureLogs } from "../test-utils";
 import { publishToGitHub, WRITE_PREFIX } from "./publish";
 
@@ -65,6 +66,7 @@ function setup({
   entitlement = undefined as EntitlementCheck | undefined,
   contributors = undefined as ContributorTracker | undefined,
   limiter = memoryRateLimiter({ limit: 60, periodSeconds: 60 }),
+  clientAddress = undefined as string | undefined,
 } = {}) {
   const repo = `widgets-${++repoCounter}`;
   // Its own user too: the per-user publish limit is process-wide.
@@ -113,6 +115,7 @@ function setup({
         entitlement,
         contributors,
         limiter,
+        clientAddress,
       },
     );
   const writes = () => fetch.mock.calls.filter(([, init]) => init?.method === "POST");
@@ -263,6 +266,19 @@ describe("credential selection", () => {
     const body = (await json(res)) as { code: string; message: string; upgradeUrl: string };
     expect(body).toMatchObject({ code: reason, upgradeUrl: "/pricing" });
     expect(body.message).toMatch(message);
+    expect(writes()).toHaveLength(0);
+  });
+
+  it("answers a typed 429 when publishing would start a trial over the daily limit", async () => {
+    const entitlement = vi.fn<EntitlementCheck>(async () => {
+      throw new RateLimited("trial-start", 600);
+    });
+    const { call, writes } = setup({ visibility: "private", entitlement, clientAddress: "198.51.100.7" });
+    const res = await call("comment", comment());
+    expect(res.status).toBe(429);
+    expect(res.headers.get("retry-after")).toBe("600");
+    expect(await json(res)).toMatchObject({ code: "rate-limited", retryAfter: 600 });
+    expect(entitlement.mock.calls[0]![1]).toMatchObject({ operation: "write", clientAddress: "198.51.100.7" });
     expect(writes()).toHaveLength(0);
   });
 

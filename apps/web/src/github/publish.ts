@@ -23,7 +23,7 @@ import { anchorLines } from "@rendered-review/review-domain";
 import { log, type RateLimiter, readBodyCapped } from "@rendered-review/runtime";
 import type { EntitlementCheck, PrivateRepository } from "../billing";
 import type { ContributorTracker } from "../contributors";
-import { checkLimit } from "../rate-limit";
+import { checkLimit, RateLimited } from "../rate-limit";
 import { forRepository, type WriteOperation } from "./broker";
 import type { InstallationCheck } from "./installation";
 import { meteredFetch } from "./metrics";
@@ -213,6 +213,8 @@ interface Deps {
   approvalUrl?: string;
   /** Writes per user per minute. */
   limiter: RateLimiter;
+  /** The trusted client address: starting a trial is limited per address. */
+  clientAddress?: string;
 }
 
 interface Target {
@@ -226,9 +228,13 @@ interface Target {
 /** Rechecks access (the least-privileged write credential) and reads the PR with it. */
 async function connect(t: Target, operation: WriteOperation["operation"], deps: Deps) {
   const credential = await forRepository(
-    { userId: t.userId, host: t.host, owner: t.owner, repo: t.repo, operation },
+    { userId: t.userId, host: t.host, owner: t.owner, repo: t.repo, operation, clientAddress: deps.clientAddress },
     { identity: deps.identity, installed: deps.installed, fetch: deps.fetch, entitlement: deps.entitlement },
-  );
+  ).catch((error: unknown) => {
+    // Publishing would start the owner's trial, over this user's or network's daily limit.
+    if (error instanceof RateLimited) refuse(429, "rate-limited", error.message, { retryAfter: error.retryAfter });
+    throw error;
+  });
   switch (credential.kind) {
     case "reauth":
       return refuse(401, "reauth", "Sign in with GitHub again");

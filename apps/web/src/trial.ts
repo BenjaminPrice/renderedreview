@@ -12,7 +12,7 @@ import type { SqlDatabase } from "@rendered-review/runtime";
 import { billingAccountFor } from "./billing";
 import { activeContributors } from "./contributors";
 import type { Account } from "./github/installations";
-import { hmacHex } from "./rate-limit";
+import { hmacHex, limited } from "./rate-limit";
 
 export const TRIAL_DAYS = 30;
 /** Active private contributors a trial covers; sales-approved trials raise it on the ledger and entitlement. */
@@ -29,9 +29,18 @@ export const trialSubjectKey = (secret: string, host: string, owner: { id: strin
  * opens write one trial. Callers only ask for owners without an entitlement. Any status other than
  * `active` counts as ended.
  */
-export async function ownerTrial(db: SqlDatabase, secret: string, host: string, owner: Account) {
+export async function ownerTrial(
+  db: SqlDatabase,
+  secret: string,
+  host: string,
+  owner: Account,
+  /** Runs only when this call would start a new trial; throws to refuse it (see `countTrialStart`). */
+  beforeStart?: () => Promise<void>,
+) {
   const now = new Date();
   const key = await trialSubjectKey(secret, host, owner);
+  const existing = await db.all("SELECT 1 FROM trial WHERE subject_key = ?", [key]);
+  if (!existing.length) await beforeStart?.();
   const account = await billingAccountFor(db, host, owner);
   await db.run(
     `INSERT INTO trial (subject_key, started_at, expires_at, status, contributor_limit, billing_account_id)
@@ -62,6 +71,45 @@ export async function ownerTrial(db: SqlDatabase, secret: string, host: string, 
     await db.run("UPDATE trial SET status = 'expired' WHERE subject_key = ?", [key]);
   }
   return { planId: "team", source: "trial", validUntil: expiresAt } satisfies LocalEntitlement;
+}
+
+/**
+ * Counts a trial start against the user and the client address for the current UTC day, and throws
+ * `RateLimited` (retry at the next midnight) when either is over `limit`: throwaway organizations
+ * cannot each get a trial from one person or one network. Rows are aggregate counters in
+ * `usage_counter`; the address is stored only as an HMAC that also covers the day, so days cannot be
+ * linked, and earlier days are deleted here.
+ */
+export async function countTrialStart(
+  db: SqlDatabase,
+  secret: string,
+  limit: number,
+  requester: { userId: string; clientAddress?: string },
+) {
+  const now = new Date();
+  const day = now.toISOString().slice(0, 10);
+  await db.run("DELETE FROM usage_counter WHERE metric = 'trial-start' AND window_start < ?", [day]);
+  const subjects = [["user", requester.userId]];
+  if (requester.clientAddress)
+    subjects.push([
+      "network",
+      await hmacHex(secret, "rendered-review trial start v1", `${day}\n${requester.clientAddress}`),
+    ]);
+  let over = false;
+  for (const [scope, subject] of subjects) {
+    await db.run(
+      `INSERT INTO usage_counter (scope, subject, metric, window_start, count) VALUES (?, ?, 'trial-start', ?, 1)
+       ON CONFLICT (scope, subject, metric, window_start) DO UPDATE SET count = usage_counter.count + 1`,
+      [scope!, subject!, day],
+    );
+    const [row] = await db.all<{ count: number }>(
+      "SELECT count FROM usage_counter WHERE scope = ? AND subject = ? AND metric = 'trial-start' AND window_start = ?",
+      [scope!, subject!, day],
+    );
+    if (Number(row!.count) > limit) over = true;
+  }
+  if (over)
+    throw limited("trial-start", Math.ceil((Date.parse(`${day}T00:00:00Z`) + 86_400_000 - now.getTime()) / 1000));
 }
 
 /**

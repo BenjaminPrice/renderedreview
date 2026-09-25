@@ -7,6 +7,7 @@ import { createGitHubClient, GitHubError } from "@rendered-review/github-integra
 import type { Identity } from "@rendered-review/identity";
 import { log } from "@rendered-review/runtime";
 import type { EntitlementCheck } from "../billing";
+import { RateLimited, rateLimitedResponse } from "../rate-limit";
 import { forRepository, privateAccess } from "./broker";
 import { meteredFetch } from "./metrics";
 import {
@@ -68,6 +69,7 @@ export async function proxyUserGitHub(
     identity,
     fetch: unmetered = fetch,
     entitlement,
+    clientAddress,
   }: {
     allowedHosts: string[];
     /** Undefined when this deployment has no sign-in. */
@@ -75,6 +77,8 @@ export async function proxyUserGitHub(
     fetch?: typeof fetch;
     /** Undefined in community mode: private repositories are then refused. */
     entitlement?: EntitlementCheck;
+    /** The trusted client address: starting a trial is limited per address. */
+    clientAddress?: string;
   },
 ): Promise<Response> {
   if (request.method !== "GET") return reject(405, "Method not allowed");
@@ -112,10 +116,18 @@ export async function proxyUserGitHub(
   let served: Record<string, string> = PRIVATE;
   if (facts.visibility === "private") {
     const [, , name] = repoPath.split("/");
-    const decision = await privateAccess(host, repoPath.startsWith("repos/") ? name : undefined, facts, entitlement, {
-      userId: user.id,
-      operation: "read",
-    });
+    let decision;
+    try {
+      decision = await privateAccess(host, repoPath.startsWith("repos/") ? name : undefined, facts, entitlement, {
+        userId: user.id,
+        operation: "read",
+        clientAddress,
+      });
+    } catch (error) {
+      // Starting the owner's trial is over this user's or network's daily limit.
+      if (error instanceof RateLimited) return rateLimitedResponse(error, { vary: "Cookie" });
+      throw error;
+    }
     if (!decision) return deny(403, "private-repo-unsupported", PRIVATE_REPO_UNSUPPORTED);
     // The ID lets an ended trial's page find this PR's drafts; GitHub just showed this viewer the repository.
     if (!decision.allowed) return notEntitled(decision.reason, facts.id);

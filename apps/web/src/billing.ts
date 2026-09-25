@@ -19,7 +19,7 @@ import { type AppConfig, errorName, log, type SqlDatabase } from "@rendered-revi
 import { type InstallationCheck, installationCheckFor } from "./github/installation";
 import { type Account, upsertOwner } from "./github/installations";
 import { apiBase } from "./github/proxy";
-import { ownerTrial, trialContributorCapReached } from "./trial";
+import { countTrialStart, ownerTrial, trialContributorCapReached } from "./trial";
 
 export type BillingAccountKind = "individual" | "organization";
 export type MembershipRole = "admin" | "member";
@@ -151,10 +151,13 @@ export interface PrivateRepository {
 /**
  * Who is asking, signed in: any private read may start the owner's trial (the repository facts
  * come from GitHub with this user's token, so they can see it); writes count against its contributor cap.
+ * Starting a trial is limited per user and client address per day: the check then throws `RateLimited`.
  */
 export interface Requester {
   userId: string;
   operation: "read" | "write";
+  /** The trusted client address, for the trial start limit only; never stored as is. */
+  clientAddress?: string;
 }
 export type EntitlementCheck = (repo: PrivateRepository, requester?: Requester) => Promise<EntitlementDecision>;
 
@@ -172,7 +175,7 @@ export function entitlementCheckFor(
   db: SqlDatabase | undefined,
   installed: InstallationCheck | undefined = installationCheckFor(config),
 ): EntitlementCheck | undefined {
-  const { hostingMode, accessPolicy, allowlist, authSecret } = config;
+  const { hostingMode, accessPolicy, allowlist, authSecret, limits } = config;
   if (hostingMode === "community" || !db) return undefined;
   // Hosted private access always needs the installation; elsewhere only the `installed` policy asks.
   const needsInstallation = hostingMode === "hosted" || accessPolicy === "installed";
@@ -197,7 +200,9 @@ export function entitlementCheckFor(
     // entitlement is already the answer, so reads after expiry write nothing.
     if (decision.reason === "no-entitlement" && !entitlement) {
       const owner = { id: repo.ownerId, login: repo.owner, type: repo.ownerType };
-      decision = decide(await ownerTrial(db, authSecret, repo.host, owner));
+      // Starting one counts against the requester's daily trial starts (throws `RateLimited`).
+      const count = () => countTrialStart(db, authSecret, limits.trialStartsPerDay, requester);
+      decision = decide(await ownerTrial(db, authSecret, repo.host, owner, count));
     }
     if (
       decision.reason === "trial" &&
