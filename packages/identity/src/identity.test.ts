@@ -257,6 +257,13 @@ describe.each(databases)("GitHub sign-in on %s", (_, open) => {
     });
   });
 
+  it("leaves the account id out, rather than sending null, when the GitHub account row is missing", async () => {
+    const { cookie } = await signIn(identity, "/");
+    await db.run(`DELETE FROM "account"`);
+    const { body } = await viewer(identity, cookie);
+    expect(body).toEqual({ login: "octocat", avatarUrl: "https://avatars.githubusercontent.com/u/583231?v=4" });
+  });
+
   it("stores GitHub tokens only as ciphertext", async () => {
     await signIn(identity, "/");
     const rows = await db.all<Record<string, string | null>>(`SELECT * FROM "account"`);

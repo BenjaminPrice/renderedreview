@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // The write boundary against a mocked GitHub: nothing here reaches the network.
-import { encodeAnnotation, type RenderedReviewAnnotationV1 } from "@rendered-review/annotation-domain";
+import {
+  encodeAnnotation,
+  type RenderedReviewAnnotationV1,
+  repairCommentBody,
+} from "@rendered-review/annotation-domain";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { captureLogs } from "../test-utils";
 import { publishToGitHub, WRITE_PREFIX } from "./publish";
@@ -677,7 +681,10 @@ describe("resolve", () => {
 
 describe("edit", () => {
   const OLD = withMarker("> old quote\n\nPlease clarify", annotation({ commitOid: OTHER }));
-  const NEW = withMarker("> retries\n\nPlease clarify");
+  const repaired = (location: "conversation" | "review-line", a = annotation(), body = OLD) =>
+    repairCommentBody({ body, annotation: a, location }).body;
+  const NEW = repaired("conversation");
+  const NEW_REVIEW = repaired("review-line");
   const author = { login: "octocat", id: 583231, node_id: "U_1", type: "User" };
   const stranger = { ...author, login: "mallory", id: 666 };
   const rawComment = (extra: object = {}) => ({
@@ -721,22 +728,53 @@ describe("edit", () => {
     expect((sent[0]![1]!.headers as Record<string, string>).Authorization).toBe("Bearer app-token");
   });
 
+  // A review comment on head lines 2–4 of docs/a.md; the annotation selects line 3.
+  const rawReview = (extra: object = {}) => ({
+    ...rawComment({ issue_url: undefined }),
+    path: "docs/a.md",
+    line: 4,
+    start_line: 2,
+    side: "RIGHT",
+    start_side: "RIGHT",
+    pull_request_url: "https://api.github.com/repos/acme/widgets/pulls/7",
+    ...extra,
+  });
+  const reviewRoutes = (review: object = rawReview()) => ({
+    "GET /user": () => Response.json(author),
+    "GET /pulls/comments/5": () => Response.json(review),
+    "PATCH /pulls/comments/5": () => Response.json({ ...review, body: NEW_REVIEW }),
+  });
+
   it("replaces the signed-in author's review comment body", async () => {
-    const review = {
-      ...rawComment({ issue_url: undefined }),
-      path: "docs/a.md",
-      pull_request_url: "https://api.github.com/repos/acme/widgets/pulls/7",
-    };
-    const { call, fetch } = setup({
-      routes: {
-        "GET /user": () => Response.json(author),
-        "GET /pulls/comments/5": () => Response.json(review),
-        "PATCH /pulls/comments/5": () => Response.json({ ...review, body: NEW }),
-      },
-    });
-    const res = await call("edit", edit({ commentType: "review" }));
+    const { call, fetch } = setup({ routes: reviewRoutes() });
+    const res = await call("edit", edit({ commentType: "review", body: NEW_REVIEW }));
     expect(res.status).toBe(200);
-    expect(JSON.parse(patches(fetch)[0]![1]!.body as string)).toEqual({ body: NEW });
+    expect(JSON.parse(patches(fetch)[0]![1]!.body as string)).toEqual({ body: NEW_REVIEW });
+  });
+
+  it("refuses a body that isn't the repair of the previous one, before calling GitHub", async () => {
+    // The same valid marker, but the reviewer's text changed.
+    const { call, fetch } = setup({ routes: routes() });
+    const res = await call("edit", edit({ body: NEW.replace("Please clarify", "Please approve") }));
+    expect(res.status).toBe(400);
+    expect(await json(res)).toMatchObject({ code: "invalid-repair" });
+    expect(patches(fetch)).toHaveLength(0);
+    // Written for the other kind of comment: a permalink added or dropped.
+    const other = await call("edit", edit({ body: NEW_REVIEW }));
+    expect(await json(other)).toMatchObject({ code: "invalid-repair" });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["GitHub lines the new selection doesn't overlap", rawReview({ line: 12, start_line: 10 })],
+    ["an outdated comment, which has no current lines", rawReview({ line: null, start_line: null })],
+    ["a comment on base lines", rawReview({ side: "LEFT", start_side: "LEFT" })],
+  ])("refuses a review comment repair onto %s", async (_, review) => {
+    const { call, fetch } = setup({ routes: reviewRoutes(review) });
+    const res = await call("edit", edit({ commentType: "review", body: NEW_REVIEW }));
+    expect(res.status).toBe(400);
+    expect(await json(res)).toMatchObject({ code: "invalid-repair" });
+    expect(patches(fetch)).toHaveLength(0);
   });
 
   it("refuses to edit someone else's comment, by GitHub user id, without editing it", async () => {
@@ -781,15 +819,8 @@ describe("edit", () => {
   });
 
   it("refuses a review comment whose file isn't the annotation's", async () => {
-    const review = {
-      ...rawComment(),
-      path: "docs/b.md",
-      pull_request_url: "https://api.github.com/repos/acme/widgets/pulls/7",
-    };
-    const { call, fetch } = setup({
-      routes: { "GET /user": () => Response.json(author), "GET /pulls/comments/5": () => Response.json(review) },
-    });
-    const res = await call("edit", edit({ commentType: "review" }));
+    const { call, fetch } = setup({ routes: reviewRoutes(rawReview({ path: "docs/b.md" })) });
+    const res = await call("edit", edit({ commentType: "review", body: NEW_REVIEW }));
     expect(res.status).toBe(400);
     expect(await json(res)).toMatchObject({ code: "annotation-mismatch" });
     expect(patches(fetch)).toHaveLength(0);
@@ -799,7 +830,7 @@ describe("edit", () => {
     ["a body without an annotation", edit({ body: "Please clarify" }), "invalid-annotation"],
     [
       "an annotation for another PR",
-      edit({ body: withMarker("x", annotation({ pullRequest: 9 })) }),
+      edit({ body: repaired("conversation", annotation({ pullRequest: 9 })) }),
       "annotation-mismatch",
     ],
     ["an unknown comment type", edit({ commentType: "commit" }), "invalid-request"],
