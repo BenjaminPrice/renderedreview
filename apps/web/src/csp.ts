@@ -46,3 +46,15 @@ export function contentSecurityPolicy(config: AppConfig, nonce: string): string 
     .map(([name, sources]) => `${name} ${[...new Set(sources)].join(" ")}`)
     .join("; ");
 }
+
+/** `response` with the app's security headers; a response with its own policy (a diagram frame) keeps it. */
+export function secureResponse(response: Response, policyHeader: string, policy: string): Response {
+  // Copy, since some responses (e.g. Response.json, redirects) have immutable headers.
+  const secured = new Response(response.body, response);
+  if (!secured.headers.has("content-security-policy")) secured.headers.set(policyHeader, policy);
+  // Following a link out (to GitHub, an external image) must not reveal the page being read.
+  secured.headers.set("Referrer-Policy", "no-referrer");
+  // Proxied GitHub content keeps GitHub's content type; never let a browser guess another.
+  secured.headers.set("X-Content-Type-Options", "nosniff");
+  return secured;
+}
