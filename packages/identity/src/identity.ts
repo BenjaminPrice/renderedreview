@@ -217,6 +217,9 @@ export async function createIdentity({
       // Never let an environment variable switch them off.
       disableOriginCheck: false,
       disableCSRFCheck: false,
+      // Sessions would otherwise store the client's IP address, read from headers a client can set.
+      // Rate limits use the trusted address in the app and keep only a keyed hash of it.
+      ipAddress: { disableIpTracking: true },
     },
   });
 

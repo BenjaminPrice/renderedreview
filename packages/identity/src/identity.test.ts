@@ -92,11 +92,11 @@ afterEach(() => {
 
 const cookieHeader = (setCookies: string[]) => setCookies.map((c) => c.split(";")[0]).join("; ");
 
-async function signIn(identity: Identity, callbackURL: string, base = BASE) {
+async function signIn(identity: Identity, callbackURL: string, base = BASE, extra: Record<string, string> = {}) {
   const start = await identity.handle(
     new Request(`${base}/api/auth/sign-in/social`, {
       method: "POST",
-      headers: { origin: base, "content-type": "application/json" },
+      headers: { origin: base, "content-type": "application/json", ...extra },
       body: JSON.stringify({ provider: "github", callbackURL }),
     }),
   );
@@ -105,7 +105,7 @@ async function signIn(identity: Identity, callbackURL: string, base = BASE) {
   const state = new URL(url).searchParams.get("state");
   const callback = await identity.handle(
     new Request(`${base}/api/auth/callback/github?code=the-code&state=${state}`, {
-      headers: { cookie: cookieHeader(start.headers.getSetCookie()) },
+      headers: { cookie: cookieHeader(start.headers.getSetCookie()), ...extra },
     }),
   );
   return { authorizeUrl: new URL(url), callback, cookie: cookieHeader(callback.headers.getSetCookie()) };
@@ -274,6 +274,13 @@ describe.each(databases)("GitHub sign-in on %s", (_, open) => {
     const cipher = await createTokenCipher(key);
     expect(await cipher.decrypt(rows[0]!.accessToken!)).toBe(tokens.access);
     expect(await cipher.decrypt(rows[0]!.refreshToken!)).toBe(tokens.refresh);
+  });
+
+  it("stores no client IP address with a session (a client can set X-Forwarded-For)", async () => {
+    await signIn(identity, "/", BASE, { "x-forwarded-for": "203.0.113.7", "x-real-ip": "203.0.113.8" });
+    const sessions = await db.all<{ ipAddress: string | null }>(`SELECT "ipAddress" FROM "session"`);
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0]!.ipAddress || null).toBeNull();
   });
 
   it("never hands a GitHub token or session token to the browser", async () => {
