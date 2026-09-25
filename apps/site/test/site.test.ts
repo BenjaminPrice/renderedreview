@@ -51,7 +51,9 @@ describe("links", () => {
 
   it("send the app calls to action to renderedreview.dev", () => {
     const home = page("/");
-    const cta = [...home.querySelectorAll("a")].filter((a) => /^(Open a pull request|Sign in)/.test(a.textContent!.trim()));
+    const cta = [...home.querySelectorAll("a")].filter((a) =>
+      /^(Open a pull request|Sign in)/.test(a.textContent!.trim()),
+    );
     expect(cta.length).toBeGreaterThanOrEqual(3);
     for (const a of cta) expect(a.getAttribute("href")).toBe(APP);
   });
