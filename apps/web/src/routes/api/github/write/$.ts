@@ -14,7 +14,7 @@ export const Route = createFileRoute("/api/github/write/$")({
         return publishToGitHub(request, {
           allowedHosts: allowedHosts(context.config),
           identity: await identityFor(context, new URL(request.url).origin),
-          installed: installationCheckFor(context.config),
+          installed: installationCheckFor(context.config, context.db),
           approvalUrl: github.oauth && `${github.url}/settings/connections/applications/${github.oauth.clientId}`,
         });
       },

@@ -25,6 +25,8 @@ export interface LogFields {
   githubEvent?: string;
   /** A GitHub webhook payload's `action`, such as `created`. */
   action?: string;
+  /** A GitHub App installation's numeric ID, as decimal text. */
+  installationId?: string;
 }
 
 const TYPES: Record<keyof LogFields, "string" | "number"> = {
@@ -41,6 +43,7 @@ const TYPES: Record<keyof LogFields, "string" | "number"> = {
   deliveryId: "string",
   githubEvent: "string",
   action: "string",
+  installationId: "string",
 };
 // No spaces, `@`, `?`, `=` or quotes: rules out prose, emails and query strings.
 const SAFE_STRING = /^[\w.:/*-]*$/;

@@ -12,8 +12,12 @@ export function PublishFailure({ error }: { error: { message: string; cause?: un
       <strong>
         {refusal.org ? `The ${refusal.org} organization` : "This organization"} restricts third-party apps.
       </strong>{" "}
-      An organization owner needs to approve Rendered Review, or install the Rendered Review GitHub App on the
-      repository. <ExternalLink href={refusal.approvalUrl}>Request approval</ExternalLink>
+      An organization owner needs to approve Rendered Review, or{" "}
+      {/* A new tab keeps the unsent text here; the install flow brings that tab back to this pull request. */}
+      <ExternalLink href={`/api/github/install?return=${encodeURIComponent(location.pathname + location.search)}`}>
+        install the Rendered Review GitHub App
+      </ExternalLink>{" "}
+      on the repository. <ExternalLink href={refusal.approvalUrl}>Request approval</ExternalLink>
     </>
   );
 }

@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { createPrivateKey, generateKeyPairSync, verify } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
+import { migrate } from "@rendered-review/control-plane";
 import { loadConfig } from "@rendered-review/runtime";
-import { appJwt, createInstallationCheck, installationCheckFor } from "./installation";
+import { openDatabase } from "@rendered-review/runtime-node";
+import { appJwt, createInstallationCheck, installationCheckFor, withLocalInstallations } from "./installation";
 
 // GitHub hands out PKCS#1 ("BEGIN RSA PRIVATE KEY") keys; PKCS#8 works too.
 const { privateKey: pkcs1, publicKey } = generateKeyPairSync("rsa", {
@@ -89,5 +91,59 @@ describe("installationCheckFor", () => {
     expect(installationCheckFor(withApp)).toBeTypeOf("function");
     expect(installationCheckFor(withApp)).toBe(installationCheckFor(withApp));
     expect(installationCheckFor(loadConfig({ HOSTING_MODE: "community", ACCESS_POLICY: "disabled" }))).toBeUndefined();
+  });
+});
+
+describe("withLocalInstallations", () => {
+  const now = "2026-09-24T12:00:00.000Z";
+  async function database() {
+    const db = openDatabase("sqlite::memory:");
+    await migrate(db);
+    await db.run(
+      "INSERT INTO github_owner (id, host, github_id, type, login, created_at, updated_at) VALUES ('o', 'github.com', '100', 'Organization', 'acme', ?, ?)",
+      [now, now],
+    );
+    await db.run(
+      "INSERT INTO github_repository (id, host, github_id, owner_id, name, private, created_at, updated_at) VALUES ('r', 'github.com', '1001', 'o', 'widgets', 0, ?, ?)",
+      [now, now],
+    );
+    return db;
+  }
+  const install = (db: Awaited<ReturnType<typeof database>>, deletedAt: string | null = null) =>
+    db.run(
+      "INSERT INTO github_installation (id, host, github_id, owner_id, repository_selection, deleted_at, created_at, updated_at) VALUES ('i', 'github.com', '42', 'o', 'selected', ?, ?, ?)",
+      [deletedAt, now, now],
+    );
+
+  it("answers from the webhook-fed tables without asking GitHub", async () => {
+    const db = await database();
+    await install(db);
+    await db.run("INSERT INTO github_installation_repository (installation_id, repository_id) VALUES ('i', 'r')");
+    const live = vi.fn(async () => false);
+    expect(await withLocalInstallations(db, live)("github.com", "acme", "widgets")).toBe(true);
+    await db.run("UPDATE github_installation SET suspended_at = ?", [now]);
+    expect(await withLocalInstallations(db, live)("github.com", "acme", "widgets")).toBe(false);
+    expect(live).not.toHaveBeenCalled();
+    await db.close();
+  });
+
+  it("asks GitHub when the tables know nothing about the owner or have no grant for the repository", async () => {
+    const db = await database();
+    const live = vi.fn(async () => true);
+    const installed = withLocalInstallations(db, live);
+    expect(await installed("github.com", "octo", "widgets")).toBe(true);
+    expect(await installed("github.com", "acme", "widgets")).toBe(true);
+    await install(db);
+    expect(await installed("github.com", "acme", "widgets")).toBe(true);
+    // An owner whose installations are all deleted may have reinstalled without us hearing of it.
+    await db.run("UPDATE github_installation SET deleted_at = ?", [now]);
+    expect(await installed("github.com", "acme", "widgets")).toBe(true);
+    expect(live.mock.calls).toEqual([
+      ["github.com", "octo", "widgets"],
+      ["github.com", "acme", "widgets"],
+      ["github.com", "acme", "widgets"],
+      ["github.com", "acme", "widgets"],
+    ]);
+    await db.close();
   });
 });
