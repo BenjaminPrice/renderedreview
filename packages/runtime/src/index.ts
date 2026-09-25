@@ -11,4 +11,5 @@ export {
   type HostingMode,
   type LoadConfigOptions,
 } from "./config";
+export { readBodyCapped } from "./body";
 export { errorName, log, type LogFields } from "./log";

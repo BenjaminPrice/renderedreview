@@ -20,7 +20,7 @@ import {
 } from "@rendered-review/github-integration";
 import type { Identity } from "@rendered-review/identity";
 import { anchorLines } from "@rendered-review/review-domain";
-import { log } from "@rendered-review/runtime";
+import { log, readBodyCapped } from "@rendered-review/runtime";
 import { forRepository, type WriteOperation } from "./broker";
 import type { InstallationCheck } from "./installation";
 import { meteredFetch } from "./metrics";
@@ -31,7 +31,7 @@ export const WRITE_PREFIX = "/api/github/write/";
 
 /** GitHub's limit on a comment body, in characters. */
 export const MAX_BODY_LENGTH = 65_536;
-const MAX_REQUEST_LENGTH = 1024 * 1024;
+const MAX_REQUEST_BYTES = 1024 * 1024;
 
 export type Representation = "review-line" | "review-file" | "conversation";
 
@@ -394,11 +394,11 @@ async function handle(request: Request, deps: Deps): Promise<Result> {
   if (!user) return refuse(401, "unauthenticated", "Sign in with GitHub");
   limitRate(user.id);
 
-  const text = await request.text();
-  if (text.length > MAX_REQUEST_LENGTH) refuse(413, "request-too-large", "Request too large");
+  const bytes = await readBodyCapped(request, MAX_REQUEST_BYTES);
+  if (!bytes) return refuse(413, "request-too-large", "Request too large");
   let input: unknown;
   try {
-    input = JSON.parse(text);
+    input = JSON.parse(new TextDecoder().decode(bytes));
   } catch {
     return invalid("Body must be JSON");
   }

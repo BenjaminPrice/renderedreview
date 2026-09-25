@@ -4,7 +4,7 @@
 import handler, { createServerEntry } from "@tanstack/react-start/server-entry";
 import { createRequestContext } from "#runtime";
 import type { RequestContext } from "@rendered-review/runtime";
-import { contentSecurityPolicy, createNonce } from "./csp";
+import { contentSecurityPolicy, createNonce, secureResponse } from "./csp";
 import { withErrorLog } from "./request-log";
 
 declare module "@tanstack/react-start" {
@@ -22,14 +22,6 @@ export default createServerEntry({
     const context = createRequestContext();
     const nonce = createNonce();
     const response = await withErrorLog(request, () => handler.fetch(request, { context: { ...context, nonce } }));
-    // Copy, since some responses (e.g. Response.json, redirects) have immutable headers.
-    const secured = new Response(response.body, response);
-    // A response with its own policy (the diagram renderer frame) keeps it.
-    if (!secured.headers.has("content-security-policy")) {
-      secured.headers.set(CSP_HEADER, contentSecurityPolicy(context.config, nonce));
-    }
-    // Following a link out (to GitHub, an external image) must not reveal the page being read.
-    secured.headers.set("Referrer-Policy", "no-referrer");
-    return secured;
+    return secureResponse(response, CSP_HEADER, contentSecurityPolicy(context.config, nonce));
   },
 });
