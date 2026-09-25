@@ -20,7 +20,7 @@ export interface EntitlementInput {
   /** `owner` or `owner/repo` entries, for the `allowlist` policy. */
   allowlist: string[];
   repo: { owner: string; name: string; private: boolean; ownerType: OwnerType };
-  /** Is the GitHub App installed on the repository? Only the `installed` policy reads it. */
+  /** Is the GitHub App installed on the repository? Read by the `installed` policy and in hosted mode. */
   installed?: boolean;
   /** Hosted mode only; other modes never read it. */
   entitlement?: LocalEntitlement | null;
@@ -61,9 +61,13 @@ export function resolveEntitlement(input: EntitlementInput): EntitlementDecision
   // Community: local policy only. Dedicated: the installation contract, enforced by the policy.
   if (input.hostingMode !== "hosted") return { allowed: true, reason: "access-policy" };
 
+  // Hosted private access always runs through the GitHub App, whatever the policy.
+  if (!input.installed) return { allowed: false, reason: "not-installed" };
   const e = input.entitlement;
   if (!e || e.planId === "public") return { allowed: false, reason: "no-entitlement" };
-  if (e.validUntil !== null && e.validUntil <= input.now) return { allowed: false, reason: "entitlement-expired" };
+  // Compared as instants (offsets and precision vary); an unparseable end counts as ended (NaN > x is false).
+  if (e.validUntil !== null && !(Date.parse(e.validUntil) > Date.parse(input.now)))
+    return { allowed: false, reason: "entitlement-expired" };
   // An Individual subscription covers its personal owner's repositories, never an organization's.
   if (e.planId === "individual" && repo.ownerType === "Organization")
     return { allowed: false, reason: "individual-plan-org-repo" };

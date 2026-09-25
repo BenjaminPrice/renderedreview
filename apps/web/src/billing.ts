@@ -15,7 +15,7 @@ import {
   type OwnerType,
   resolveEntitlement,
 } from "@rendered-review/control-plane";
-import type { AppConfig, SqlDatabase } from "@rendered-review/runtime";
+import { type AppConfig, errorName, log, type SqlDatabase } from "@rendered-review/runtime";
 import { type InstallationCheck, installationCheckFor } from "./github/installation";
 import { type Account, upsertOwner } from "./github/installations";
 import { apiBase } from "./github/proxy";
@@ -165,15 +165,26 @@ export function entitlementCheckFor(
 ): EntitlementCheck | undefined {
   const { hostingMode, accessPolicy, allowlist } = config;
   if (hostingMode === "community" || !db) return undefined;
+  // Hosted private access always needs the installation; elsewhere only the `installed` policy asks.
+  const needsInstallation = hostingMode === "hosted" || accessPolicy === "installed";
   return async (repo) =>
     resolveEntitlement({
       hostingMode,
       accessPolicy,
       allowlist,
       repo: { owner: repo.owner, name: repo.name, private: true, ownerType: repo.ownerType },
-      installed:
-        accessPolicy === "installed" ? ((await installed?.(repo.host, repo.owner, repo.name)) ?? false) : undefined,
+      installed: needsInstallation ? await isInstalled(installed, repo) : undefined,
       entitlement: hostingMode === "hosted" ? await ownerEntitlement(db, repo.host, repo.ownerId) : null,
       now: new Date().toISOString(),
     });
+}
+
+/** Fails closed: an installation check that cannot answer counts as not installed. */
+async function isInstalled(installed: InstallationCheck | undefined, repo: PrivateRepository) {
+  try {
+    return (await installed?.(repo.host, repo.owner, repo.name)) ?? false;
+  } catch (error) {
+    log.warn("billing.installation_check", { category: "failed", error: errorName(error), host: repo.host });
+    return false;
+  }
 }

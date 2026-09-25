@@ -82,6 +82,15 @@ describe.each(testDatabases)("billing accounts on %s", (_, open) => {
     });
   });
 
+  it("creates one account when two requests ask for the same owner at once", async () => {
+    const [a, b] = await Promise.all([
+      billingAccountFor(db, "github.com", acme),
+      billingAccountFor(db, "github.com", acme),
+    ]);
+    expect(a).toEqual(b);
+    expect(await db.all("SELECT id FROM billing_account")).toEqual([{ id: a.id }]);
+  });
+
   it("finds no entitlement for an owner without an account or plan", async () => {
     expect(await ownerEntitlement(db, "github.com", "100")).toBeNull();
     await billingAccountFor(db, "github.com", acme);
@@ -141,12 +150,34 @@ describe.each(testDatabases)("billing accounts on %s", (_, open) => {
 
     afterEach(() => vi.restoreAllMocks());
 
-    it("asks GitHub whether the app is installed, never the local installation tables", async () => {
-      const { privateKey: appKey } = generateKeyPairSync("rsa", {
-        modulusLength: 2048,
-        privateKeyEncoding: { type: "pkcs1", format: "pem" },
-        publicKeyEncoding: { type: "spki", format: "pem" },
+    const { privateKey: appKey } = generateKeyPairSync("rsa", {
+      modulusLength: 2048,
+      privateKeyEncoding: { type: "pkcs1", format: "pem" },
+      publicKeyEncoding: { type: "spki", format: "pem" },
+    });
+
+    it("in hosted mode needs the installation even when the policy would not ask for it", async () => {
+      const installed = vi.fn(async () => false);
+      const config = loadConfig({ ...env, HOSTING_MODE: "hosted", ACCESS_POLICY: "all-accessible" });
+      await entitle((await billingAccountFor(db, "github.com", acme)).id, "team");
+      expect(await entitlementCheckFor(config, db, installed)!(repo(acme))).toEqual({
+        allowed: false,
+        reason: "not-installed",
       });
+      expect(installed).toHaveBeenCalledWith("github.com", "acme", "widgets");
+    });
+
+    it("refuses when GitHub's installation check fails", async () => {
+      const config = loadConfig({ ...env, HOSTING_MODE: "hosted", GITHUB_APP_PRIVATE_KEY: appKey });
+      await entitle((await billingAccountFor(db, "github.com", acme)).id, "team");
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 502 }));
+      expect(await entitlementCheckFor(config, db)!({ ...repo(acme), name: "flaky" })).toEqual({
+        allowed: false,
+        reason: "not-installed",
+      });
+    });
+
+    it("asks GitHub whether the app is installed, never the local installation tables", async () => {
       const config = loadConfig({ ...env, HOSTING_MODE: "hosted", GITHUB_APP_PRIVATE_KEY: appKey });
       await entitle((await billingAccountFor(db, "github.com", acme)).id, "team");
       // The tables claim an all-repositories installation for "acme", as a stale row after a missed rename would.

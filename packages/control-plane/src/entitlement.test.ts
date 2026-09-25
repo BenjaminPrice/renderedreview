@@ -82,6 +82,30 @@ describe("private organization repositories (hosted)", () => {
     });
   });
 
+  it("need the installation whatever the access policy", () => {
+    const entitlement = subscription("team");
+    expect(
+      resolveEntitlement(hosted({ repo: org, accessPolicy: "all-accessible", installed: false, entitlement })),
+    ).toEqual({ allowed: false, reason: "not-installed" });
+    expect(
+      resolveEntitlement(
+        hosted({ repo: org, accessPolicy: "allowlist", allowlist: ["acme"], installed: false, entitlement }),
+      ),
+    ).toEqual({ allowed: false, reason: "not-installed" });
+  });
+
+  it("compare the plan's end as an instant, not as text", () => {
+    const until = (validUntil: string) =>
+      resolveEntitlement(hosted({ repo: org, entitlement: subscription("team", validUntil) }));
+    // Exactly the current instant, written without milliseconds: ended.
+    expect(until("2026-09-25T12:00:00Z")).toEqual({ allowed: false, reason: "entitlement-expired" });
+    // 16:00 at +05:00 is 11:00Z, an hour ago; 18:00 at +05:00 is 13:00Z, an hour ahead.
+    expect(until("2026-09-25T16:00:00.000+05:00")).toEqual({ allowed: false, reason: "entitlement-expired" });
+    expect(until("2026-09-25T18:00:00.000+05:00")).toEqual({ allowed: true, reason: "subscription" });
+    // Unparseable: treated as ended.
+    expect(until("soon")).toEqual({ allowed: false, reason: "entitlement-expired" });
+  });
+
   it("still need the local access policy: a subscription does not replace the installation", () => {
     expect(resolveEntitlement(hosted({ repo: org, installed: false, entitlement: subscription("team") }))).toEqual({
       allowed: false,
