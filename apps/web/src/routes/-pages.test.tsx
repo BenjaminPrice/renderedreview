@@ -68,6 +68,11 @@ function renderApp(path: string) {
 }
 
 describe("home page", () => {
+  it("explains a sign-in refused for too many attempts, with when to retry", async () => {
+    renderApp("/?error=too_many_requests&retry_after=42");
+    expect((await screen.findByRole("alert")).textContent).toBe("Too many sign-in attempts. Try again in 42 seconds.");
+  });
+
   const input = () => screen.getByLabelText("GitHub pull request URL");
 
   async function submit(url: string) {

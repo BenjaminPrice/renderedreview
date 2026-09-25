@@ -70,7 +70,14 @@ it("limits sign-in starts and callbacks per client address, with a typed 429, bu
   expect(limited.status).toBe(429);
   expect(limited.headers.get("retry-after")).toMatch(/^\d+$/);
   expect(await limited.json()).toMatchObject({ code: "rate-limited", retryAfter: expect.any(Number) });
-  expect((await callback("198.51.100.1")).status).toBe(429);
+  // The browser arrives at the callback from GitHub: send it to a page that explains, not raw JSON.
+  const refused = await callback("198.51.100.1");
+  expect(refused.status).toBe(302);
+  expect(refused.headers.get("cache-control")).toBe("no-store");
+  const location = new URL(refused.headers.get("location")!, "http://localhost:3000");
+  expect(location.pathname).toBe("/");
+  expect(location.searchParams.get("error")).toBe("too_many_requests");
+  expect(Number(location.searchParams.get("retry_after"))).toBeGreaterThan(0);
   // Another address has its own budget; the viewer lookup on every page load is not counted.
   expect((await start("198.51.100.2")).status).toBe(200);
   for (let i = 0; i < 3; i++) {
