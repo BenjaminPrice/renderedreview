@@ -18,9 +18,10 @@ afterEach(() => {
   document.getSelection()?.removeAllRanges();
 });
 
-function mount(source: string) {
+function mount(source: string, repairing = false) {
   const rendered = renderMarkdown(source);
   const onCompose = vi.fn();
+  const onRepair = vi.fn();
   function Page() {
     const [article, setArticle] = useState<HTMLElement | null>(null);
     return (
@@ -28,12 +29,18 @@ function mount(source: string) {
         <article ref={setArticle} tabIndex={0}>
           {toJsxRuntime(rendered.tree, { Fragment, jsx, jsxs })}
         </article>
-        <SelectionPopover article={article} rendered={rendered} source={source} onCompose={onCompose} />
+        <SelectionPopover
+          article={article}
+          rendered={rendered}
+          source={source}
+          onCompose={onCompose}
+          onRepair={repairing ? onRepair : undefined}
+        />
       </>
     );
   }
   render(<Page />);
-  return { article: document.querySelector("article")!, onCompose };
+  return { article: document.querySelector("article")!, onCompose, onRepair };
 }
 
 /** Select from the start of `from` to the end of `to`, each within one text node. */
@@ -170,4 +177,18 @@ it("starts after the front matter, which cannot be commented on", async () => {
   article.focus();
   await userEvent.keyboard("{Shift>}{ArrowRight}{ArrowRight}{/Shift}");
   expect(document.getSelection()!.toString()).toBe("Bo");
+});
+
+it("while repairing an anchor, offers only Move comment here (M) for the selection", async () => {
+  const { article, onCompose, onRepair } = mount("Hello brave new world.\n", true);
+  selectText(article, "brave");
+  fireEvent.keyUp(article, { key: "ArrowRight", shiftKey: true });
+  const actions = within(toolbar()!);
+  expect(actions.queryByRole("button", { name: /Comment|Suggest/ })).toBeNull();
+  expect(actions.getByRole("button", { name: /Move comment here/ }).getAttribute("aria-keyshortcuts")).toBe("M");
+  await userEvent.keyboard("c");
+  expect(onCompose).not.toHaveBeenCalled();
+  await userEvent.keyboard("m");
+  expect(onRepair).toHaveBeenCalledWith(expect.objectContaining({ exact: "brave" }));
+  expect(toolbar()).toBeNull();
 });
