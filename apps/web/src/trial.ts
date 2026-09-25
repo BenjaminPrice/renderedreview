@@ -46,7 +46,13 @@ export async function ownerTrial(db: SqlDatabase, secret: string, host: string, 
   await db.run(
     `INSERT INTO trial (subject_key, started_at, expires_at, status, contributor_limit, billing_account_id)
      VALUES (?, ?, ?, 'active', ?, ?) ON CONFLICT (subject_key) DO NOTHING`,
-    [key, now.toISOString(), new Date(now.getTime() + TRIAL_DAYS * 86_400_000).toISOString(), TRIAL_CONTRIBUTORS, account.id],
+    [
+      key,
+      now.toISOString(),
+      new Date(now.getTime() + TRIAL_DAYS * 86_400_000).toISOString(),
+      TRIAL_CONTRIBUTORS,
+      account.id,
+    ],
   );
   const [trial] = await db.all<{ expiresAt: string; status: string; limit: number }>(
     `SELECT expires_at AS "expiresAt", status, contributor_limit AS "limit" FROM trial WHERE subject_key = ?`,

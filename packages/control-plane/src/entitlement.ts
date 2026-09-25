@@ -76,5 +76,7 @@ export function resolveEntitlement(input: EntitlementInput): EntitlementDecision
   // An Individual subscription covers its personal owner's repositories, never an organization's.
   if (e.planId === "individual" && repo.ownerType === "Organization")
     return { allowed: false, reason: "individual-plan-org-repo" };
-  return e.source === "trial" ? { allowed: true, reason: "trial", validUntil: e.validUntil } : { allowed: true, reason: e.source };
+  return e.source === "trial"
+    ? { allowed: true, reason: "trial", validUntil: e.validUntil }
+    : { allowed: true, reason: e.source };
 }

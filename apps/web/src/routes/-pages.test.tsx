@@ -215,6 +215,60 @@ describe("signed-in and sign-in states", () => {
     expect(requested).toEqual([`${USER}/pulls/45377`]);
   });
 
+  it("says the owner's trial has ended, pointing to the plans, without rendering content", async () => {
+    stubGitHub(
+      signedIn(() =>
+        json(
+          JSON.stringify({
+            code: "trial-expired",
+            message: "The private-repository trial for this owner has ended",
+            upgradeUrl: "/pricing",
+          }),
+          { status: 403 },
+        ),
+      ),
+    );
+    renderApp("/github.com/mdn/content/pull/45377");
+    const title = await heading("Private-repository trial ended");
+    const message = title.parentElement!;
+    expect(message.textContent).toMatch(/30-day trial for mdn has ended/);
+    expect(message.textContent).toMatch(/Comments already on GitHub are unaffected/);
+    const plans = within(message).getByRole("link", { name: "See plans" });
+    expect(plans.getAttribute("href")).toBe("/pricing");
+    expect(plans.getAttribute("target")).toBeNull();
+  });
+
+  it("announces a started trial once and then shows the days left", async () => {
+    localStorage.clear();
+    const ends = new Date(Date.now() + 23.5 * 86_400_000);
+    const files = (JSON.parse(fixture("files.json")) as { filename: string }[]).filter(
+      (f) => !f.filename.endsWith(".md"),
+    );
+    const responses: Record<string, Response> = {
+      [`${USER}/pulls/45377`]: json(
+        fixture("pull.json").replace(
+          '"full_name":"mdn/content","private":false',
+          '"full_name":"mdn/content","private":true',
+        ),
+      ),
+      [`${USER}/pulls/45377/files?per_page=100`]: json(JSON.stringify(files)),
+      [USER]: json("{}", { headers: { "x-rendered-review-trial-ends": ends.toISOString() } }),
+    };
+    stubGitHub(signedIn((url) => responses[url]?.clone()));
+    renderApp("/github.com/mdn/content/pull/45377");
+    const date = ends.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
+    const started = await screen.findByRole("status", { name: "Trial started" });
+    expect(started.textContent).toBe(`30-day trial started for mdn · ends ${date}`);
+    expect((await screen.findByTitle(`Private-repository trial ends ${date}`)).textContent).toBe(
+      "Trial · 24 days left",
+    );
+    cleanup();
+
+    renderApp("/github.com/mdn/content/pull/45377");
+    expect(await screen.findByTitle(`Private-repository trial ends ${date}`)).toBeTruthy();
+    expect(screen.queryByRole("status", { name: "Trial started" })).toBeNull();
+  });
+
   it("asks the user to sign in again when their GitHub session has expired", async () => {
     stubGitHub(
       signedIn(() => json(JSON.stringify({ message: "Sign in with GitHub again", code: "reauth" }), { status: 401 })),

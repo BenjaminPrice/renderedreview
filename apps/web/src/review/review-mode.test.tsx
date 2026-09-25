@@ -239,7 +239,11 @@ it("keeps drafts copyable when an ended trial refuses the review, and points to 
   const alert = await within(dialog).findByRole("alert");
   expect(alert.textContent).toMatch(/trial for this owner has ended/);
   expect(alert.textContent).toMatch(/comments already on GitHub are unaffected/i);
-  expect(within(alert).getByRole("link", { name: /See plans/ }).getAttribute("href")).toBe("/pricing");
+  expect(
+    within(alert)
+      .getByRole("link", { name: /See plans/ })
+      .getAttribute("href"),
+  ).toBe("/pricing");
 
   await userEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
   const draft = screen.getByRole("region", { name: "Draft comment on line 10" });

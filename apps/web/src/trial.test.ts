@@ -67,9 +67,13 @@ describe.each(testDatabases)("private-repository trial on %s", (_, open) => {
   afterEach(() => vi.useRealTimers());
 
   const ledger = () =>
-    db.all<{ started_at: string; expires_at: string; status: string; contributor_limit: number; account: string | null }>(
-      `SELECT started_at, expires_at, status, contributor_limit, billing_account_id AS account FROM trial`,
-    );
+    db.all<{
+      started_at: string;
+      expires_at: string;
+      status: string;
+      contributor_limit: number;
+      account: string | null;
+    }>(`SELECT started_at, expires_at, status, contributor_limit, billing_account_id AS account FROM trial`);
   const entitlements = () =>
     db.all(`SELECT plan_id, source, contributor_limit, valid_until FROM entitlement ORDER BY valid_until`);
 

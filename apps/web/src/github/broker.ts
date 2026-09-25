@@ -81,7 +81,10 @@ export async function forRepository(
     return facts.status === 401 ? { kind: "reauth" } : { kind: "unavailable", status: facts.status };
   }
   if (facts.visibility === "private") {
-    const decision = await privateAccess(host, op.repo, facts, deps.entitlement, { userId: op.userId, operation: "write" });
+    const decision = await privateAccess(host, op.repo, facts, deps.entitlement, {
+      userId: op.userId,
+      operation: "write",
+    });
     if (!decision) return { kind: "private-repo-unsupported" };
     // An entitled private repository is written with the GitHub App user token (the app is installed there).
     return decision.allowed ? { kind: "user", token } : { kind: "not-entitled", reason: decision.reason };

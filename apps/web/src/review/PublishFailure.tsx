@@ -9,8 +9,7 @@ export function PublishFailure({ error }: { error: { message: string; cause?: un
   if (refusal?.upgradeUrl && (refusal.code === "trial-expired" || refusal.code === "trial-contributor-cap"))
     return (
       <>
-        {error.message}{" "}
-        {/* A new tab keeps unsent text and in-memory drafts here. */}
+        {error.message} {/* A new tab keeps unsent text and in-memory drafts here. */}
         <ExternalLink href={refusal.upgradeUrl}>See plans</ExternalLink>
       </>
     );
