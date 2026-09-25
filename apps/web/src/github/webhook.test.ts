@@ -5,8 +5,8 @@
 import { createHmac } from "node:crypto";
 import { migrate } from "@rendered-review/control-plane";
 import { loadConfig, type RequestContext, type SqlDatabase } from "@rendered-review/runtime";
-import { openDatabase, type NodeDatabase } from "@rendered-review/runtime-node";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { testDatabases } from "./test-databases";
 import { receiveWebhook } from "./webhook";
 
 const SECRET = "webhook-secret";
@@ -48,39 +48,6 @@ function delivery(
   });
 }
 
-const databases: [string, () => Promise<{ db: NodeDatabase; close: () => Promise<void> }>][] = [
-  [
-    "SQLite",
-    async () => {
-      const db = openDatabase("sqlite::memory:");
-      return { db, close: () => db.close() };
-    },
-  ],
-];
-const postgresUrl = process.env.TEST_POSTGRES_URL;
-if (postgresUrl || process.env.CI) {
-  databases.push([
-    "PostgreSQL",
-    async () => {
-      if (!postgresUrl) throw new Error("TEST_POSTGRES_URL is required in CI");
-      const schema = `rr_webhook_${crypto.randomUUID().replaceAll("-", "")}`;
-      const admin = openDatabase(postgresUrl);
-      await admin.run(`CREATE SCHEMA ${schema}`);
-      const url = new URL(postgresUrl);
-      url.searchParams.set("search_path", schema);
-      const db = openDatabase(url.toString());
-      return {
-        db,
-        close: async () => {
-          await db.close();
-          await admin.run(`DROP SCHEMA ${schema} CASCADE`);
-          await admin.close();
-        },
-      };
-    },
-  ]);
-}
-
 const noScheduler = { waitUntil: () => {} };
 const noSecrets = { get: async () => undefined };
 
@@ -94,7 +61,7 @@ describe("receiveWebhook without a webhook secret or database", () => {
   });
 });
 
-describe.each(databases)("receiveWebhook on %s", (_, open) => {
+describe.each(testDatabases)("receiveWebhook on %s", (_, open) => {
   let db: SqlDatabase;
   let close: () => Promise<void>;
   let context: RequestContext;
