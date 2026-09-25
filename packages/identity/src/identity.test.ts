@@ -312,6 +312,29 @@ describe.each(databases)("GitHub sign-in on %s", (_, open) => {
     }
   });
 
+  it("refuses to start sign-in or linking from another site (CSRF)", async () => {
+    const { cookie } = await signIn(identity, "/");
+    for (const [path, provider] of [
+      ["sign-in/social", "github"],
+      ["link-social", "github-public"],
+    ]) {
+      for (const contentType of ["application/json", "text/plain"]) {
+        const response = await (
+          path === "link-social" ? await createIdentity({ config: publicConfig, db, baseURL: BASE }) : identity
+        ).handle(
+          new Request(`${BASE}/api/auth/${path}`, {
+            method: "POST",
+            headers: { origin: "https://evil.example", "content-type": contentType, cookie },
+            body: JSON.stringify({ provider, callbackURL: "/" }),
+          }),
+        );
+        // A form-encodable body is refused before the origin check even runs.
+        expect(response.status, `${path} ${contentType}`).toBe(contentType === "text/plain" ? 415 : 403);
+        expect(response.headers.getSetCookie(), `${path} ${contentType}`).toEqual([]);
+      }
+    }
+  });
+
   it("rejects cross-site sign-out (CSRF) and signs out same-site", async () => {
     const { cookie } = await signIn(identity, "/");
     const signOut = (origin: string) =>
