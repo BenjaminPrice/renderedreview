@@ -38,6 +38,10 @@ export function publishErrorMessage(error: { code?: string; message: string; res
       return "The comment changed on GitHub since this page loaded, so it was left as it is. Reload to see the latest version.";
     case "private-repo-unsupported":
       return "Commenting on private repositories isn't supported yet.";
+    case "trial-expired":
+      return "The private-repository trial for this owner has ended, so nothing was published. Your drafts are kept to copy; comments already on GitHub are unaffected.";
+    case "trial-contributor-cap":
+      return "This trial's active private contributor places are all taken, so nothing was published. Your drafts are kept to copy.";
     case "reauth":
     case "unauthenticated":
       return "Your GitHub sign-in has expired. Sign in again, then retry.";

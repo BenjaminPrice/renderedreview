@@ -56,6 +56,8 @@ export class PublishError extends Error {
   /** `oauth-org-restricted`: the organization, and where users ask it to approve the OAuth App. */
   readonly org?: string;
   readonly approvalUrl?: string;
+  /** `trial-expired`, `trial-contributor-cap`: where to choose a plan. */
+  readonly upgradeUrl?: string;
   /** The review draft that was refused. */
   readonly draftId?: string;
 
