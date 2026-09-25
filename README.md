@@ -113,12 +113,15 @@ OAuth App tokens do not expire unless you enable expiring tokens in the OAuth Ap
 
 CI (`.github/workflows/ci.yml`) runs the same commands inside devbox.
 
+The marketing site in `apps/site` builds and tests on its own (`pnpm --filter @rendered-review/site build|test`) and has its own CI and manual deploy workflows: [docs/deploy-site.md](docs/deploy-site.md).
+
 On Cloudflare Workers, configuration comes from `vars` and secrets in `apps/web/wrangler.jsonc` instead of the process environment, and the database is the D1 binding `DB` rather than `DATABASE_URL`. Deploying and rolling back: [docs/deploy-cloudflare.md](docs/deploy-cloudflare.md).
 
 ## Repository layout
 
 ```text
 apps/web                        TanStack Start app (Router + Query)
+apps/site                       Marketing site for renderedreview.com (Astro, static)
 packages/review-domain          PR/file models, comment mapping, threads, re-anchoring
 packages/markdown-domain        Parsing, sanitization, source mapping, selection
 packages/diagram-domain         Fenced diagram registry and renderers
