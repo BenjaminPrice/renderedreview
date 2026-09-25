@@ -158,6 +158,20 @@ export const viewerQuery = queryOptions({
   staleTime: Infinity,
 });
 
+/** Whether the signed-in viewer has write access to the repository: GitHub's `permissions` for their token. */
+export const viewerCanPushQuery = (id: PrIdentity) =>
+  queryOptions({
+    queryKey: ["github", "user", id.host, id.repositoryId, "can-push"],
+    queryFn: async () => {
+      const path = `repos/${encodeURIComponent(id.owner)}/${encodeURIComponent(id.repo)}`;
+      const res = await fetch(`${USER_PREFIX}${id.host}/${path}`, { headers: { "X-Requested-With": REQUESTED_WITH } });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const body = (await res.json()) as { permissions?: { push?: boolean } };
+      return body.permissions?.push === true;
+    },
+    staleTime: Infinity,
+  });
+
 /** When the owner's private-repository trial ends (ISO), null outside a trial. Read with the viewer's access. */
 export const trialEndsQuery = (id: PrIdentity) =>
   queryOptions({

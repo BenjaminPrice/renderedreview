@@ -265,6 +265,7 @@ export function ThreadCard({
               <time dateTime={e.at} title={new Date(e.at).toLocaleString()}>
                 {relativeTime(e.at)}
               </time>
+              {e.ignored && " · doesn't change the thread state"}
             </li>
           ))}
         </ol>

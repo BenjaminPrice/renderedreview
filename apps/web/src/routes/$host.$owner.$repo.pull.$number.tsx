@@ -134,7 +134,7 @@ function PullRequestPage() {
 function ReviewPage({ pr, id, files }: { pr: PullRequest; id: PrIdentity; files: ChangedFile[] }) {
   const search = Route.useSearch();
   const { docs: changed, otherCount } = useMemo(() => changedDocs(files), [files]);
-  const review = useReview(id);
+  const review = useReview(id, pr);
   // The active thread lives in the URL (`thread`: root comment id) so it can be shared.
   const threads = review.data?.threads;
   const active = threads?.find((t) => t.id === search.thread || t.comments.some((c) => c.id === search.thread));
@@ -556,7 +556,7 @@ function useOriginals(id: PrIdentity, placements: ThreadPlacement[]): ReadonlyMa
  * GitHub-native review content for the PR. Thread resolution needs GraphQL, which GitHub refuses
  * anonymously: known when signed in, unknown otherwise (or when that read fails).
  */
-function useReview(id: PrIdentity) {
+function useReview(id: PrIdentity, pr: PullRequest) {
   const comments = useQuery(reviewCommentsQuery(id));
   const reviews = useQuery(reviewsQuery(id));
   const issueComments = useQuery(issueCommentsQuery(id));
@@ -577,9 +577,10 @@ function useReview(id: PrIdentity) {
             reviewThreads: threads.data,
             reviews: reviews.data,
             issueComments: issueComments.data,
+            pullRequestAuthor: pr.author,
           })
         : undefined,
-    [id, comments.data, reviews.data, issueComments.data, threads.data, threadsSettled],
+    [id, pr.author, comments.data, reviews.data, issueComments.data, threads.data, threadsSettled],
   );
   return { data, raw: reviews.data, error: comments.error ?? reviews.error ?? issueComments.error };
 }

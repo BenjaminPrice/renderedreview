@@ -5,7 +5,7 @@
 import { composeCommentBody, extractAnnotation } from "@rendered-review/annotation-domain";
 import { projectReview } from "@rendered-review/review-domain";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { renderHook } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { PrIdentity } from "../github/queries";
@@ -31,7 +31,10 @@ const WRITE = "/api/github/write/github.com/acme/docs/pulls/7";
 const app = (resolution: "resolved" | "unresolved" = "unresolved") =>
   appThread([issueComment("Why jitter?", { id: 1001 }), issueComment("Because.", { id: 1002 })], { resolution });
 
-function setup(response: () => Response = () => Response.json({}, { status: 201 })) {
+function setup(
+  response: () => Response = () => Response.json({}, { status: 201 }),
+  who: { signedIn?: boolean; viewerId?: number; authorId?: number } = { signedIn: true },
+) {
   const fetch = vi.fn<(url: string, init: RequestInit) => Promise<Response>>(async () => response());
   vi.stubGlobal("fetch", fetch);
   const client = new QueryClient();
@@ -39,9 +42,11 @@ function setup(response: () => Response = () => Response.json({}, { status: 201 
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>{children}</QueryClientProvider>
   );
-  const { result } = renderHook(() => useThreadActions(id, { signedIn: true, announce }), { wrapper });
+  const { result } = renderHook(() => useThreadActions(id, { signedIn: true, ...who, announce }), { wrapper });
   const sent = () =>
-    fetch.mock.calls.map(([url, init]) => ({ url, body: JSON.parse(init.body as string) as Record<string, unknown> }));
+    fetch.mock.calls
+      .filter(([, init]) => init.method === "POST")
+      .map(([url, init]) => ({ url, body: JSON.parse(init.body as string) as Record<string, unknown> }));
   return { actions: () => result.current, sent, announce };
 }
 
@@ -134,6 +139,35 @@ describe("resolution", () => {
     });
     expect(reopen!.body.body).toContain("Reopened [this thread]");
     expect(decode(reopen!.body.body)).toMatchObject({ motivation: "resolving", resolution: "reopened" });
+  });
+});
+
+describe("who is offered Resolve (GitHub: the pull request author and people with write access)", () => {
+  const REPO = "/api/github/user/github.com/repos/acme/docs";
+  const repo = (push: boolean) => () => Response.json({ id: 42, permissions: { admin: false, push, pull: true } });
+
+  it("offers it to a viewer with write access, read from the repository's permissions for them", async () => {
+    const { actions } = setup(repo(true), { signedIn: true, viewerId: 5, authorId: 9 });
+    await waitFor(() => expect(actions().canResolve).toBe(true));
+  });
+
+  it("does not offer it to a viewer with only read access", async () => {
+    const { actions } = setup(repo(false), { signedIn: true, viewerId: 5, authorId: 9 });
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith(REPO, expect.anything()));
+    await act(async () => {});
+    expect(actions().canResolve).toBe(false);
+  });
+
+  it("offers it to the pull request author without asking GitHub", () => {
+    const { actions } = setup(repo(false), { signedIn: true, viewerId: 9, authorId: 9 });
+    expect(actions().canResolve).toBe(true);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("does not offer it signed out", () => {
+    const { actions } = setup(repo(true), { signedIn: false });
+    expect(actions().canResolve).toBe(false);
+    expect(fetch).not.toHaveBeenCalled();
   });
 });
 
