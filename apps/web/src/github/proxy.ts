@@ -134,10 +134,16 @@ export async function repoFacts(
   repo: string,
   headers: Record<string, string>,
   fetchFn: typeof fetch,
+  /**
+   * False where a private answer leads to a per-viewer decision: the cache is shared by every
+   * viewer, so a private repository is read again with this viewer's token, and a viewer GitHub
+   * would not show it gets GitHub's own answer.
+   */
+  privateFromCache = true,
 ): Promise<RepoFacts | Response> {
   const key = `${host}/${repo.toLowerCase()}`;
   const hit = visibility.get(key);
-  if (hit && hit.until > Date.now()) return { visibility: hit.visibility, name: hit.name, owner: hit.owner };
+  if (hit && hit.until > Date.now() && (privateFromCache || hit.visibility === "public")) return { visibility: hit.visibility, name: hit.name, owner: hit.owner };
   const res = await fetchFn(`${apiBase(host)}/${repo}`, {
     headers: { ...headers, Accept: "application/vnd.github+json" },
   }).catch(() => undefined);
@@ -157,9 +163,12 @@ export async function repoFacts(
 }
 
 export async function repoVisibility(
-  ...args: Parameters<typeof repoFacts>
+  host: string,
+  repo: string,
+  headers: Record<string, string>,
+  fetchFn: typeof fetch,
 ): Promise<RepoFacts["visibility"] | Response> {
-  const facts = await repoFacts(...args);
+  const facts = await repoFacts(host, repo, headers, fetchFn);
   return facts instanceof Response ? facts : facts.visibility;
 }
 

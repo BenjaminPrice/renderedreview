@@ -156,6 +156,29 @@ describe("proxyUserGitHub", () => {
       expect(await body(res)).toMatchObject({ code: "not-entitled", reason: "no-entitlement" });
       expect(fetch).toHaveBeenCalledOnce();
     });
+
+    it("never reveal the owner's plan to a viewer GitHub would not show the repository", async () => {
+      const entitlement = vi.fn<EntitlementCheck>(async () => ({ allowed: false, reason: "no-entitlement" }));
+      // GitHub shows the repository to viewer A only; B gets its 404.
+      const fetch = vi.fn<typeof globalThis.fetch>(async (_, init) =>
+        (init?.headers as Record<string, string>).Authorization === "Bearer token-a"
+          ? privateRepo()
+          : Response.json({ message: "Not Found" }, { status: 404 }),
+      );
+      const as = (token: string) =>
+        proxyUserGitHub(new Request(`${origin}${USER_PREFIX}github.com/repos/acme/shared/pulls/1`, { headers: XRW }), {
+          allowedHosts: ["github.com"],
+          identity: { getSessionUser: async () => user, getUserGitHubToken: async () => token },
+          fetch,
+          entitlement,
+        });
+      expect(await body(await as("token-a"))).toMatchObject({ code: "not-entitled" });
+      // A's answer is cached; B must still get GitHub's own 404, never the plan status.
+      const res = await as("token-b");
+      expect(res.status).toBe(404);
+      expect(await res.json()).toEqual({ message: "Not Found" });
+      expect(entitlement).toHaveBeenCalledOnce();
+    });
   });
 
   it("passes GitHub's answer through when the repository lookup fails", async () => {

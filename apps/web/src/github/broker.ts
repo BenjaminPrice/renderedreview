@@ -75,6 +75,7 @@ export async function forRepository(
     `repos/${op.owner}/${op.repo}`,
     { Authorization: `Bearer ${token}`, "User-Agent": "rendered-review", "X-GitHub-Api-Version": "2022-11-28" },
     deps.fetch ?? fetch,
+    !deps.entitlement,
   );
   if (facts instanceof Response) {
     return facts.status === 401 ? { kind: "reauth" } : { kind: "unavailable", status: facts.status };

@@ -98,7 +98,7 @@ export async function proxyUserGitHub(
   // The repository-authorization seam: a private repository is served only when the entitlement
   // check (local access policy, installation and, when hosted, the owner's plan) allows it.
   const repoPath = REPO_PREFIX.exec(path)![0];
-  const facts = await repoFacts(host, repoPath, headers, fetchFn);
+  const facts = await repoFacts(host, repoPath, headers, fetchFn, !entitlement);
   if (facts instanceof Response) return facts.status === 401 ? reauth() : passError(facts);
   if (facts.visibility === "private") {
     const [, , name] = repoPath.split("/");

@@ -128,6 +128,25 @@ describe("forRepository (comment, review, resolve)", () => {
     expect(await forRepository(write(), deps)).toEqual({ kind: "not-entitled", reason: "individual-plan-org-repo" });
   });
 
+  it("never reveals the owner's plan to a user GitHub would not show the repository", async () => {
+    const entitlement = vi.fn(async () => ({ allowed: false, reason: "no-entitlement" }) as const);
+    const op = write();
+    const fetch = vi.fn(async (_: string, init: RequestInit) =>
+      new Headers(init.headers).get("authorization") === "Bearer token-a"
+        ? Response.json({ private: true, visibility: "private", owner: acme })
+        : Response.json({ message: "Not Found" }, { status: 404 }),
+    ) as unknown as typeof globalThis.fetch;
+    expect(await forRepository(op, { identity: writer("token-a", null), fetch, entitlement })).toMatchObject({
+      kind: "not-entitled",
+    });
+    // A's answer is cached; B still gets what GitHub tells B.
+    expect(await forRepository(op, { identity: writer("token-b", null), fetch, entitlement })).toEqual({
+      kind: "unavailable",
+      status: 404,
+    });
+    expect(entitlement).toHaveBeenCalledOnce();
+  });
+
   it("judges a transferred repository by its new owner", async () => {
     const entitlement = vi.fn(async (r: { ownerId: string }) =>
       r.ownerId === "100" ? allowed : ({ allowed: false, reason: "no-entitlement" } as const),
