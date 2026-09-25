@@ -33,6 +33,8 @@ beforeEach(() => {
   posted = [];
   responses = {
     "/api/auth/viewer": '{"login":"octocat","avatarUrl":null}',
+    // The viewer's permissions: write access, so GitHub lets them resolve threads.
+    [API]: JSON.stringify({ id: REPO_ID, permissions: { admin: false, push: true, pull: true } }),
     [`${API}/pulls/45377`]: fixture("pull.json"),
     [`${API}/pulls/45377/files?per_page=100`]: fixture("files.json"),
     [`${API}/pulls/45377/comments?per_page=100`]: "[]",
@@ -439,6 +441,15 @@ it("replies to a review thread and resolves it, announcing each outcome", async 
   });
   // Refetched as resolved: the thread collapses in place.
   expect(await screen.findByLabelText(/^Resolved thread by hamishwillee/)).toBeTruthy();
+});
+
+it("offers a read-only viewer Reply but not Resolve", async () => {
+  responses[API] = JSON.stringify({ id: REPO_ID, permissions: { admin: false, push: false, pull: true } });
+  suggestionThread(false);
+  renderPage();
+  const card = await suggestionCard();
+  expect(within(card).getByRole("button", { name: /^Reply to thread by hamishwillee/ })).toBeTruthy();
+  expect(within(card).queryByRole("button", { name: /^Resolve/ })).toBeNull();
 });
 
 it("signed out, thread cards offer sign-in instead of reply and resolve", async () => {

@@ -4,6 +4,7 @@
 import handler, { createServerEntry } from "@tanstack/react-start/server-entry";
 import { createRequestContext } from "#runtime";
 import type { RequestContext } from "@rendered-review/runtime";
+import { atPublicOrigin } from "./auth";
 import { contentSecurityPolicy, createNonce, secureResponse } from "./csp";
 import { withErrorLog } from "./request-log";
 
@@ -18,8 +19,9 @@ declare module "@tanstack/react-start" {
 const CSP_HEADER = import.meta.env.DEV ? "Content-Security-Policy-Report-Only" : "Content-Security-Policy";
 
 export default createServerEntry({
-  fetch: async (request) => {
+  fetch: async (incoming) => {
     const context = createRequestContext();
+    const request = atPublicOrigin(incoming, context.config.publicUrl);
     const nonce = createNonce();
     const response = await withErrorLog(request, () => handler.fetch(request, { context: { ...context, nonce } }));
     return secureResponse(response, CSP_HEADER, contentSecurityPolicy(context.config, nonce));

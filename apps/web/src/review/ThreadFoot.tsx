@@ -119,18 +119,20 @@ export function ThreadFoot({ thread, actions, context, resolving, children }: Th
             >
               Reply
             </button>
-            <button
-              type="button"
-              className="rr-btn rr-btn-sm rr-btn-ghost"
-              aria-label={`${resolved ? "Reopen" : "Resolve"} ${context}`}
-              aria-disabled={!known || busy || undefined}
-              aria-describedby={known ? undefined : ids.unknown}
-              title={known ? undefined : "GitHub didn't report whether this thread is resolved."}
-              onClick={() => void toggleResolved()}
-            >
-              {resolved ? "Reopen" : "Resolve"}
-            </button>
-            {!known && (
+            {actions.canResolve && (
+              <button
+                type="button"
+                className="rr-btn rr-btn-sm rr-btn-ghost"
+                aria-label={`${resolved ? "Reopen" : "Resolve"} ${context}`}
+                aria-disabled={!known || busy || undefined}
+                aria-describedby={known ? undefined : ids.unknown}
+                title={known ? undefined : "GitHub didn't report whether this thread is resolved."}
+                onClick={() => void toggleResolved()}
+              >
+                {resolved ? "Reopen" : "Resolve"}
+              </button>
+            )}
+            {actions.canResolve && !known && (
               <span id={ids.unknown} className="rr-sr-only">
                 GitHub didn't report whether this thread is resolved.
               </span>

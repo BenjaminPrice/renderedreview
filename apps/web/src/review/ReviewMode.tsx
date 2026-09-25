@@ -75,6 +75,8 @@ export function useReviewMode({ pr, id, files, entry, doc, viewer }: ReviewModeI
   const announce = (text: string) => setAnnouncement((a) => ({ text, n: a.n + 1 }));
   const threadActions = useThreadActions(id, {
     signedIn,
+    viewerId: viewer?.githubId,
+    authorId: pr.author?.id,
     onSignIn: viewer?.signInEnabled ? () => void signIn() : undefined,
     announce,
   });

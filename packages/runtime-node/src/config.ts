@@ -14,5 +14,6 @@ export function loadNodeConfig(env: Env = process.env): AppConfig {
       throw new ConfigError([`GITHUB_APP_PRIVATE_KEY_FILE could not be read: ${(error as Error).message}`]);
     }
   }
-  return loadConfig(env, { githubAppPrivateKeyFile });
+  // Node takes the request origin from the Host header, so hosted and dedicated deployments pin it.
+  return loadConfig(env, { githubAppPrivateKeyFile, requirePublicUrl: true });
 }

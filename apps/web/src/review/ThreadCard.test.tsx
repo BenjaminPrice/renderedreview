@@ -177,6 +177,7 @@ describe("resolved threads", () => {
 function withActions(t: Parameters<typeof ThreadCard>[0]["thread"], over: Partial<ThreadActions> = {}) {
   const actions: ThreadActions = {
     signedIn: true,
+    canResolve: true,
     onSignIn: vi.fn(),
     reply: vi.fn(async () => {}),
     setResolved: vi.fn(async () => {}),
@@ -286,6 +287,12 @@ describe("replies", () => {
 });
 
 describe("resolution controls", () => {
+  it("offers no Resolve or Reopen to a viewer GitHub wouldn't let resolve, only Reply", () => {
+    withActions(thread("t1", lineAnchor(3), "unresolved"), { canResolve: false });
+    expect(screen.queryByRole("button", { name: /^(Resolve|Reopen) / })).toBeNull();
+    expect(screen.getByRole("button", { name: REPLY })).toBeTruthy();
+  });
+
   it("resolves an open thread and moves focus to it once it collapses", async () => {
     const t = thread("t1", lineAnchor(3), "unresolved");
     const { actions, rerender } = withActions(t);
@@ -404,6 +411,16 @@ describe("application threads", () => {
       expect.stringMatching(/^alice reopened this thread/),
     ]);
     expect(screen.queryByText("Resolved")).toBeNull();
+  });
+
+  it("notes that a resolve from someone without permission doesn't change the thread state", () => {
+    const [root, resolve] = [issueComment("Needs retry limit."), issueComment("Resolved")];
+    const t = appThread([root], {
+      events: [{ resolution: "resolved", at: "2026-01-02T00:00:00Z", comment: resolve, ignored: true }],
+    });
+    render(<ThreadCard thread={t} repository={repository} verified />);
+    const [event] = within(screen.getByRole("list", { name: "Thread events" })).getAllByRole("listitem");
+    expect(event!.textContent).toMatch(/^alice resolved this thread · .* · doesn't change the thread state$/);
   });
 });
 

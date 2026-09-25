@@ -45,6 +45,8 @@ beforeEach(() => {
   );
   responses = {
     "/api/auth/viewer": '{"login":"octocat","avatarUrl":null}',
+    // Write access, so GitHub lets the viewer resolve threads.
+    [API]: JSON.stringify({ permissions: { admin: false, push: true, pull: true } }),
     [`${API}/pulls/45377`]: fixture("pull.json"),
     [`${API}/pulls/45377/files?per_page=100`]: fixture("files.json"),
     [`${API}/pulls/45377/comments?per_page=100`]: JSON.stringify(comments),

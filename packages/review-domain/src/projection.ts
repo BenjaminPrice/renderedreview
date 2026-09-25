@@ -56,6 +56,8 @@ export interface ResolutionEvent {
   resolution: "resolved" | "reopened";
   at: string;
   comment: IssueComment;
+  /** From someone GitHub would not let resolve this thread: shown, but it doesn't change the state. */
+  ignored?: true;
 }
 
 /** A native review thread, or an application thread rebuilt from PR conversation comments. */
@@ -107,6 +109,8 @@ export interface ProjectionInput {
   reviewThreads?: ReviewThread[];
   reviews: Review[];
   issueComments: IssueComment[];
+  /** The pull request's author, who may resolve application threads. */
+  pullRequestAuthor?: Actor | null;
   /** Logins allowed to author the PR-link comment. Defaults to the Actions bot; add the app bot login. */
   integrationBots?: string[];
 }
@@ -137,7 +141,7 @@ export function projectReview(input: ProjectionInput): ReviewProjection {
   const context = input.repository;
   const native = groupThreads(input.reviewComments, input.reviewThreads).map((t) => annotateThread(t, context));
   const visible = input.issueComments.filter((c) => !isIntegrationNotice(c, input.integrationBots));
-  const app = reconstructThreads(visible, context);
+  const app = reconstructThreads(visible, context, input.pullRequestAuthor?.id);
   const threads = [...native, ...app.threads].sort((a, b) => byTime(a.comments[0]!, b.comments[0]!));
   const entries = app.rest.map(({ comment, classification }): ConversationEntry => ({
     comment,
