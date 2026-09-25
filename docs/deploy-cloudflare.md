@@ -59,7 +59,8 @@ Signed-in readers use their own GitHub token: 5,000 requests an hour instead of 
    - **GitHub App name:** `Rendered Review`. **Homepage URL:** `https://<domain>`.
    - **Callback URL:** `https://<domain>/api/auth/callback/github`. You can add more, for example the `workers.dev` URL.
    - **Expire user authorization tokens:** on. **Request user authorization (OAuth) during installation:** off.
-   - **Webhook:** **Active**, **Webhook URL** `https://<domain>/api/github/webhook`, **Webhook secret** the value you set as `GITHUB_APP_WEBHOOK_SECRET` below (generate it now with `openssl rand -hex 32`). No events need subscribing yet. GitHub pings the URL when you save, before the Worker has its secrets, so that first ping fails; you redeliver it in step 5.
+   - **Setup URL:** `https://<domain>/api/github/setup`, with **Redirect on update** on. After someone installs the app (or changes its repositories) from a pull request, GitHub sends them here and Rendered Review returns them to that pull request. It only works while **Request user authorization (OAuth) during installation** is off.
+   - **Webhook:** **Active**, **Webhook URL** `https://<domain>/api/github/webhook`, **Webhook secret** the value you set as `GITHUB_APP_WEBHOOK_SECRET` below (generate it now with `openssl rand -hex 32`). Under **Subscribe to events**, tick **Repository** (installation events arrive without subscribing). GitHub pings the URL when you save, before the Worker has its secrets, so that first ping fails; you redeliver it in step 5.
    - **Repository permissions:** Contents, Issues, Metadata and Pull requests, all **Read-only**. **Account permissions:** Email addresses, **Read-only**.
    - **Where can this GitHub App be installed?** Start with **Only on this account**.
    - After creating the app, generate a client secret and a private key (a `.pem` download).
@@ -95,6 +96,9 @@ An app set up before the webhook endpoint existed has its webhook inactive, and 
 2. Generate a new secret (`openssl rand -hex 32`) and store it, from `apps/web`: `pnpm exec wrangler secret put GITHUB_APP_WEBHOOK_SECRET --env production`.
 3. In the GitHub App's settings, enter the same value as **Webhook secret**, set **Webhook URL** to `https://<domain>/api/github/webhook`, and turn **Active** on. Save.
 4. On the **Advanced** tab, **Redeliver** the ping under **Recent Deliveries** and check that it answers `200`.
+5. Under **Subscribe to events**, tick **Repository**, and set **Setup URL** to `https://<domain>/api/github/setup` with **Redirect on update** on.
+
+Installations made before the webhook was active aren't in the database until GitHub next sends an event for them. Until then, the Worker asks GitHub directly whether the app is installed on a repository, as it did before, so nothing breaks.
 
 `pnpm --filter @rendered-review/web smoke:workers` checks the same wiring locally. It runs the built Worker with fake app credentials and a throwaway local D1, then checks that `/api/auth/viewer` answers and sign-in redirects to GitHub with the right callback URL.
 
