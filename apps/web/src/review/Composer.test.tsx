@@ -140,6 +140,7 @@ describe("publishing now", () => {
 
 describe("an organization restricting the OAuth App", () => {
   it("explains it and links to where approval is requested, keeping the text and Add to review", async () => {
+    window.history.replaceState(null, "", "/github.com/acme/widgets/pull/7?file=README.md");
     const { onCommentNow, onAddToReview } = mount();
     const refusal = new PublishError(403, {
       code: "oauth-org-restricted",
@@ -156,11 +157,17 @@ describe("an organization restricting the OAuth App", () => {
       "STRONG",
     );
     expect(alert.textContent).toContain(
-      "An organization owner needs to approve Rendered Review, or install the Rendered Review GitHub App on the repository.",
+      "An organization owner needs to approve Rendered Review, or install the Rendered Review GitHub App",
     );
     const link = within(alert).getByRole("link", { name: /Request approval/ });
     expect(link.getAttribute("href")).toBe("https://github.com/settings/connections/applications/Ov23abc");
     expectNewTab(link);
+    // Installing happens in a new tab (keeping this draft) that returns to this pull request.
+    const install = within(alert).getByRole("link", { name: /install the Rendered Review GitHub App/ });
+    expect(install.getAttribute("href")).toBe(
+      `/api/github/install?return=${encodeURIComponent(window.location.pathname + window.location.search)}`,
+    );
+    expectNewTab(install);
     expect(textarea()).toHaveProperty("value", "Good find!");
     await userEvent.click(screen.getByRole("button", { name: "Add to review" }));
     expect(onAddToReview).toHaveBeenCalledWith("Good find!");
