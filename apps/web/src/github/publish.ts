@@ -21,11 +21,12 @@ import {
 import type { Identity } from "@rendered-review/identity";
 import { anchorLines } from "@rendered-review/review-domain";
 import { log, readBodyCapped } from "@rendered-review/runtime";
+import type { EntitlementCheck } from "../billing";
 import { forRepository, type WriteOperation } from "./broker";
 import type { InstallationCheck } from "./installation";
 import { meteredFetch } from "./metrics";
 import { parseProxyPath, REPO_SEGMENT } from "./proxy";
-import { REQUESTED_WITH } from "./user-proxy";
+import { NOT_ENTITLED, REQUESTED_WITH } from "./user-proxy";
 
 export const WRITE_PREFIX = "/api/github/write/";
 
@@ -44,6 +45,7 @@ export type PublishErrorCode =
   | "reauth"
   | "needs-public-authorization"
   | "private-repo-unsupported"
+  | "not-entitled"
   | "unavailable"
   | "stale-head"
   | "invalid-request"
@@ -210,6 +212,8 @@ interface Deps {
   /** Undefined when this deployment has no sign-in. */
   identity: Pick<Identity, "getSessionUser" | "getUserGitHubToken" | "getUserPublicWriteToken"> | undefined;
   installed?: InstallationCheck;
+  /** Undefined in community mode: private repositories are then refused. */
+  entitlement?: EntitlementCheck;
   fetch?: typeof fetch;
   /** The OAuth App's page on GitHub, where users ask an organization to approve it. */
   approvalUrl?: string;
@@ -227,7 +231,7 @@ interface Target {
 async function connect(t: Target, operation: WriteOperation["operation"], deps: Deps) {
   const credential = await forRepository(
     { userId: t.userId, host: t.host, owner: t.owner, repo: t.repo, operation },
-    { identity: deps.identity, installed: deps.installed, fetch: deps.fetch },
+    { identity: deps.identity, installed: deps.installed, fetch: deps.fetch, entitlement: deps.entitlement },
   );
   switch (credential.kind) {
     case "reauth":
@@ -236,6 +240,8 @@ async function connect(t: Target, operation: WriteOperation["operation"], deps: 
       return refuse(403, "needs-public-authorization", "Allow Rendered Review to comment on public repositories");
     case "private-repo-unsupported":
       return refuse(403, "private-repo-unsupported", "Private repositories aren't supported yet");
+    case "not-entitled":
+      return refuse(403, "not-entitled", NOT_ENTITLED, { reason: credential.reason });
     case "unavailable":
       return refuse(credential.status === 404 ? 404 : 403, "unavailable", "Repository not available");
   }

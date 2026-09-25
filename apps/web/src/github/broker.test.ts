@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
+import { loadConfig } from "@rendered-review/runtime";
 import { describe, expect, it, vi } from "vitest";
+import { entitlementCheckFor } from "../billing";
 import { forRepository } from "./broker";
 
 const read = { host: "github.com", owner: "acme", repo: "widgets", operation: "read" } as const;
@@ -88,6 +90,78 @@ describe("forRepository (comment, review, resolve)", () => {
       kind: "private-repo-unsupported",
     });
     expect(installed).not.toHaveBeenCalled();
+  });
+
+  const acme = { id: 100, login: "acme", type: "Organization" };
+  const octo = { id: 200, login: "octo", type: "User" };
+  const privateRepo = (owner = acme) => repoReply(200, { private: true, visibility: "private", owner });
+  const allowed = { allowed: true, reason: "subscription" } as const;
+
+  it("refuses private repositories in community mode without touching the database", async () => {
+    const db = { all: vi.fn(), run: vi.fn() };
+    const config = loadConfig({ HOSTING_MODE: "community", ACCESS_POLICY: "disabled" });
+    const deps = { identity: writer("app-token", null), fetch: privateRepo() };
+    expect(await forRepository(write(), { ...deps, entitlement: entitlementCheckFor(config, db, undefined) })).toEqual({
+      kind: "private-repo-unsupported",
+    });
+    expect(db.all).not.toHaveBeenCalled();
+    expect(db.run).not.toHaveBeenCalled();
+  });
+
+  it("uses the GitHub App user token on a private repository its owner's plan covers", async () => {
+    const entitlement = vi.fn(async () => allowed);
+    const op = write();
+    const deps = { identity: writer("app-token", null), fetch: privateRepo(), entitlement };
+    expect(await forRepository(op, deps)).toEqual({ kind: "user", token: "app-token" });
+    expect(entitlement).toHaveBeenCalledWith({
+      host: "github.com",
+      owner: "acme",
+      name: op.repo,
+      ownerId: "100",
+      ownerType: "Organization",
+    });
+  });
+
+  it("refuses a private repository its owner's plan does not cover, with the reason", async () => {
+    const entitlement = async () => ({ allowed: false, reason: "individual-plan-org-repo" }) as const;
+    const deps = { identity: writer("app-token", null), fetch: privateRepo(), entitlement };
+    expect(await forRepository(write(), deps)).toEqual({ kind: "not-entitled", reason: "individual-plan-org-repo" });
+  });
+
+  it("never reveals the owner's plan to a user GitHub would not show the repository", async () => {
+    const entitlement = vi.fn(async () => ({ allowed: false, reason: "no-entitlement" }) as const);
+    const op = write();
+    const fetch = vi.fn(async (_: string, init: RequestInit) =>
+      new Headers(init.headers).get("authorization") === "Bearer token-a"
+        ? Response.json({ private: true, visibility: "private", owner: acme })
+        : Response.json({ message: "Not Found" }, { status: 404 }),
+    ) as unknown as typeof globalThis.fetch;
+    expect(await forRepository(op, { identity: writer("token-a", null), fetch, entitlement })).toMatchObject({
+      kind: "not-entitled",
+    });
+    // A's answer is cached; B still gets what GitHub tells B.
+    expect(await forRepository(op, { identity: writer("token-b", null), fetch, entitlement })).toEqual({
+      kind: "unavailable",
+      status: 404,
+    });
+    expect(entitlement).toHaveBeenCalledOnce();
+  });
+
+  it("judges a transferred repository by its new owner", async () => {
+    const entitlement = vi.fn(async (r: { ownerId: string }) =>
+      r.ownerId === "100" ? allowed : ({ allowed: false, reason: "no-entitlement" } as const),
+    );
+    const identity = writer("app-token", null);
+    const before = write();
+    expect(await forRepository(before, { identity, fetch: privateRepo(acme), entitlement })).toMatchObject({
+      kind: "user",
+    });
+    const after = { ...before, owner: "octo" };
+    expect(await forRepository(after, { identity, fetch: privateRepo(octo), entitlement })).toEqual({
+      kind: "not-entitled",
+      reason: "no-entitlement",
+    });
+    expect(entitlement).toHaveBeenLastCalledWith(expect.objectContaining({ owner: "octo", ownerId: "200" }));
   });
 
   it("asks the user to sign in again without a usable GitHub App token", async () => {

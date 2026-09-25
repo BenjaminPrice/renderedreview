@@ -107,33 +107,70 @@ export function forwardHeaders(upstream: Response, extra: Record<string, string>
 }
 
 const VISIBILITY_TTL_MS = 5 * 60_000;
+
+/** A repository's visibility and its current owner (absent if GitHub's answer lacks one). */
+export interface RepoFacts {
+  visibility: "public" | "private";
+  name?: string;
+  owner?: { id: string; login: string; type: "User" | "Organization" };
+}
 // ponytail: per-process map cleared when full; a shared cache if many instances hammer the lookup.
-const visibility = new Map<string, { public: boolean; until: number }>();
+const visibility = new Map<string, RepoFacts & { until: number }>();
+
+function ownerOf(value: unknown): RepoFacts["owner"] {
+  const o = value as { id?: unknown; login?: unknown; type?: unknown } | undefined;
+  if (!Number.isSafeInteger(o?.id) || typeof o?.login !== "string") return undefined;
+  if (o.type !== "User" && o.type !== "Organization") return undefined;
+  return { id: String(o.id), login: o.login, type: o.type };
+}
 
 /**
  * A token may read private repositories, so token-backed reads first confirm the repository is
  * public. `repo` is the path's repository prefix. A failed lookup returns GitHub's response (or a
  * 502 when unreachable) and is not cached.
  */
-export async function repoVisibility(
+export async function repoFacts(
   host: string,
   repo: string,
   headers: Record<string, string>,
   fetchFn: typeof fetch,
-): Promise<"public" | "private" | Response> {
+  /**
+   * False where a private answer leads to a per-viewer decision: the cache is shared by every
+   * viewer, so a private repository is read again with this viewer's token, and a viewer GitHub
+   * would not show it gets GitHub's own answer.
+   */
+  privateFromCache = true,
+): Promise<RepoFacts | Response> {
   const key = `${host}/${repo.toLowerCase()}`;
   const hit = visibility.get(key);
-  if (hit && hit.until > Date.now()) return hit.public ? "public" : "private";
+  if (hit && hit.until > Date.now() && (privateFromCache || hit.visibility === "public"))
+    return { visibility: hit.visibility, name: hit.name, owner: hit.owner };
   const res = await fetchFn(`${apiBase(host)}/${repo}`, {
     headers: { ...headers, Accept: "application/vnd.github+json" },
   }).catch(() => undefined);
   if (!res) return reject(502, "GitHub unreachable");
   if (res.status !== 200) return res;
-  const body = (await res.json().catch(() => undefined)) as { private?: unknown; visibility?: unknown } | undefined;
+  const body = (await res.json().catch(() => undefined)) as
+    { private?: unknown; visibility?: unknown; name?: unknown; owner?: unknown } | undefined;
   const isPublic = body?.private === false && (body.visibility ?? "public") === "public";
+  const facts: RepoFacts = {
+    visibility: isPublic ? "public" : "private",
+    name: typeof body?.name === "string" ? body.name : undefined,
+    owner: ownerOf(body?.owner),
+  };
   if (visibility.size >= 10_000) visibility.clear();
-  visibility.set(key, { public: isPublic, until: Date.now() + VISIBILITY_TTL_MS });
-  return isPublic ? "public" : "private";
+  visibility.set(key, { ...facts, until: Date.now() + VISIBILITY_TTL_MS });
+  return facts;
+}
+
+export async function repoVisibility(
+  host: string,
+  repo: string,
+  headers: Record<string, string>,
+  fetchFn: typeof fetch,
+): Promise<RepoFacts["visibility"] | Response> {
+  const facts = await repoFacts(host, repo, headers, fetchFn);
+  return facts instanceof Response ? facts : facts.visibility;
 }
 
 export async function proxyPublicGitHub(
