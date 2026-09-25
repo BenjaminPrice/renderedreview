@@ -14,6 +14,8 @@ import { Route as HealthRouteImport } from './routes/health'
 import { Route as FramesMermaidRouteImport } from './routes/frames.mermaid'
 import { Route as FramesRendererRouteImport } from './routes/frames.renderer'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
+import { Route as ApiGithubInstallRouteImport } from './routes/api/github/install'
+import { Route as ApiGithubSetupRouteImport } from './routes/api/github/setup'
 import { Route as ApiGithubWebhookRouteImport } from './routes/api/github/webhook'
 import { Route as ApiGithubPublicSplatRouteImport } from './routes/api/github/public/$'
 import { Route as ApiGithubUserSplatRouteImport } from './routes/api/github/user/$'
@@ -43,6 +45,16 @@ const FramesRendererRoute = FramesRendererRouteImport.update({
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
   path: '/api/auth/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiGithubInstallRoute = ApiGithubInstallRouteImport.update({
+  id: '/api/github/install',
+  path: '/api/github/install',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiGithubSetupRoute = ApiGithubSetupRouteImport.update({
+  id: '/api/github/setup',
+  path: '/api/github/setup',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiGithubWebhookRoute = ApiGithubWebhookRouteImport.update({
@@ -77,6 +89,8 @@ export interface FileRoutesByFullPath {
   '/frames/mermaid': typeof FramesMermaidRoute
   '/frames/renderer': typeof FramesRendererRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/github/install': typeof ApiGithubInstallRoute
+  '/api/github/setup': typeof ApiGithubSetupRoute
   '/api/github/webhook': typeof ApiGithubWebhookRoute
   '/api/github/public/$': typeof ApiGithubPublicSplatRoute
   '/api/github/user/$': typeof ApiGithubUserSplatRoute
@@ -89,6 +103,8 @@ export interface FileRoutesByTo {
   '/frames/mermaid': typeof FramesMermaidRoute
   '/frames/renderer': typeof FramesRendererRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/github/install': typeof ApiGithubInstallRoute
+  '/api/github/setup': typeof ApiGithubSetupRoute
   '/api/github/webhook': typeof ApiGithubWebhookRoute
   '/api/github/public/$': typeof ApiGithubPublicSplatRoute
   '/api/github/user/$': typeof ApiGithubUserSplatRoute
@@ -102,6 +118,8 @@ export interface FileRoutesById {
   '/frames/mermaid': typeof FramesMermaidRoute
   '/frames/renderer': typeof FramesRendererRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/github/install': typeof ApiGithubInstallRoute
+  '/api/github/setup': typeof ApiGithubSetupRoute
   '/api/github/webhook': typeof ApiGithubWebhookRoute
   '/api/github/public/$': typeof ApiGithubPublicSplatRoute
   '/api/github/user/$': typeof ApiGithubUserSplatRoute
@@ -116,6 +134,8 @@ export interface FileRouteTypes {
     | '/frames/mermaid'
     | '/frames/renderer'
     | '/api/auth/$'
+    | '/api/github/install'
+    | '/api/github/setup'
     | '/api/github/webhook'
     | '/api/github/public/$'
     | '/api/github/user/$'
@@ -128,6 +148,8 @@ export interface FileRouteTypes {
     | '/frames/mermaid'
     | '/frames/renderer'
     | '/api/auth/$'
+    | '/api/github/install'
+    | '/api/github/setup'
     | '/api/github/webhook'
     | '/api/github/public/$'
     | '/api/github/user/$'
@@ -140,6 +162,8 @@ export interface FileRouteTypes {
     | '/frames/mermaid'
     | '/frames/renderer'
     | '/api/auth/$'
+    | '/api/github/install'
+    | '/api/github/setup'
     | '/api/github/webhook'
     | '/api/github/public/$'
     | '/api/github/user/$'
@@ -153,6 +177,8 @@ export interface RootRouteChildren {
   FramesMermaidRoute: typeof FramesMermaidRoute
   FramesRendererRoute: typeof FramesRendererRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
+  ApiGithubInstallRoute: typeof ApiGithubInstallRoute
+  ApiGithubSetupRoute: typeof ApiGithubSetupRoute
   ApiGithubWebhookRoute: typeof ApiGithubWebhookRoute
   ApiGithubPublicSplatRoute: typeof ApiGithubPublicSplatRoute
   ApiGithubUserSplatRoute: typeof ApiGithubUserSplatRoute
@@ -195,6 +221,20 @@ declare module '@tanstack/react-router' {
       path: '/api/auth/$'
       fullPath: '/api/auth/$'
       preLoaderRoute: typeof ApiAuthSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/github/install': {
+      id: '/api/github/install'
+      path: '/api/github/install'
+      fullPath: '/api/github/install'
+      preLoaderRoute: typeof ApiGithubInstallRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/github/setup': {
+      id: '/api/github/setup'
+      path: '/api/github/setup'
+      fullPath: '/api/github/setup'
+      preLoaderRoute: typeof ApiGithubSetupRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/github/webhook': {
@@ -241,6 +281,8 @@ const rootRouteChildren: RootRouteChildren = {
   FramesMermaidRoute: FramesMermaidRoute,
   FramesRendererRoute: FramesRendererRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
+  ApiGithubInstallRoute: ApiGithubInstallRoute,
+  ApiGithubSetupRoute: ApiGithubSetupRoute,
   ApiGithubWebhookRoute: ApiGithubWebhookRoute,
   ApiGithubPublicSplatRoute: ApiGithubPublicSplatRoute,
   ApiGithubUserSplatRoute: ApiGithubUserSplatRoute,
