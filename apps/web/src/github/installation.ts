@@ -1,19 +1,27 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Server only: is the GitHub App installed on a repository? `GET /repos/{owner}/{repo}/installation`
 // answers in one request but only for an app JWT, signed here with the app's private key through
-// WebCrypto (Node and Workers alike). The key and the JWT never leave the server.
-import type { AppConfig } from "@rendered-review/runtime";
+// WebCrypto (Node and Workers alike). The key and the JWT never leave the server. With a database,
+// the webhook-fed installation tables answer first and GitHub is asked only when they cannot.
+import type { AppConfig, SqlDatabase } from "@rendered-review/runtime";
+import { localInstallation } from "./installations";
 
 const checks = new WeakMap<AppConfig, InstallationCheck>();
 
 /** The deployment's installation check (cache shared per process/isolate); undefined without a GitHub App. */
-export function installationCheckFor(config: AppConfig): InstallationCheck | undefined {
+export function installationCheckFor(config: AppConfig, db?: SqlDatabase): InstallationCheck | undefined {
   const app = config.github.app;
   if (!app) return undefined;
   let check = checks.get(config);
   if (!check) checks.set(config, (check = createInstallationCheck({ appId: app.id, privateKey: app.privateKey })));
-  return check;
+  return db ? withLocalInstallations(db, check) : check;
 }
+
+/** Answers from the installation tables where they can say, else from `live` (GitHub). */
+export const withLocalInstallations =
+  (db: SqlDatabase, live: InstallationCheck): InstallationCheck =>
+  async (host, owner, repo) =>
+    (await localInstallation(db, host, owner, repo)) ?? live(host, owner, repo);
 
 // Answers change only when someone installs or removes the app: a short cache saves a request per write.
 const TTL_MS = 5 * 60 * 1000;
