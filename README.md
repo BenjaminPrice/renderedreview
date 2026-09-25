@@ -61,6 +61,8 @@ Sign-in uses the GitHub App's user authorization: `GITHUB_APP_CLIENT_ID` / `GITH
 
 In the GitHub App settings, set the callback URL to `<public origin>/api/auth/callback/github` (for local development `http://localhost:3000/api/auth/callback/github`) and enable **Expire user authorization tokens**. Give the app the **Email addresses** account permission (read) if you want users' email addresses; without it, accounts use GitHub's noreply address.
 
+Turn the app's webhook on with the URL `<public origin>/api/github/webhook` and the same secret as `GITHUB_APP_WEBHOOK_SECRET` (`openssl rand -hex 32`). GitHub must be able to reach that URL; for local development, forward it with a tunnel such as smee.io, or leave the webhook inactive. Each delivery is checked against its signature before anything else, and a redelivered one is answered without being processed again. The endpoint answers 404 when no webhook secret or database is configured.
+
 A local `.env.local` with sign-in (generate `ENCRYPTION_KEY` and `BETTER_AUTH_SECRET` with `openssl rand -base64 32`):
 
 ```sh

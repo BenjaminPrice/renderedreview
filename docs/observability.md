@@ -23,16 +23,17 @@ name) and a few fields. For example:
 }
 ```
 
-| Event                 | When                                                            | Fields                                                                                                                         |
-| --------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `github.request`      | Each server call to GitHub from the read proxies and publishing | `host`, `method`, `route`, `status`, `durationMs`, `rateLimitRemaining`, `outcome` (`ok`, `error`, `network`), `error`         |
-| `github.user_proxy`   | A signed-in read is refused                                     | `category` (`unauthenticated`, `reauth`, `private-repo-unsupported`, `too-large`, `graphql-error`), `status`                   |
-| `github.publish`      | Each publish request finishes                                   | `category` (`published` or the refusal code, such as `stale-head`, `rate-limited`, `reauth`, `oauth-org-restricted`), `status` |
-| `auth.failure`        | A sign-in, link or token refresh fails                          | `route` (such as `/callback/github`), `category` (the error code, or `refresh-rejected`), or `status`                          |
-| `auth.library`        | The sign-in library reports a warning or error                  | `category` (its level; the library's message is not logged)                                                                    |
-| `server.error`        | A request ends in a 5xx or throws                               | `method`, `route` (a template such as `/:host/:owner/:repo/pull/:number`), `status` or `error`                                 |
-| `background.failed`   | Background work fails (Node)                                    | `error`                                                                                                                        |
-| `db.migration_failed` | Database migrations fail (Node)                                 | `error`                                                                                                                        |
+| Event                 | When                                                            | Fields                                                                                                                                                                                                                 |
+| --------------------- | --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `github.request`      | Each server call to GitHub from the read proxies and publishing | `host`, `method`, `route`, `status`, `durationMs`, `rateLimitRemaining`, `outcome` (`ok`, `error`, `network`), `error`                                                                                                 |
+| `github.user_proxy`   | A signed-in read is refused                                     | `category` (`unauthenticated`, `reauth`, `private-repo-unsupported`, `too-large`, `graphql-error`), `status`                                                                                                           |
+| `github.publish`      | Each publish request finishes                                   | `category` (`published` or the refusal code, such as `stale-head`, `rate-limited`, `reauth`, `oauth-org-restricted`), `status`                                                                                         |
+| `github.webhook`      | Each GitHub webhook delivery finishes                           | `deliveryId`, `githubEvent`, `action`, `outcome` (`accepted`, `duplicate`, `ignored`, `rejected`, `failed`), `status`, `durationMs`, `category` (why it was rejected, such as `bad-signature` or `too-large`), `error` |
+| `auth.failure`        | A sign-in, link or token refresh fails                          | `route` (such as `/callback/github`), `category` (the error code, or `refresh-rejected`), or `status`                                                                                                                  |
+| `auth.library`        | The sign-in library reports a warning or error                  | `category` (its level; the library's message is not logged)                                                                                                                                                            |
+| `server.error`        | A request ends in a 5xx or throws                               | `method`, `route` (a template such as `/:host/:owner/:repo/pull/:number`), `status` or `error`                                                                                                                         |
+| `background.failed`   | Background work fails (Node)                                    | `error`                                                                                                                                                                                                                |
+| `db.migration_failed` | Database migrations fail (Node)                                 | `error`                                                                                                                                                                                                                |
 
 At startup, the Node server also prints its configuration (secrets redacted) or the list of configuration
 problems.
@@ -44,6 +45,7 @@ problems.
 - Owner or repository names, pull request numbers, file paths, or full URLs. A private repository's name is
   itself confidential, so GitHub calls are logged by route template (`/repos/:/:/pulls/:`) and pages by
   route (`/:host/:owner/:repo/pull/:number`).
+- Webhook payloads and signatures. A delivery is logged by its ID, event name and action only.
 - Error messages, which can quote any of the above. Errors are logged by class name (`TypeError`).
 - Email addresses, GitHub logins or user IDs.
 
@@ -86,6 +88,7 @@ Split failures by where they come from, so a GitHub outage is not mistaken for a
 | GitHub rate limits  | `github.request` with `status` 403/429, and minimum `rateLimitRemaining` by `host` | Quota; set `GITHUB_PUBLIC_READ_TOKEN`       |
 | GitHub latency      | p50/p95 `durationMs` of `github.request` by `route`                                | GitHub slowness                             |
 | Sign-in failures    | `auth.failure` by `category`                                                       | GitHub App or OAuth configuration, sessions |
+| Webhooks            | `github.webhook` by `outcome`; `rejected` by `category`, `failed` by `error`       | Webhook secret mismatch, handler bugs       |
 | Publishing outcomes | `github.publish` by `category`                                                     | Stale heads, permissions, GitHub refusals   |
 | Platform errors     | `db.migration_failed`, `background.failed`, and Cloudflare exceptions/CPU limits   | Hosting platform and database               |
 | Application defects | `server.error` by `route` and `error`                                              | Bugs in Rendered Review                     |

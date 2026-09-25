@@ -59,7 +59,7 @@ Signed-in readers use their own GitHub token: 5,000 requests an hour instead of 
    - **GitHub App name:** `Rendered Review`. **Homepage URL:** `https://<domain>`.
    - **Callback URL:** `https://<domain>/api/auth/callback/github`. You can add more, for example the `workers.dev` URL.
    - **Expire user authorization tokens:** on. **Request user authorization (OAuth) during installation:** off.
-   - **Webhook:** turn off **Active**. Nothing receives webhooks yet.
+   - **Webhook:** **Active**, **Webhook URL** `https://<domain>/api/github/webhook`, **Webhook secret** the value you set as `GITHUB_APP_WEBHOOK_SECRET` below (generate it now with `openssl rand -hex 32`). No events need subscribing yet; GitHub sends a ping when you save.
    - **Repository permissions:** Contents, Issues, Metadata and Pull requests, all **Read-only**. **Account permissions:** Email addresses, **Read-only**.
    - **Where can this GitHub App be installed?** Start with **Only on this account**.
    - After creating the app, generate a client secret and a private key (a `.pem` download).
@@ -84,6 +84,7 @@ Signed-in readers use their own GitHub token: 5,000 requests an hour instead of 
    - Signing in from a pull request brings you back to the same pull request, and your avatar shows.
    - `/api/github/user/...` responses (browser devtools) carry `x-ratelimit-limit: 5000`.
    - Signing out works.
+   - Under the app's **Advanced** tab, **Recent Deliveries** shows the ping answered `200`. A `401` means the webhook secret on GitHub and in the Worker differ.
    - A second GitHub account can sign in. An app installable **Only on this account** may refuse other users. If it does, switch it to **Any account** under the app's **Advanced → Make public**. Private repositories need that later anyway.
 
 `pnpm --filter @rendered-review/web smoke:workers` checks the same wiring locally. It runs the built Worker with fake app credentials and a throwaway local D1, then checks that `/api/auth/viewer` answers and sign-in redirects to GitHub with the right callback URL.
