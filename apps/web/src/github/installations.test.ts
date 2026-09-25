@@ -134,7 +134,9 @@ describe.each(testDatabases)("installation tracking on %s", (_, open) => {
       await created();
       await send("installation", { action: "deleted", installation: installation(), repositories: [widgets] });
       const after = await state();
-      expect(after.installations).toEqual([expect.objectContaining({ github_id: "42", deleted_at: expect.any(String) })]);
+      expect(after.installations).toEqual([
+        expect.objectContaining({ github_id: "42", deleted_at: expect.any(String) }),
+      ]);
       expect(after.grants).toEqual([]);
     });
 
@@ -142,7 +144,9 @@ describe.each(testDatabases)("installation tracking on %s", (_, open) => {
       await send("installation", { action: "deleted", installation: installation(), repositories: [widgets] });
       expect(await created()).toEqual({ outcome: "accepted" });
       const after = await state();
-      expect(after.installations).toEqual([expect.objectContaining({ github_id: "42", deleted_at: expect.any(String) })]);
+      expect(after.installations).toEqual([
+        expect.objectContaining({ github_id: "42", deleted_at: expect.any(String) }),
+      ]);
       expect(after.grants).toEqual([]);
       // Nor does a late repositories change.
       await send("installation_repositories", {
