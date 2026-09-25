@@ -163,6 +163,8 @@ export interface ThreadCardProps {
   onActivate?: () => void;
   /** Reply and resolve controls; without them the card is read-only. */
   actions?: ThreadActions;
+  /** Starts repairing the anchor of the viewer's own comment; offered only when given. */
+  onRepair?: () => void;
 }
 
 /** One native review thread. Resolved threads collapse in place; unknown resolution claims nothing. */
@@ -179,6 +181,7 @@ export function ThreadCard({
   original,
   onActivate,
   actions,
+  onRepair,
 }: ThreadCardProps) {
   const state = historical && threadState(thread) !== "resolved" ? "historical" : threadState(thread);
   // An annotation not verified against this document is shown at its GitHub line, when it has one.
@@ -283,6 +286,16 @@ export function ThreadCard({
           )}
         </span>
         <span className="rr-spacer" />
+        {onRepair && (
+          <button
+            type="button"
+            className="rr-btn rr-btn-sm rr-btn-ghost"
+            aria-label={`Repair anchor of thread by ${who}, ${label}`}
+            onClick={onRepair}
+          >
+            Repair anchor
+          </button>
+        )}
         {original ? (
           <a className="rr-btn rr-btn-sm rr-btn-ghost" href={original.href} onClick={original.onClick}>
             View in original

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Floating actions for a text selection in the rendered document: Comment (C) and Suggest (S).
+// Floating actions for a text selection in the rendered document: Comment (C) and Suggest (S), or
+// Move comment here (M) while repairing a comment's anchor.
 import type { RenderedMarkdown, SelectionResult, SourceSelection } from "@rendered-review/markdown-domain";
 import { useEffect, useEffectEvent, useId, useState } from "react";
 import { convertRange } from "./selection";
@@ -59,12 +60,15 @@ export function SelectionPopover({
   rendered,
   source,
   onCompose,
+  onRepair,
 }: {
   article: HTMLElement | null;
   rendered: RenderedMarkdown;
   source: string;
   /** `suggest`: asked to suggest a change rather than comment. */
   onCompose: (selection: SourceSelection, suggest?: true) => void;
+  /** Repairing a comment's anchor: the only action is moving it to the selection (M). */
+  onRepair?: (selection: SourceSelection) => void;
 }) {
   const [current, setCurrent] = useState<{ result: SelectionResult; range: Range; rect: DOMRect } | null>(null);
   const previewId = useId();
@@ -96,6 +100,10 @@ export function SelectionPopover({
     if (suggest) onCompose(selection, suggest);
     else onCompose(selection);
   };
+  const repair = (selection: SourceSelection) => {
+    setCurrent(null);
+    onRepair?.(selection);
+  };
   const onKey = useEffectEvent((event: KeyboardEvent) => {
     if (!current) return;
     if (event.key === "Escape") {
@@ -104,7 +112,12 @@ export function SelectionPopover({
       if (selection?.focusNode) selection.collapse(selection.focusNode, selection.focusOffset);
       setCurrent(null);
     } else if (event.ctrlKey || event.metaKey || event.altKey || editable(event.target)) return;
-    else if (/^[cs]$/i.test(event.key) && current.result.ok) {
+    else if (onRepair) {
+      if (/^m$/i.test(event.key) && current.result.ok) {
+        event.preventDefault();
+        repair(current.result.selection);
+      }
+    } else if (/^[cs]$/i.test(event.key) && current.result.ok) {
       event.preventDefault();
       compose(current.result.selection, event.key.toLowerCase() === "s" || undefined);
     }
@@ -142,22 +155,35 @@ export function SelectionPopover({
             aria-label="Selection actions"
             aria-describedby={result.selection.expanded ? previewId : undefined}
           >
-            <button
-              type="button"
-              className="rr-btn rr-btn-sm rr-btn-primary"
-              aria-keyshortcuts="C"
-              onClick={() => compose(result.selection)}
-            >
-              Comment <kbd>C</kbd>
-            </button>
-            <button
-              type="button"
-              className="rr-btn rr-btn-sm rr-btn-ghost"
-              aria-keyshortcuts="S"
-              onClick={() => compose(result.selection, true)}
-            >
-              Suggest <kbd>S</kbd>
-            </button>
+            {onRepair ? (
+              <button
+                type="button"
+                className="rr-btn rr-btn-sm rr-btn-primary"
+                aria-keyshortcuts="M"
+                onClick={() => repair(result.selection)}
+              >
+                Move comment here <kbd>M</kbd>
+              </button>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  className="rr-btn rr-btn-sm rr-btn-primary"
+                  aria-keyshortcuts="C"
+                  onClick={() => compose(result.selection)}
+                >
+                  Comment <kbd>C</kbd>
+                </button>
+                <button
+                  type="button"
+                  className="rr-btn rr-btn-sm rr-btn-ghost"
+                  aria-keyshortcuts="S"
+                  onClick={() => compose(result.selection, true)}
+                >
+                  Suggest <kbd>S</kbd>
+                </button>
+              </>
+            )}
           </div>
         </>
       )}

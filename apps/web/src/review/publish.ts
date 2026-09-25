@@ -34,6 +34,8 @@ export function publishErrorMessage(error: { code?: string; message: string; res
       return "The pull request has new commits since this page loaded. Your text is kept; reload to comment on the latest version.";
     case "needs-public-authorization":
       return "GitHub needs your permission to comment on public repositories. Opening GitHub to ask…";
+    case "comment-changed":
+      return "The comment changed on GitHub since this page loaded, so it was left as it is. Reload to see the latest version.";
     case "private-repo-unsupported":
       return "Commenting on private repositories isn't supported yet.";
     case "reauth":

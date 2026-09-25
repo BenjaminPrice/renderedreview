@@ -416,6 +416,45 @@ describe("write operations", () => {
     expect(comment.id).toBe(issueComments[0]!.id);
   });
 
+  it("reads a comment with the pull request it belongs to, and the signed-in user", async () => {
+    const { client, request } = setup([
+      json({ ...issueComments[0], issue_url: `${API}/issues/45752` }),
+      json({ ...reviewComments[0], pull_request_url: `${PR}` }),
+      json({ login: "octocat", id: 583231, node_id: "MDQ6VXNlcjU4MzIzMQ==", type: "User" }),
+    ]);
+    const issue = await client.getIssueComment("mdn", "content", 11);
+    expect(request(0).url).toBe(`${API}/issues/comments/11`);
+    expect(issue).toMatchObject({ id: issueComments[0]!.id, pullRequest: 45752 });
+    const review = await client.getReviewComment("mdn", "content", 12);
+    expect(request(1).url).toBe(`${API}/pulls/comments/12`);
+    expect(review).toMatchObject({ id: reviewComments[0]!.id, pullRequest: 45752 });
+    expect(await client.getAuthenticatedUser()).toEqual({
+      login: "octocat",
+      id: 583231,
+      nodeId: "MDQ6VXNlcjU4MzIzMQ==",
+      type: "User",
+    });
+    expect(request(2).url).toBe("https://api.github.com/user");
+  });
+
+  it("edits a conversation comment and a review comment, without retrying", async () => {
+    const { client, request, fetch } = setup([
+      json(issueComments[0]),
+      json(reviewComments[0]),
+      json({ message: "Server Error" }, 502),
+    ]);
+    await client.updateIssueComment("mdn", "content", 11, "New body");
+    expect(request(0).url).toBe(`${API}/issues/comments/11`);
+    expect(request(0).init.method).toBe("PATCH");
+    expect(sent(request(0).init)).toEqual({ body: "New body" });
+    await client.updateReviewComment("mdn", "content", 12, "Other body");
+    expect(request(1).url).toBe(`${API}/pulls/comments/12`);
+    expect(request(1).init.method).toBe("PATCH");
+    expect(sent(request(1).init)).toEqual({ body: "Other body" });
+    await expect(client.updateIssueComment("mdn", "content", 11, "x")).rejects.toMatchObject({ status: 502 });
+    expect(fetch).toHaveBeenCalledTimes(3);
+  });
+
   it("never retries a write, so a comment cannot be posted twice", async () => {
     const { client, fetch } = setup([json({ message: "Server Error" }, 502)]);
     await expect(client.createIssueComment("mdn", "content", 1, "x")).rejects.toMatchObject({ status: 502 });

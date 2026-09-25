@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Pure logic behind the comment rail: thread states, filters, labels, card layout and connector
 // geometry. No DOM access, so it is unit-tested directly.
+import type { RenderedReviewAnnotationV1 } from "@rendered-review/annotation-domain";
 import {
   anchorLines,
   type NativeAnchor,
   type NativeThread,
   type RepositoryRef,
+  type ThreadComment,
   type ThreadPlacement,
 } from "@rendered-review/review-domain";
 
@@ -145,4 +147,48 @@ export const LANE_STEP = 5;
 export function connectorPath(w: Wire, index: number): string {
   const lane = Math.max(w.cardX - LANE_OFFSET - index * LANE_STEP, w.anchorX + LANE_STEP);
   return `M${w.cardX} ${w.cardY}H${lane}V${w.anchorY}H${w.anchorX}`;
+}
+
+/** A comment whose anchor its author can repair, and how it is stored on GitHub. */
+export interface RepairTarget {
+  comment: ThreadComment;
+  /** `issue`: a PR conversation comment (application thread); `review`: a review comment. */
+  commentType: "issue" | "review";
+  location: "conversation" | "review-line";
+  /** Review comments stay on these GitHub lines: the new selection must overlap them to be used. */
+  lines?: { startLine: number; endLine: number };
+  /** Its current annotation, when valid: kept, apart from the target. */
+  annotation?: RenderedReviewAnnotationV1;
+}
+
+/**
+ * What the viewer (GitHub user id `viewerId`) may repair on this placed thread: the root comment,
+ * when they wrote it and its annotation is damaged, of an unsupported version with a quote to
+ * replace, or not placed at its words in this document. Never on others' comments, nor on GitHub
+ * line comments without metadata (nothing to repair). Review comments only on current head lines:
+ * a file, outdated or base-side comment keeps GitHub's location whatever its annotation says.
+ */
+export function repairTarget(p: ThreadPlacement, viewerId: number | undefined): RepairTarget | undefined {
+  const { thread } = p;
+  const root = thread.comments[0];
+  if (!root || viewerId === undefined || root.author?.id !== viewerId) return undefined;
+  const meta = thread.metadata?.[root.id];
+  const broken =
+    meta?.state === "damaged" ||
+    (meta?.state === "unsupported" && root.body.trimStart().startsWith(">")) ||
+    !!p.damaged ||
+    (!!p.reanchor && !p.reanchor.sourceRange);
+  if (!broken) return undefined;
+  const annotation = meta?.annotation;
+  if (thread.id.startsWith("app:"))
+    return { comment: root, commentType: "issue", location: "conversation", ...(annotation && { annotation }) };
+  const a = thread.anchor.type === "annotation" ? thread.anchor.fallback : thread.anchor;
+  if (a?.type !== "current" || a.side !== "RIGHT") return undefined;
+  return {
+    comment: root,
+    commentType: "review",
+    location: "review-line",
+    lines: { startLine: a.startLine, endLine: a.endLine },
+    ...(annotation && { annotation }),
+  };
 }

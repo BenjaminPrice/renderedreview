@@ -7,6 +7,7 @@ import {
   composeExtendedSuggestionBody,
   composeSuggestionBody,
   permalink,
+  repairCommentBody,
   stripRedundantContext,
 } from "./body.js";
 import { encodeAnnotation, extractAnnotation } from "./envelope.js";
@@ -195,5 +196,73 @@ describe("stripRedundantContext", () => {
     expect(stripRedundantContext(edited, annotation, true)).toBe(
       `${comment}\n\n${link.replace("#L42", "#L40")}\n\n${marker}`,
     );
+  });
+});
+
+describe("repairCommentBody", () => {
+  const moved = withTarget(
+    {
+      commitOid: "fedcba9876543210fedcba9876543210fedcba98",
+      selectors: [
+        { type: "TextQuoteSelector", exact: "backs off" },
+        { type: "TextPositionSelector", start: 100, end: 109 },
+        { type: "MarkdownSourceRangeSelector", startLine: 50, startColumn: 3, endLine: 50, endColumn: 12 },
+      ],
+    },
+    "backs off",
+  );
+  const newLink = link.replace(/blob\/\w+/, `blob/${moved.target.commitOid}`).replace("#L42-L42", "#L50-L50");
+  // Prose GitHub users write: CRLF line endings, trailing spaces, Markdown that must not be touched.
+  const prose = "Should this *define* a limit?  \r\n\r\n- one\r\n- two\r\n\r\n> quoted later";
+
+  it("replaces the quote, permalink and marker and keeps the comment byte for byte", () => {
+    const body = composeCommentBody({ annotation, comment: prose, location: "conversation" });
+    const repaired = repairCommentBody({ body, annotation: moved, location: "conversation" });
+    expect(repaired.body).toBe(`> backs off\n\n${prose}\n\n${newLink}\n\n${encodeAnnotation(moved)}`);
+    expect(repaired.comment).toBe(prose);
+    expect(repaired.removed).toEqual({ quote: "> retries failed requests", permalink: link, marker });
+    expect(repaired.added).toEqual({ quote: "> backs off", permalink: newLink, marker: encodeAnnotation(moved) });
+  });
+
+  it("writes a marker that validates to the new annotation", () => {
+    const body = composeCommentBody({ annotation, comment, location: "review-line" });
+    const repaired = repairCommentBody({ body, annotation: moved, location: "review-line" });
+    expect(extractAnnotation(repaired.body)).toMatchObject({ status: "ok", annotation: moved });
+    expect(repaired.body).toBe(`> backs off\n\n${comment}\n\n${encodeAnnotation(moved)}`);
+  });
+
+  it("repairs a damaged marker and a GitHub CRLF body", () => {
+    const body = `> retries failed requests\r\n\r\n${comment}\r\n\r\n<!-- rendered-review:v1:not base64! -->`;
+    const repaired = repairCommentBody({ body, annotation: moved, location: "review-line" });
+    expect(repaired.comment).toBe(comment);
+    expect(repaired.removed).toEqual({
+      quote: "> retries failed requests",
+      marker: "<!-- rendered-review:v1:not base64! -->",
+    });
+    expect(extractAnnotation(repaired.body).status).toBe("ok");
+  });
+
+  it("replaces an unsupported version's marker and an unclosed one up to its line end", () => {
+    const v2 = repairCommentBody({
+      body: `> old\n\n${comment}\n\n<!-- rendered-review:v2:e30= -->`,
+      annotation: moved,
+      location: "review-line",
+    });
+    expect(v2.comment).toBe(comment);
+    const unclosed = repairCommentBody({
+      body: `${comment}\n\n<!-- rendered-review:v1:abc\nafter`,
+      annotation: moved,
+      location: "review-line",
+    });
+    expect(unclosed.comment).toBe(comment);
+    expect(unclosed.body).toBe(`> backs off\n\n${comment}\n\n${encodeAnnotation(moved)}\n\nafter`);
+  });
+
+  it("adds a quote to a body without one, such as a native suggestion", () => {
+    const body = `Use this:\n\n\`\`\`suggestion\nnew\n\`\`\`\n\n${marker}`;
+    const repaired = repairCommentBody({ body, annotation: moved, location: "review-line" });
+    expect(repaired.comment).toBe("Use this:\n\n```suggestion\nnew\n```");
+    expect(repaired.removed).toEqual({ marker });
+    expect(repaired.body).toBe(`> backs off\n\n${repaired.comment}\n\n${encodeAnnotation(moved)}`);
   });
 });

@@ -149,3 +149,15 @@ export const reviewMutation = (id: PrIdentity) =>
     (v) => ({ expectedHeadOid: id.headSha, ...v }),
     () => ["reviews", "review-comments", "review-threads", "issue-comments"],
   );
+
+/** Replaces the body of the viewer's own comment, to repair its anchor. `previousBody`: the body it replaces. */
+export const editMutation = (id: PrIdentity) =>
+  publishing<
+    { comment: ReviewComment | IssueComment },
+    { commentType: "issue" | "review"; commentId: number; previousBody: string; body: string }
+  >(
+    id,
+    "edit",
+    (v) => ({ expectedHeadOid: id.headSha, ...v }),
+    (v) => (v.commentType === "issue" ? ["issue-comments"] : ["review-comments", "review-threads"]),
+  );

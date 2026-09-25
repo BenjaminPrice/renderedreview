@@ -6,9 +6,10 @@ export {
   composeExtendedSuggestionBody,
   composeSuggestionBody,
   permalink,
+  repairCommentBody,
   stripRedundantContext,
 } from "./body.js";
-export type { CommentLocation } from "./body.js";
+export type { CommentLocation, RepairedBody } from "./body.js";
 export { encodeAnnotation, extractAnnotation, MAX_DECODED_BYTES, MAX_ENCODED_LENGTH } from "./envelope.js";
 export type { ExtractResult } from "./envelope.js";
 export { verifyContent } from "./verify.js";

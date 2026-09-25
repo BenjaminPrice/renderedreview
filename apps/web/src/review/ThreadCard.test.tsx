@@ -465,3 +465,16 @@ describe("an organization restricting the OAuth App", () => {
     ).toBe("https://docs.github.com/x");
   });
 });
+
+describe("repairing an anchor", () => {
+  it("offers Repair anchor only when the card is given a repair action", async () => {
+    const onRepair = vi.fn();
+    const { rerender } = render(<ThreadCard thread={appThread()} repository={repository} />);
+    expect(screen.queryByRole("button", { name: /Repair anchor/ })).toBeNull();
+    rerender(<ThreadCard thread={appThread()} repository={repository} onRepair={onRepair} />);
+    const button = screen.getByRole("button", { name: /^Repair anchor of thread by alice/ });
+    expect(button.textContent).toBe("Repair anchor");
+    await userEvent.click(button);
+    expect(onRepair).toHaveBeenCalledOnce();
+  });
+});
