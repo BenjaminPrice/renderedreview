@@ -17,7 +17,10 @@ export interface WebhookDelivery {
   payload: unknown;
 }
 
-export type WebhookHandler = (delivery: WebhookDelivery, context: RequestContext & { db: SqlDatabase }) => Promise<void>;
+export type WebhookHandler = (
+  delivery: WebhookDelivery,
+  context: RequestContext & { db: SqlDatabase },
+) => Promise<void>;
 
 /** Handlers keyed by `event.action` (preferred) or `event`. Events without a handler are ignored. */
 export type WebhookHandlers = Readonly<Record<string, WebhookHandler>>;

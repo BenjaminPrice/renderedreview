@@ -7,7 +7,7 @@ import { migrate } from "@rendered-review/control-plane";
 import { loadConfig, type RequestContext, type SqlDatabase } from "@rendered-review/runtime";
 import { openDatabase, type NodeDatabase } from "@rendered-review/runtime-node";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { receiveWebhook, type WebhookHandlers } from "./webhook";
+import { receiveWebhook } from "./webhook";
 
 const SECRET = "webhook-secret";
 const config = loadConfig({
@@ -287,11 +287,51 @@ describe.each(databases)("receiveWebhook on %s", (_, open) => {
       const events = logged().filter((e) => e.event === "github.webhook");
       expect(events.map(({ durationMs, ...rest }) => (expect(durationMs).toBeTypeOf("number"), rest))).toEqual(
         expect.arrayContaining([
-          { level: "info", event: "github.webhook", deliveryId: "l-1", githubEvent: "installation", action: "created", outcome: "accepted", status: 200 },
-          { level: "info", event: "github.webhook", deliveryId: "l-1", githubEvent: "installation", action: "created", outcome: "duplicate", status: 200 },
-          { level: "info", event: "github.webhook", deliveryId: "l-2", githubEvent: "star", action: "created", outcome: "ignored", status: 200 },
-          { level: "error", event: "github.webhook", deliveryId: "l-3", githubEvent: "ping", outcome: "failed", status: 500, error: "TypeError" },
-          { level: "warn", event: "github.webhook", deliveryId: "l-4", githubEvent: "ping", outcome: "rejected", status: 401, category: "bad-signature" },
+          {
+            level: "info",
+            event: "github.webhook",
+            deliveryId: "l-1",
+            githubEvent: "installation",
+            action: "created",
+            outcome: "accepted",
+            status: 200,
+          },
+          {
+            level: "info",
+            event: "github.webhook",
+            deliveryId: "l-1",
+            githubEvent: "installation",
+            action: "created",
+            outcome: "duplicate",
+            status: 200,
+          },
+          {
+            level: "info",
+            event: "github.webhook",
+            deliveryId: "l-2",
+            githubEvent: "star",
+            action: "created",
+            outcome: "ignored",
+            status: 200,
+          },
+          {
+            level: "error",
+            event: "github.webhook",
+            deliveryId: "l-3",
+            githubEvent: "ping",
+            outcome: "failed",
+            status: 500,
+            error: "TypeError",
+          },
+          {
+            level: "warn",
+            event: "github.webhook",
+            deliveryId: "l-4",
+            githubEvent: "ping",
+            outcome: "rejected",
+            status: 401,
+            category: "bad-signature",
+          },
         ]),
       );
       expect(events).toHaveLength(5);
