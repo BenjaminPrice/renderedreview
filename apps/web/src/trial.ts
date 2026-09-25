@@ -12,27 +12,15 @@ import type { SqlDatabase } from "@rendered-review/runtime";
 import { billingAccountFor } from "./billing";
 import { activeContributors } from "./contributors";
 import type { Account } from "./github/installations";
+import { hmacHex } from "./rate-limit";
 
 export const TRIAL_DAYS = 30;
 /** Active private contributors a trial covers; sales-approved trials raise it on the ledger and entitlement. */
 export const TRIAL_CONTRIBUTORS = 10;
 
-const encoder = new TextEncoder();
-
 /** The owner's ledger key, hex. The host is case-insensitive. */
-export async function trialSubjectKey(secret: string, host: string, owner: { id: string; type: OwnerType }) {
-  const ikm = await crypto.subtle.importKey("raw", encoder.encode(secret), "HKDF", false, ["deriveKey"]);
-  const key = await crypto.subtle.deriveKey(
-    { name: "HKDF", hash: "SHA-256", salt: new Uint8Array(), info: encoder.encode("rendered-review trial ledger v1") },
-    ikm,
-    { name: "HMAC", hash: "SHA-256", length: 256 },
-    false,
-    ["sign"],
-  );
-  const subject = `${host.toLowerCase()}\n${owner.type}\n${owner.id}`;
-  const mac = await crypto.subtle.sign("HMAC", key, encoder.encode(subject));
-  return Array.from(new Uint8Array(mac), (b) => b.toString(16).padStart(2, "0")).join("");
-}
+export const trialSubjectKey = (secret: string, host: string, owner: { id: string; type: OwnerType }) =>
+  hmacHex(secret, "rendered-review trial ledger v1", `${host.toLowerCase()}\n${owner.type}\n${owner.id}`);
 
 /**
  * The owner's trial as an entitlement. Starts it (ledger row plus Team entitlement) when the owner
