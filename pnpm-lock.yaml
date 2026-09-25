@@ -47,6 +47,9 @@ importers:
       '@rendered-review/browser-cache':
         specifier: workspace:*
         version: link:../../packages/browser-cache
+      '@rendered-review/design-tokens':
+        specifier: workspace:*
+        version: link:../../packages/design-tokens
       '@rendered-review/diagram-domain':
         specifier: workspace:*
         version: link:../../packages/diagram-domain
@@ -209,6 +212,8 @@ importers:
       vite:
         specifier: ^8.3.0
         version: 8.3.0(@types/node@24.13.6)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.1)
+
+  packages/design-tokens: {}
 
   packages/diagram-domain: {}
 
