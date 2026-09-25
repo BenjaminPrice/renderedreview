@@ -238,7 +238,10 @@ it("keeps drafts copyable when an ended trial refuses the review, and points to 
   await userEvent.click(within(dialog).getByRole("button", { name: "Submit review" }));
   const alert = await within(dialog).findByRole("alert");
   expect(alert.textContent).toMatch(/trial for this owner has ended/);
-  expect(alert.textContent).toMatch(/comments already on GitHub are unaffected/i);
+  // Private drafts live only in this tab: the reviewer is told to copy them before reloading.
+  expect(alert.textContent).toMatch(/Copy your drafts now/);
+  expect(alert.textContent).toMatch(/reloading shows the trial-ended page/);
+  expect(alert.textContent).not.toMatch(/drafts are kept/);
   expect(
     within(alert)
       .getByRole("link", { name: /See plans/ })

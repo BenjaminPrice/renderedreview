@@ -169,3 +169,16 @@ export const trialEndsQuery = (id: PrIdentity) =>
     },
     staleTime: Infinity,
   });
+
+/** The repository ID an ended trial's refusal names, so the ended page can find the PR's drafts. */
+export const trialEndedRepositoryQuery = (host: string, owner: string, repo: string) =>
+  queryOptions({
+    queryKey: ["trial-ended-repository", host, owner.toLowerCase(), repo.toLowerCase()],
+    queryFn: async () => {
+      const path = `repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
+      const res = await fetch(`${USER_PREFIX}${host}/${path}`, { headers: { "X-Requested-With": REQUESTED_WITH } });
+      const body = (await res.json().catch(() => null)) as { repositoryId?: unknown } | null;
+      return Number.isSafeInteger(body?.repositoryId) ? (body!.repositoryId as number) : null;
+    },
+    staleTime: Infinity,
+  });

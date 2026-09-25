@@ -39,9 +39,9 @@ export function publishErrorMessage(error: { code?: string; message: string; res
     case "private-repo-unsupported":
       return "Commenting on private repositories isn't supported yet.";
     case "trial-expired":
-      return "The private-repository trial for this owner has ended, so nothing was published. Your drafts are kept to copy; comments already on GitHub are unaffected.";
+      return "The private-repository trial for this owner has ended, so nothing was published. Copy your drafts now: they're kept only in this tab, and reloading shows the trial-ended page. Comments already on GitHub are unaffected.";
     case "trial-contributor-cap":
-      return "This trial's active private contributor places are all taken, so nothing was published. Your drafts are kept to copy.";
+      return "This trial's active private contributor places are all taken, so nothing was published. Copy your drafts now: they're kept only in this tab.";
     case "reauth":
     case "unauthenticated":
       return "Your GitHub sign-in has expired. Sign in again, then retry.";

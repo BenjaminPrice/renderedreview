@@ -9,6 +9,7 @@ import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { routeTree } from "../routeTree.gen";
+import { browserCache } from "../github/client";
 import { expectNewTab } from "../test-utils";
 import { allowedHostsQuery } from "./$host.$owner.$repo.pull.$number";
 import { Route as RootRoute } from "./__root";
@@ -236,6 +237,28 @@ describe("signed-in and sign-in states", () => {
     const plans = within(message).getByRole("link", { name: "See plans" });
     expect(plans.getAttribute("href")).toBe("/pricing");
     expect(plans.getAttribute("target")).toBeNull();
+    expect(message.textContent).not.toMatch(/draft/i);
+  });
+
+  it("lists this pull request's stored drafts with Copy on the trial-ended page", async () => {
+    const ended = JSON.stringify({
+      code: "trial-expired",
+      message: "The private-repository trial for this owner has ended",
+      upgradeUrl: "/pricing",
+      repositoryId: 295774370,
+    });
+    stubGitHub(signedIn(() => json(ended, { status: 403 })));
+    const draft = { id: "d1", path: "docs/intro.md", comment: "Grouped how?", body: "> grouped\n\nGrouped how?" };
+    await browserCache.set("drafts", "github.com/295774370/45377", [draft], { private: true });
+    renderApp("/github.com/mdn/content/pull/45377");
+    const drafts = await screen.findByRole("region", { name: "Unpublished drafts" });
+    expect(drafts.textContent).toMatch(/docs\/intro\.md/);
+    expect(drafts.textContent).toMatch(/Grouped how\?/);
+    const writeText = vi.fn(async () => {});
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    await userEvent.click(within(drafts).getByRole("button", { name: "Copy" }));
+    expect(writeText).toHaveBeenCalledWith(draft.body);
+    await browserCache.clearLocalData();
   });
 
   it("announces a started trial once and then shows the days left", async () => {

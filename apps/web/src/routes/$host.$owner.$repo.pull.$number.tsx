@@ -67,7 +67,7 @@ import { relativeTime } from "../review/model";
 import { useReviewMode } from "../review/ReviewMode";
 import { AppShell } from "../ui/AppShell";
 import { GuestNotice } from "../ui/GuestNotice";
-import { TrialDaysLeft, TrialStarted } from "../ui/Trial";
+import { TrialDaysLeft, TrialEndedDrafts, TrialStarted } from "../ui/Trial";
 import { signIn } from "../ui/Viewer";
 import { parsePrParams, validatePrSearch } from "../pr-url";
 
@@ -129,7 +129,7 @@ function PullRequestPage() {
     return (
       <ErrorState
         error={error}
-        owner={params.owner}
+        pr={params}
         offerSignIn={viewer.data?.signInEnabled && !viewer.data.signedIn}
       />
     );
@@ -681,7 +681,15 @@ function SignInButton() {
   );
 }
 
-function ErrorState({ error, owner, offerSignIn }: { error: Error; owner: string; offerSignIn?: boolean }) {
+function ErrorState({
+  error,
+  pr,
+  offerSignIn,
+}: {
+  error: Error;
+  pr: { host: string; owner: string; repo: string; number: number };
+  offerSignIn?: boolean;
+}) {
   if (isSignInRequired(error)) {
     return (
       <Message title="Sign in again" action={<SignInButton />}>
@@ -697,11 +705,11 @@ function ErrorState({ error, owner, offerSignIn }: { error: Error; owner: string
       </Message>
     );
   }
-  // Nothing here to lose, so the plans open in this tab.
+  // Drafts still in this browser are listed to copy before following the plans link.
   if (isTrialExpired(error)) {
     return (
-      <Message title="Private-repository trial ended">
-        The 30-day trial for {owner} has ended. Choose a plan to keep reviewing its private pull requests here. Comments
+      <Message title="Private-repository trial ended" action={<TrialEndedDrafts {...pr} />}>
+        The 30-day trial for {pr.owner} has ended. Choose a plan to keep reviewing its private pull requests here. Comments
         already on GitHub are unaffected. <a href={UPGRADE_URL}>See plans</a>
       </Message>
     );
