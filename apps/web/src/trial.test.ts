@@ -140,7 +140,26 @@ describe.each(testDatabases)("private-repository trial on %s", (_, open) => {
     vi.setSystemTime(days(30));
     expect(await check(acme, reader())).toEqual({ allowed: false, reason: "trial-expired" });
     expect(await check(acme, writer())).toEqual({ allowed: false, reason: "trial-expired" });
-    expect((await ledger())[0]!.status).toBe("expired");
+  });
+
+  it("writes nothing on reads once the owner's trial entitlement has ended", async () => {
+    await check(acme, reader());
+    vi.setSystemTime(days(31));
+    const run = vi.spyOn(db, "run");
+    expect(await check(acme, reader())).toEqual({ allowed: false, reason: "trial-expired" });
+    expect(run).not.toHaveBeenCalled();
+    run.mockRestore();
+  });
+
+  it.each(["converted", "expired"])("counts a ledger entry with status %s as ended, whatever its expiry", async (status) => {
+    await check(acme, reader());
+    // Converted to a plan that later lapsed and was removed, or revoked by an operator.
+    await db.run("UPDATE trial SET status = ?", [status]);
+    await db.run("DELETE FROM entitlement");
+    vi.setSystemTime(days(5));
+    expect(await check(acme, reader())).toEqual({ allowed: false, reason: "trial-expired" });
+    expect(await entitlements()).toEqual([]);
+    expect((await ledger())[0]!.status).toBe(status);
   });
 
   it("is not granted again by a reinstall", async () => {

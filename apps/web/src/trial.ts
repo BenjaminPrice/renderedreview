@@ -38,7 +38,8 @@ export async function trialSubjectKey(secret: string, host: string, owner: { id:
  * The owner's trial as an entitlement. Starts it (ledger row plus Team entitlement) when the owner
  * never had one; otherwise returns the earlier trial unchanged, restoring its entitlement while it
  * runs (a recreated billing account). Race-safe: the ledger key is unique, so concurrent first
- * opens write one trial. Callers only ask for owners without an entitlement or with an ended trial.
+ * opens write one trial. Callers only ask for owners without an entitlement. Any status other than
+ * `active` counts as ended.
  */
 export async function ownerTrial(db: SqlDatabase, secret: string, host: string, owner: Account) {
   const now = new Date();
@@ -59,7 +60,9 @@ export async function ownerTrial(db: SqlDatabase, secret: string, host: string, 
     `SELECT expires_at AS "expiresAt", status, contributor_limit AS "limit" FROM trial WHERE subject_key = ?`,
     [key],
   );
-  const { expiresAt, status, limit } = trial!;
+  const { status, limit } = trial!;
+  // Converted to a plan or revoked by an operator: ended, whatever the expiry says.
+  const expiresAt = status === "active" ? trial!.expiresAt : now.toISOString();
   if (status === "active" && Date.parse(expiresAt) > now.getTime()) {
     await db.run("UPDATE trial SET billing_account_id = ? WHERE subject_key = ?", [account.id, key]);
     await db.run(
@@ -87,6 +90,9 @@ export async function trialContributorCapReached(db: SqlDatabase, host: string, 
     [userId, host, ownerId],
   );
   if (!row || row.limit === null) return false;
+  // ponytail: new contributors publishing at the same moment can each pass at count limit - 1 (the
+  // tracker records after the GitHub write); accepted, the overshoot is that burst. A reservation
+  // row before the write if it matters.
   const { count, contributors } = await activeContributors(db, row.account);
   return !contributors.some((c) => c.githubUserId === row.githubUserId) && count >= row.limit;
 }

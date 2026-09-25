@@ -193,8 +193,9 @@ export function entitlementCheckFor(
     const entitlement = await ownerEntitlement(db, repo.host, repo.ownerId);
     let decision = decide(entitlement);
     if (!requester || !authSecret) return decision;
-    // No plan yet (or an ended trial, which the ledger may still hold as active): the owner's trial decides.
-    if ((decision.reason === "no-entitlement" && !entitlement) || decision.reason === "trial-expired") {
+    // No plan yet: the owner's trial decides (starting it the first time). An ended trial
+    // entitlement is already the answer, so reads after expiry write nothing.
+    if (decision.reason === "no-entitlement" && !entitlement) {
       const owner = { id: repo.ownerId, login: repo.owner, type: repo.ownerType };
       decision = decide(await ownerTrial(db, authSecret, repo.host, owner));
     }
