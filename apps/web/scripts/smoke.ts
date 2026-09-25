@@ -29,6 +29,8 @@ const server = start({
   HOSTING_MODE: "community",
   ACCESS_POLICY: "disabled",
   RATE_LIMIT_GUEST_PER_MINUTE: "3",
+  // Pinning the origin rebuilds each request: the client address must survive that.
+  PUBLIC_URL: `http://localhost:${port}`,
 });
 try {
   let response: Response | undefined;
@@ -63,6 +65,9 @@ try {
   const statuses = [];
   for (let i = 0; i < 4; i++) statuses.push((await guest(i)).status);
   assert.deepEqual(statuses, [403, 403, 403, 429]);
+  // Another peer address (IPv6 loopback) has its own budget.
+  const other = await fetch(`http://[::1]:${port}/api/github/public/github.com/not-allowed`);
+  assert.equal(other.status, 403);
   console.log("ok: the guest proxy is rate limited per client address");
 } finally {
   server.child.kill();

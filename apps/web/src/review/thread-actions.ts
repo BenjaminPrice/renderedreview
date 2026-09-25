@@ -4,13 +4,18 @@
 // whose annotation names the thread (`threadId`) and the comment answered (`replyTo`).
 import { composeCommentBody, type RenderedReviewAnnotationV1 } from "@rendered-review/annotation-domain";
 import type { NativeThread } from "@rendered-review/review-domain";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { commentMutation, replyMutation, resolveMutation } from "../github/mutations";
-import type { PrIdentity } from "../github/queries";
+import { type PrIdentity, viewerCanPushQuery } from "../github/queries";
 import { publishErrorMessage } from "./publish";
 
 export interface ThreadActions {
   signedIn: boolean;
+  /**
+   * Whether GitHub lets the viewer resolve this pull request's threads: its author, or someone with
+   * write access. Without it, no Resolve or Reopen is offered.
+   */
+  canResolve: boolean;
   /** Starts sign-in; without it, signed-out readers get no reply or resolve controls. */
   onSignIn?: () => void;
   /** Rejects with an Error whose message is for the reviewer. */
@@ -42,8 +47,17 @@ function appThreadBody(thread: NativeThread, text: string, event: Event): string
 
 export function useThreadActions(
   id: PrIdentity,
-  options: { signedIn: boolean; onSignIn?: () => void; announce: (message: string) => void },
+  options: {
+    signedIn: boolean;
+    /** GitHub user ids of the viewer and the pull request author: the author may always resolve. */
+    viewerId?: number;
+    authorId?: number;
+    onSignIn?: () => void;
+    announce: (message: string) => void;
+  },
 ): ThreadActions {
+  const isAuthor = options.viewerId !== undefined && options.viewerId === options.authorId;
+  const canPush = useQuery({ ...viewerCanPushQuery(id), enabled: options.signedIn && !isAuthor }).data;
   const comment = useMutation(commentMutation(id));
   const reply = useMutation(replyMutation(id));
   const resolve = useMutation(resolveMutation(id));
@@ -60,6 +74,7 @@ export function useThreadActions(
 
   return {
     signedIn: options.signedIn,
+    canResolve: options.signedIn && (isAuthor || canPush === true),
     onSignIn: options.onSignIn,
     reply: (thread, text) =>
       publish(

@@ -2,8 +2,8 @@
 import { migrate } from "@rendered-review/control-plane";
 import { loadConfig, type RequestContext } from "@rendered-review/runtime";
 import { openDatabase } from "@rendered-review/runtime-node";
-import { expect, it } from "vitest";
-import { handleAuthRequest, identityFor } from "./auth";
+import { describe, expect, it } from "vitest";
+import { atPublicOrigin, handleAuthRequest, identityFor } from "./auth";
 import { captureLogs, serverContext } from "./test-utils";
 
 const publicOnly = serverContext(loadConfig({ HOSTING_MODE: "community", ACCESS_POLICY: "disabled" }));
@@ -79,4 +79,24 @@ it("limits sign-in starts and callbacks per client address, with a typed 429, bu
     });
     expect((await handleAuthRequest(viewer, context)).status).toBe(200);
   }
+
+describe("atPublicOrigin", () => {
+  it("treats a request as addressed to the pinned origin, whatever its Host, keeping everything else", async () => {
+    const request = new Request("http://attacker.example:8080/api/github/write/x?y=1", {
+      method: "POST",
+      headers: { origin: "https://rr.example", "content-type": "application/json" },
+      body: '{"a":1}',
+    });
+    const pinned = atPublicOrigin(request, "https://rr.example");
+    expect(pinned.url).toBe("https://rr.example/api/github/write/x?y=1");
+    expect(pinned.method).toBe("POST");
+    expect(pinned.headers.get("origin")).toBe("https://rr.example");
+    expect(await pinned.text()).toBe('{"a":1}');
+  });
+
+  it("leaves the request alone without a pinned origin, or when it already matches", () => {
+    const request = new Request("http://localhost:3000/health");
+    expect(atPublicOrigin(request, undefined)).toBe(request);
+    expect(atPublicOrigin(request, "http://localhost:3000")).toBe(request);
+  });
 });

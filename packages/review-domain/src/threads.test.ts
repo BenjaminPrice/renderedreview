@@ -2,7 +2,7 @@
 import { composeCommentBody, type RenderedReviewAnnotationV1 } from "@rendered-review/annotation-domain";
 import type { IssueComment } from "@rendered-review/github-integration";
 import { describe, expect, it } from "vitest";
-import { annotation, at, context, issueComment, target } from "./fixtures.js";
+import { annotation, at, context, issueComment, target, user } from "./fixtures.js";
 import { reconstructThreads } from "./threads.js";
 
 const post = (a: RenderedReviewAnnotationV1, second: number, text = "comment") =>
@@ -125,5 +125,48 @@ describe("reconstructThreads", () => {
     const { threads, rest } = reconstructThreads([plain, damaged], context);
     expect(threads).toEqual([]);
     expect(rest.map((e) => e.classification.state)).toEqual(["native", "damaged"]);
+  });
+  describe("who may resolve (GitHub: the pull request author and people with write access)", () => {
+    const author = { ...user("pat"), id: 42 };
+    const by = (c: IssueComment, association: string, login = "drive-by", id = 7) => ({
+      ...c,
+      author: { ...user(login), id },
+      authorAssociation: association,
+    });
+
+    it.each(["OWNER", "MEMBER", "COLLABORATOR"])("honours a resolve from a %s", (association) => {
+      const r = root();
+      const { threads } = reconstructThreads([r, by(event(r, 10), association)], context, author.id);
+      expect(threads[0]!.resolution).toBe("resolved");
+      expect(threads[0]!.events![0]!.ignored).toBeUndefined();
+    });
+
+    it("honours the pull request author, whatever their association", () => {
+      const r = root();
+      const { threads } = reconstructThreads([r, by(event(r, 10), "CONTRIBUTOR", "pat", 42)], context, author.id);
+      expect(threads[0]!.resolution).toBe("resolved");
+    });
+
+    it.each(["CONTRIBUTOR", "FIRST_TIME_CONTRIBUTOR", "FIRST_TIMER", "NONE", "MANNEQUIN"])(
+      "shows but ignores a resolve or reopen from a %s",
+      (association) => {
+        const r = root();
+        const resolve = by(event(r, 10), association);
+        const { threads, rest } = reconstructThreads([r, resolve], context, author.id);
+        expect(threads[0]!.resolution).toBe("unresolved");
+        expect(threads[0]!.events).toMatchObject([{ comment: { id: resolve.id }, ignored: true }]);
+        expect(rest).toEqual([]);
+
+        const reopen = by(event(r, 20, "reopened"), association);
+        const after = reconstructThreads([r, event(r, 10), reopen], context, author.id).threads[0]!;
+        expect(after.resolution).toBe("resolved");
+      },
+    );
+
+    it("ignores a deleted (ghost) account, which cannot be the author", () => {
+      const r = root();
+      const ghost = { ...event(r, 10), author: null, authorAssociation: "NONE" };
+      expect(reconstructThreads([r, ghost], context, author.id).threads[0]!.resolution).toBe("unresolved");
+    });
   });
 });

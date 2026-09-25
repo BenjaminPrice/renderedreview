@@ -16,8 +16,8 @@ export function identityFor(context: RequestContext, origin: string): Promise<Id
   if (!byOrigin) identities.set(context.config, (byOrigin = new Map()));
   let identity = byOrigin.get(origin);
   if (!identity) {
-    // On Node the Host header picks the origin, so a client could mint origins at will.
-    // ponytail: bounded by clearing; pin a configured public URL if this ever churns.
+    // Without PUBLIC_URL, on Node the Host header picks the origin, so a client could mint origins
+    // at will; bounded by clearing. With it, the server entry pins every request to one origin.
     if (byOrigin.size >= 16) byOrigin.clear();
     identity = createIdentity({ config: context.config, db: context.db, baseURL: origin });
     byOrigin.set(origin, identity);
@@ -37,4 +37,15 @@ export async function handleAuthRequest(request: Request, context: RequestContex
     if (hit) return rateLimitedResponse(hit);
   }
   return (await identity).handle(request);
+}
+
+/**
+ * `request` as addressed to the configured public origin (`PUBLIC_URL`), whatever its Host header,
+ * so OAuth callbacks, redirects and same-origin checks follow the configured origin. Unchanged when
+ * none is configured (Workers: the platform's request URL is already the public one).
+ */
+export function atPublicOrigin(request: Request, publicUrl: string | undefined): Request {
+  const url = new URL(request.url);
+  if (!publicUrl || url.origin === publicUrl) return request;
+  return new Request(publicUrl + url.pathname + url.search, request);
 }
