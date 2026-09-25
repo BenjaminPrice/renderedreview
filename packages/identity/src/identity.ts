@@ -9,6 +9,8 @@ import { createTokenCipher } from "./token-cipher";
 
 export interface Viewer {
   login: string;
+  /** GitHub's numeric user id: the stable identity, unlike the login, for "is this my comment". */
+  id: number;
   avatarUrl: string | null;
   /** Whether the OAuth App for commenting on public repositories is linked. Absent when not configured. */
   publicComments?: "linked" | "unlinked";
@@ -275,10 +277,13 @@ export async function createIdentity({
     let response: Response;
     if (path === "/viewer" && request.method === "GET") {
       const user = await getSessionUser(request.headers);
-      const viewer: Viewer | null = user && { login: user.login, avatarUrl: user.avatarUrl };
-      if (viewer && oauth) {
-        const accounts = await (await auth.$context).internalAdapter.findAccounts(user!.id);
-        viewer.publicComments = accounts.some((a) => a.providerId === PUBLIC_PROVIDER) ? "linked" : "unlinked";
+      let viewer: Viewer | null = null;
+      if (user) {
+        const accounts = await (await auth.$context).internalAdapter.findAccounts(user.id);
+        const github = accounts.find((a) => a.providerId === PROVIDER);
+        viewer = { login: user.login, id: Number(github?.accountId), avatarUrl: user.avatarUrl };
+        if (oauth)
+          viewer.publicComments = accounts.some((a) => a.providerId === PUBLIC_PROVIDER) ? "linked" : "unlinked";
       }
       response = Response.json(viewer);
     } else if (START_ROUTES[path] && request.method === "POST") {
