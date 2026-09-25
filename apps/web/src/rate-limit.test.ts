@@ -61,7 +61,7 @@ describe("rateLimitedResponse", () => {
     expect(res.headers.get("cache-control")).toBe("no-store");
     expect(await res.json()).toEqual({
       code: "rate-limited",
-      message: "Too many requests. Try again in 42 seconds.",
+      message: "Too many requests. Try again shortly.",
       retryAfter: 42,
     });
   });

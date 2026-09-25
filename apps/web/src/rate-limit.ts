@@ -7,6 +7,8 @@
 import { type AppConfig, log, type RateLimiter, type RequestContext } from "@rendered-review/runtime";
 
 export type LimitName = "guest" | "auth" | "writes" | "trial-start";
+/** The 429's message; the browser matches on it (the wait is in `retryAfter`). */
+export const RATE_LIMITED = "Too many requests. Try again shortly.";
 
 export class RateLimited extends Error {
   constructor(
@@ -14,7 +16,7 @@ export class RateLimited extends Error {
     /** Seconds until the client may try again. */
     readonly retryAfter: number,
   ) {
-    super(`Too many requests. Try again in ${retryAfter} seconds.`);
+    super(RATE_LIMITED);
     this.name = "RateLimited";
   }
   get body() {

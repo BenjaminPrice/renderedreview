@@ -125,6 +125,21 @@ it("keeps the text and explains a refusal", async () => {
   expect(status().textContent).toBe("");
 });
 
+it("explains this app's own limit with how long to wait", async () => {
+  mount(undefined, () =>
+    Response.json(
+      { code: "rate-limited", message: "Too many requests. Try again shortly.", retryAfter: 42 },
+      { status: 429, headers: { "retry-after": "42" } },
+    ),
+  );
+  await userEvent.type(box(), "Keep me");
+  await userEvent.click(screen.getByRole("button", { name: "Comment" }));
+  expect((await screen.findByRole("alert")).textContent).toBe(
+    "Too many requests right now. Your text is kept; try again in 42 seconds.",
+  );
+  expect((box() as HTMLTextAreaElement).value).toBe("Keep me");
+});
+
 it("explains an organization's third-party app restriction and links to request approval", async () => {
   const approvalUrl = "https://github.com/settings/connections/applications/Ov23abc";
   mount(undefined, () =>
