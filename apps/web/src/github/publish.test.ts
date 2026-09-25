@@ -84,8 +84,11 @@ function setup({
           origin,
           ...headers,
         },
-        ...(method === "POST" && { body: typeof body === "string" ? body : JSON.stringify(body) }),
-      }),
+        ...(method === "POST" && {
+          body: typeof body === "string" || body instanceof ReadableStream ? body : JSON.stringify(body),
+          duplex: "half",
+        }),
+      } as RequestInit),
       { allowedHosts: ["github.com"], identity, installed: async () => installed, fetch, approvalUrl },
     );
   const writes = () => fetch.mock.calls.filter(([, init]) => init?.method === "POST");
@@ -162,6 +165,30 @@ describe("request guards", () => {
       { allowedHosts: ["github.com"], identity: setup().identity },
     );
     expect(res.status).toBe(403);
+  });
+
+  it("stops reading an oversized body instead of buffering all of it", async () => {
+    const { call, fetch } = setup();
+    // 4 MiB in 64 KiB chunks, with no Content-Length to go by.
+    let pulled = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (++pulled > 64) return controller.close();
+        controller.enqueue(new Uint8Array(64 * 1024).fill(32));
+      },
+    });
+    const res = await call("comment", body);
+    expect(res.status).toBe(413);
+    expect(await json(res)).toMatchObject({ code: "request-too-large" });
+    expect(pulled).toBeLessThan(32);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("refuses a declared oversized body without reading it", async () => {
+    const { call } = setup();
+    const res = await call("comment", comment(), { "content-length": String(2 * 1024 * 1024) });
+    expect(res.status).toBe(413);
+    expect(await json(res)).toMatchObject({ code: "request-too-large" });
   });
 
   it("rejects malformed JSON", async () => {
