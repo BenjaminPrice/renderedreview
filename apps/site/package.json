@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@astrojs/markdown-remark": "^7.3.1",
     "@rendered-review/design-tokens": "workspace:*",
     "astro": "^7.3.3"
   },

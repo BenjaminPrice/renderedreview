@@ -11,8 +11,10 @@ interface Props {
   description: string;
   /** Kept out of search results (404, coming-soon pages). */
   noindex?: boolean;
+  /** The page brings its own header, main and footer (the docs layout). */
+  bare?: boolean;
 }
-const { title, description, noindex = false } = Astro.props;
+const { title, description, noindex = false, bare = false } = Astro.props;
 // The 404 page is served at any missing address, so it names no canonical URL of its own.
 const notFound = Astro.url.pathname.startsWith("/404");
 const canonical = new URL(Astro.url.pathname, SITE_URL).href;
@@ -43,10 +45,18 @@ const image = `${SITE_URL}/video/hero-poster.png`;
   </head>
   <body>
     <a class="skip" href="#main">Skip to content</a>
-    <Header />
-    <main id="main">
-      <slot />
-    </main>
-    <Footer />
+    {
+      bare ? (
+        <slot />
+      ) : (
+        <>
+          <Header />
+          <main id="main">
+            <slot />
+          </main>
+          <Footer />
+        </>
+      )
+    }
   </body>
 </html>

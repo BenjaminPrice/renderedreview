@@ -1,0 +1,59 @@
+---
+// SPDX-License-Identifier: AGPL-3.0-only
+// One page per published docs/<slug>.md, rendered from the file in place.
+import { getCollection, render } from "astro:content";
+import Docs from "../../layouts/Docs.astro";
+import { docPages, publishedDocs } from "../../docs-nav";
+import { summary } from "../../docs-summary";
+import { REPO_URL } from "../../site";
+
+export async function getStaticPaths() {
+  const docs = await getCollection("docs", ({ id }) => publishedDocs.has(id));
+  return docs.map((entry) => ({ params: { slug: entry.id }, props: { entry } }));
+}
+
+const { entry } = Astro.props;
+const { Content, headings } = await render(entry);
+const title = headings.find((h) => h.depth === 1)?.text ?? entry.id;
+const index = docPages.findIndex((p) => p.slug === entry.id);
+const page = docPages[index]!;
+const prev = docPages[index - 1];
+const next = docPages[index + 1];
+---
+
+<Docs
+  title={`${title} · Rendered Review docs`}
+  description={summary(entry.body ?? "")}
+  current={entry.id}
+  toc={headings.filter((h) => h.depth === 2)}
+>
+  <div class="crumb">
+    <a href="/docs/">Docs</a><span aria-hidden="true">/</span><span>{page.group}</span>
+  </div>
+  <article class="doc">
+    <Content />
+  </article>
+  {
+    (prev || next) && (
+      <nav class="pager" aria-label="Previous and next page">
+        {prev && (
+          <a href={`/docs/${prev.slug}/`}>
+            <span>Previous</span>
+            <b>← {prev.label}</b>
+          </a>
+        )}
+        {next && (
+          <a class="next" href={`/docs/${next.slug}/`}>
+            <span>Next</span>
+            <b>{next.label} →</b>
+          </a>
+        )}
+      </nav>
+    )
+  }
+  <div class="edit-row">
+    <a class="edit ext" href={`${REPO_URL}/blob/main/docs/${entry.id}.md`} target="_blank" rel="noopener noreferrer"
+      >Edit this page on GitHub<span class="sr-only"> (opens in new tab)</span></a
+    >
+  </div>
+</Docs>

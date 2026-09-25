@@ -7,4 +7,3 @@ export const REPO_URL = "https://github.com/BenjaminPrice/renderedreview";
 export const SPONSORS_URL = "https://github.com/sponsors/BenjaminPrice";
 export const LICENSE_URL = `${REPO_URL}/blob/main/LICENSE`;
 export const SITE_LICENSE_URL = `${REPO_URL}/blob/main/apps/site/LICENSE`;
-export const DOCS_URL = `${REPO_URL}/tree/main/docs`;
