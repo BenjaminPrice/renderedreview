@@ -195,4 +195,78 @@ describe.each(databases)("receiveWebhook on %s", (_, open) => {
       expect(await rows()).toEqual([]);
     });
   });
+
+  describe("dedup and dispatch", () => {
+    const INSTALL = JSON.stringify({ action: "created", installation: { id: 7 } });
+
+    it("answers a replayed delivery 200 without running its handler again", async () => {
+      const handler = vi.fn(async () => {});
+      const first = await receiveWebhook(delivery("ping", PING, { id: "r-1" }), context, { ping: handler });
+      const replay = await receiveWebhook(delivery("ping", PING, { id: "r-1" }), context, { ping: handler });
+      expect(first.status).toBe(200);
+      expect(replay.status).toBe(200);
+      expect(await replay.json()).toEqual({ outcome: "duplicate" });
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect(await rows()).toEqual(["r-1"]);
+    });
+
+    it("runs the handler once for concurrent copies of one delivery", async () => {
+      const handler = vi.fn(async () => {});
+      const results = await Promise.all(
+        [1, 2, 3].map(() => receiveWebhook(delivery("ping", PING, { id: "c-1" }), context, { ping: handler })),
+      );
+      expect(results.map((r) => r.status)).toEqual([200, 200, 200]);
+      expect(handler).toHaveBeenCalledTimes(1);
+    });
+
+    it("prefers an event.action handler and passes it the parsed delivery and database", async () => {
+      const byAction = vi.fn(async () => {});
+      const byEvent = vi.fn(async () => {});
+      const res = await receiveWebhook(delivery("installation", INSTALL, { id: "i-1" }), context, {
+        "installation.created": byAction,
+        installation: byEvent,
+      });
+      expect(res.status).toBe(200);
+      expect(byEvent).not.toHaveBeenCalled();
+      expect(byAction).toHaveBeenCalledWith(
+        { id: "i-1", event: "installation", action: "created", payload: JSON.parse(INSTALL) },
+        expect.objectContaining({ db, config }),
+      );
+    });
+
+    it("falls back to the event handler for other actions", async () => {
+      const byEvent = vi.fn(async () => {});
+      await receiveWebhook(delivery("installation", INSTALL.replace("created", "deleted")), context, {
+        "installation.created": vi.fn(),
+        installation: byEvent,
+      });
+      expect(byEvent).toHaveBeenCalledOnce();
+    });
+
+    it("ignores events without a handler: 200, nothing recorded", async () => {
+      const res = await receiveWebhook(delivery("star", JSON.stringify({ action: "created" })), context);
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ outcome: "ignored" });
+      // Not even an Object.prototype member resolves to a handler.
+      expect((await receiveWebhook(delivery("constructor"), context)).status).toBe(200);
+      expect(await rows()).toEqual([]);
+    });
+
+    it("handles ping by default", async () => {
+      const res = await receiveWebhook(delivery("ping", PING, { id: "p-default" }), context);
+      expect(await res.json()).toEqual({ outcome: "accepted" });
+    });
+
+    it("answers 500 when a handler fails and leaves the delivery unrecorded, so a redelivery retries", async () => {
+      const handler = vi.fn().mockRejectedValueOnce(new TypeError("boom")).mockResolvedValueOnce(undefined);
+      const failed = await receiveWebhook(delivery("ping", PING, { id: "f-1" }), context, { ping: handler });
+      expect(failed.status).toBe(500);
+      expect(await failed.json()).toEqual({ outcome: "failed" });
+      expect(await rows()).toEqual([]);
+      const redelivered = await receiveWebhook(delivery("ping", PING, { id: "f-1" }), context, { ping: handler });
+      expect(await redelivered.json()).toEqual({ outcome: "accepted" });
+      expect(handler).toHaveBeenCalledTimes(2);
+      expect(await rows()).toEqual(["f-1"]);
+    });
+  });
 });
