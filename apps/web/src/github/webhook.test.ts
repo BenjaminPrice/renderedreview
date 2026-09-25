@@ -224,13 +224,15 @@ describe.each(databases)("receiveWebhook on %s", (_, open) => {
       expect(await rows()).toEqual(["r-1"]);
     });
 
-    it("runs the handler once for concurrent copies of one delivery", async () => {
+    it("records concurrent copies of one delivery once", async () => {
+      // Copies racing past the processed check may each run the (idempotent) handler; one row wins.
       const handler = vi.fn(async () => {});
       const results = await Promise.all(
         [1, 2, 3].map(() => receiveWebhook(delivery("ping", PING, { id: "c-1" }), context, { ping: handler })),
       );
       expect(results.map((r) => r.status)).toEqual([200, 200, 200]);
-      expect(handler).toHaveBeenCalledTimes(1);
+      expect(handler).toHaveBeenCalled();
+      expect(await rows()).toEqual(["c-1"]);
     });
 
     it("prefers an event.action handler and passes it the parsed delivery and database", async () => {
@@ -281,6 +283,47 @@ describe.each(databases)("receiveWebhook on %s", (_, open) => {
       expect(await redelivered.json()).toEqual({ outcome: "accepted" });
       expect(handler).toHaveBeenCalledTimes(2);
       expect(await rows()).toEqual(["f-1"]);
+    });
+
+    it("records a delivery only after its handler succeeds, so dying before the record means a redelivery reruns it", async () => {
+      // The handler's side effect lands, then the process dies before the delivery is recorded
+      // (simulated by the record write failing once).
+      const effects: string[] = [];
+      const handler = vi.fn(async (d: { id: string }) => void effects.push(d.id));
+      let dieOnRecord = true;
+      const dying: SqlDatabase = {
+        all: (sql, params) => db.all(sql, params),
+        run: async (sql, params) => {
+          if (dieOnRecord && sql.startsWith("INSERT INTO processed_webhook_event")) {
+            dieOnRecord = false;
+            throw new Error("process died");
+          }
+          return db.run(sql, params);
+        },
+      };
+      const crashed = await receiveWebhook(
+        delivery("ping", PING, { id: "x-1" }),
+        { ...context, db: dying },
+        {
+          ping: handler,
+        },
+      );
+      expect(crashed.status).toBe(500);
+      expect(effects).toEqual(["x-1"]);
+      expect(await rows()).toEqual([]);
+      const redelivered = await receiveWebhook(
+        delivery("ping", PING, { id: "x-1" }),
+        { ...context, db: dying },
+        {
+          ping: handler,
+        },
+      );
+      expect(await redelivered.json()).toEqual({ outcome: "accepted" });
+      expect(effects).toEqual(["x-1", "x-1"]);
+      expect(await rows()).toEqual(["x-1"]);
+      const replay = await receiveWebhook(delivery("ping", PING, { id: "x-1" }), context, { ping: handler });
+      expect(await replay.json()).toEqual({ outcome: "duplicate" });
+      expect(handler).toHaveBeenCalledTimes(2);
     });
   });
 
