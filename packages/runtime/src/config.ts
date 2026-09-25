@@ -34,6 +34,13 @@ export interface AppConfig {
   databaseUrl?: string;
   /** Only in hosted mode. */
   billing?: { provider: BillingProviderName; apiKey: string; webhookSecret: string };
+  /**
+   * Node only: the header, lower-case, in which the operator's reverse proxy passes the client
+   * address. Undefined: the socket's peer address. Workers always use `CF-Connecting-IP`.
+   */
+  trustedProxyHeader?: string;
+  /** Abuse limits. On Workers the guest and auth limits come from the Rate Limiting bindings instead. */
+  limits: { guestPerMinute: number; authPerMinute: number; writesPerMinute: number; trialStartsPerDay: number };
 }
 
 export type Env = Readonly<Record<string, string | undefined>>;
@@ -197,6 +204,23 @@ export function loadConfig(env: Env, options: LoadConfigOptions = {}): AppConfig
     if (creds) billing = { provider, ...creds };
   }
 
+  const trustedProxyHeader = read("TRUSTED_PROXY_HEADER")?.toLowerCase();
+  if (trustedProxyHeader && !/^[!#$%&'*+.^`|~\w-]+$/.test(trustedProxyHeader))
+    problems.push(`TRUSTED_PROXY_HEADER must be an HTTP header name (got "${trustedProxyHeader}")`);
+  const count = (name: string, fallback: number) => {
+    const value = read(name);
+    if (value === undefined) return fallback;
+    if (/^[1-9]\d{0,8}$/.test(value)) return Number(value);
+    problems.push(`${name} must be a positive integer (got "${value}")`);
+    return fallback;
+  };
+  const limits = {
+    guestPerMinute: count("RATE_LIMIT_GUEST_PER_MINUTE", 120),
+    authPerMinute: count("RATE_LIMIT_AUTH_PER_MINUTE", 20),
+    writesPerMinute: count("RATE_LIMIT_WRITES_PER_MINUTE", 60),
+    trialStartsPerDay: count("TRIAL_STARTS_PER_DAY", 3),
+  };
+
   if (problems.length > 0) {
     throw new ConfigError(
       problems,
@@ -213,6 +237,8 @@ export function loadConfig(env: Env, options: LoadConfigOptions = {}): AppConfig
     authSecret,
     databaseUrl,
     billing,
+    trustedProxyHeader,
+    limits,
   };
 }
 
