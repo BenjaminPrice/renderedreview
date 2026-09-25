@@ -4,7 +4,11 @@
 // annotation target, representation) and publishes with the least-privileged credential. It does
 // not rerun rendering: GitHub is the final authority on native locations. Server only; bodies and
 // tokens are never logged. Web Request/Response/fetch only.
-import { extractAnnotation, type RenderedReviewAnnotationV1 } from "@rendered-review/annotation-domain";
+import {
+  extractAnnotation,
+  type RenderedReviewAnnotationV1,
+  repairCommentBody,
+} from "@rendered-review/annotation-domain";
 import {
   createGitHubClient,
   ForbiddenError,
@@ -15,6 +19,7 @@ import {
   RateLimitError,
 } from "@rendered-review/github-integration";
 import type { Identity } from "@rendered-review/identity";
+import { anchorLines } from "@rendered-review/review-domain";
 import { log } from "@rendered-review/runtime";
 import { forRepository, type WriteOperation } from "./broker";
 import type { InstallationCheck } from "./installation";
@@ -49,6 +54,7 @@ export type PublishErrorCode =
   | "thread-mismatch"
   | "not-author"
   | "comment-changed"
+  | "invalid-repair"
   | "rate-limited"
   | "oauth-org-restricted"
   | "github-rejected"
@@ -452,7 +458,12 @@ async function handle(request: Request, deps: Deps): Promise<Result> {
       if (typeof previousBody !== "string" || previousBody.length > MAX_BODY_LENGTH)
         invalid("previousBody must be the comment's current body");
       const { body, annotation } = commentBody(input.body);
-      if (!annotation) refuse(400, "invalid-annotation", "A repaired comment needs its annotation");
+      if (!annotation) return refuse(400, "invalid-annotation", "A repaired comment needs its annotation");
+      // Only the quote, permalink and marker may change; the rest is the previous body's, byte for byte.
+      // (Re-encoding a decoded annotation is byte-stable: compact JSON parses and stringifies back unchanged.)
+      const location = commentType === "issue" ? "conversation" : "review-line";
+      if (repairCommentBody({ body: previousBody as string, annotation, location }).body !== body)
+        refuse(400, "invalid-repair", "A repair may change only the comment's quote, link and metadata");
       const expected = oid(input.expectedHeadOid, "expectedHeadOid");
       const { client, pr } = await connect(t, "comment", deps);
       checkHead(pr, expected);
@@ -465,8 +476,21 @@ async function handle(request: Request, deps: Deps): Promise<Result> {
             ? await client.getIssueComment(t.owner, t.repo, commentId)
             : await client.getReviewComment(t.owner, t.repo, commentId);
         if (current.pullRequest !== pr.number) refuse(404, "not-found", "Comment not found on this pull request");
-        if ("path" in current && current.path !== annotation!.target.path)
-          refuse(400, "annotation-mismatch", "The annotation names another file than the comment");
+        if ("path" in current) {
+          if (current.path !== annotation.target.path)
+            refuse(400, "annotation-mismatch", "The annotation names another file than the comment");
+          // GitHub keeps a review comment on its lines; an annotation elsewhere would never place it.
+          const selected = anchorLines({ type: "annotation", annotation })!;
+          const start =
+            (current.startSide ?? "RIGHT") === "RIGHT" && current.startLine ? current.startLine : current.line;
+          if (
+            current.line === null ||
+            current.side !== "RIGHT" ||
+            selected.endLine < start! ||
+            selected.startLine > current.line
+          )
+            refuse(400, "invalid-repair", "The new selection must be on the comment's lines in the current head");
+        }
         if (current.author?.id !== me.id) refuse(403, "not-author", "Only the comment's author can repair its anchor");
         // Sent again after it landed: nothing to do. Changed since the preview: never overwrite it.
         if (current.body === body) return current;
