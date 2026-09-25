@@ -471,24 +471,17 @@ async function handle(request: Request, deps: Deps): Promise<Result> {
       const comment = await (async () => {
         // Collaborators may edit others' comments on GitHub; here only the author may, by account id.
         const me = await client.getAuthenticatedUser();
-        const current =
-          commentType === "issue"
-            ? await client.getIssueComment(t.owner, t.repo, commentId)
-            : await client.getReviewComment(t.owner, t.repo, commentId);
+        const review = commentType === "review" ? await client.getReviewComment(t.owner, t.repo, commentId) : undefined;
+        const current = review ?? (await client.getIssueComment(t.owner, t.repo, commentId));
         if (current.pullRequest !== pr.number) refuse(404, "not-found", "Comment not found on this pull request");
-        if ("path" in current) {
-          if (current.path !== annotation.target.path)
+        if (review) {
+          if (review.path !== annotation.target.path)
             refuse(400, "annotation-mismatch", "The annotation names another file than the comment");
           // GitHub keeps a review comment on its lines; an annotation elsewhere would never place it.
           const selected = anchorLines({ type: "annotation", annotation })!;
-          const start =
-            (current.startSide ?? "RIGHT") === "RIGHT" && current.startLine ? current.startLine : current.line;
-          if (
-            current.line === null ||
-            current.side !== "RIGHT" ||
-            selected.endLine < start! ||
-            selected.startLine > current.line
-          )
+          const { line, side, startLine, startSide } = review;
+          const start = (startSide ?? "RIGHT") === "RIGHT" && startLine ? startLine : line;
+          if (line === null || side !== "RIGHT" || selected.endLine < start! || selected.startLine > line)
             refuse(400, "invalid-repair", "The new selection must be on the comment's lines in the current head");
         }
         if (current.author?.id !== me.id) refuse(403, "not-author", "Only the comment's author can repair its anchor");
