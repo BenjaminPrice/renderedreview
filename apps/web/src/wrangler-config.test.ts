@@ -46,7 +46,8 @@ it("keeps preview public-only, with no required secrets", () => {
 it("binds the guest and sign-in rate limiters in every environment, each with its own counters", () => {
   const namespaces = new Set<string>();
   for (const env of ["", "preview", "production"]) {
-    const limits = read(env).ratelimits ?? [];
+    const limits: { name: string; namespace_id: string; simple: { limit: number; period: number } }[] =
+      read(env).ratelimits ?? [];
     expect(limits.map((l) => l.name).sort()).toEqual(["AUTH_RATE_LIMIT", "GUEST_RATE_LIMIT"]);
     for (const limit of limits) {
       // The Worker reports 60 s as the wait when a binding refuses (runtime-cloudflare context).
