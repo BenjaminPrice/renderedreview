@@ -4,7 +4,7 @@
 // under a server subkey, so no counter or log holds one. Exceeding a limit answers a typed 429
 // (`{ code: "rate-limited", message, retryAfter }` plus `Retry-After`) and logs `rate.limited`
 // with the limit's name only.
-import { type AppConfig, log, type RateLimiter } from "@rendered-review/runtime";
+import { type AppConfig, log, type RateLimiter, type RequestContext } from "@rendered-review/runtime";
 
 export type LimitName = "guest" | "auth" | "writes" | "trial-start";
 
@@ -67,6 +67,11 @@ export async function checkLimit(
 ): Promise<RateLimited | undefined> {
   const retryAfter = await limiter.limit(key, cost);
   return retryAfter > 0 ? limited(name, retryAfter) : undefined;
+}
+
+/** Counts `request` against its client address's `name` limit. */
+export async function limitClient(context: RequestContext, name: "guest" | "auth", request: Request) {
+  return checkLimit(context.limiters[name], name, await addressKey(context.config, context.clientAddress(request)));
 }
 
 /** A refusal for `name`, logged. */

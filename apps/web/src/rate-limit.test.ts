@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { loadConfig, memoryRateLimiter } from "@rendered-review/runtime";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { addressKey, checkLimit, rateLimitedResponse, RateLimited } from "./rate-limit";
-import { captureLogs } from "./test-utils";
+import { addressKey, checkLimit, limitClient, rateLimitedResponse, RateLimited } from "./rate-limit";
+import { captureLogs, serverContext } from "./test-utils";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -64,5 +64,23 @@ describe("rateLimitedResponse", () => {
       message: "Too many requests. Try again in 42 seconds.",
       retryAfter: 42,
     });
+  });
+});
+
+describe("limitClient", () => {
+  const context = serverContext(
+    loadConfig({ HOSTING_MODE: "community", ACCESS_POLICY: "disabled", RATE_LIMIT_GUEST_PER_MINUTE: "2" }),
+  );
+  const from = (address: string, spoofed = "") =>
+    new Request("https://app.example/api/github/public/x", {
+      headers: { "x-test-client": address, "x-forwarded-for": spoofed || address },
+    });
+
+  it("counts per trusted client address: a spoofed X-Forwarded-For neither evades nor frames anyone", async () => {
+    captureLogs();
+    expect(await limitClient(context, "guest", from("198.51.100.1", "1.1.1.1"))).toBeUndefined();
+    expect(await limitClient(context, "guest", from("198.51.100.1", "2.2.2.2"))).toBeUndefined();
+    expect(await limitClient(context, "guest", from("198.51.100.1", "3.3.3.3"))).toMatchObject({ limit: "guest" });
+    expect(await limitClient(context, "guest", from("198.51.100.2", "198.51.100.1"))).toBeUndefined();
   });
 });
