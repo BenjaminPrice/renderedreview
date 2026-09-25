@@ -44,7 +44,8 @@ import { usePendingHighlight } from "../document/highlight";
 import { SelectionPopover } from "../document/SelectionPopover";
 import { Sidebar } from "../document/Sidebar";
 import { ExternalLink } from "../ui/ExternalLink";
-import { isPrivateRepoUnsupported, isSignInRequired, preferProxy, rateLimit } from "../github/client";
+import { isPrivateRepoUnsupported, isSignInRequired, isTrialExpired, preferProxy, rateLimit } from "../github/client";
+import { UPGRADE_URL } from "../github/user-proxy";
 import { allowedHosts, proxyFirstHosts } from "../github/proxy";
 import {
   blobQuery,
@@ -58,6 +59,7 @@ import {
   reviewsQuery,
   reviewThreadsQuery,
   treeQuery,
+  trialEndsQuery,
   viewerQuery,
 } from "../github/queries";
 import { CommentRail, DEFAULT_FILTERS, placementCounts, RailHeader, type ThreadState } from "../review";
@@ -65,6 +67,7 @@ import { relativeTime } from "../review/model";
 import { useReviewMode } from "../review/ReviewMode";
 import { AppShell } from "../ui/AppShell";
 import { GuestNotice } from "../ui/GuestNotice";
+import { TrialDaysLeft, TrialEndedDrafts, TrialStarted } from "../ui/Trial";
 import { signIn } from "../ui/Viewer";
 import { parsePrParams, validatePrSearch } from "../pr-url";
 
@@ -123,7 +126,7 @@ function PullRequestPage() {
   // Data already loaded stays on screen when a refetch fails (e.g. rate-limited).
   const error = pr.error ?? files.error;
   if ((!pr.data || !files.data) && error)
-    return <ErrorState error={error} offerSignIn={viewer.data?.signInEnabled && !viewer.data.signedIn} />;
+    return <ErrorState error={error} pr={params} offerSignIn={viewer.data?.signInEnabled && !viewer.data.signedIn} />;
   if (!pr.data || !identity || !files.data) return <Message title="Loading…" />;
   return <ReviewPage pr={pr.data} id={identity} files={files.data} />;
 }
@@ -162,6 +165,10 @@ function ReviewPage({ pr, id, files }: { pr: PullRequest; id: PrIdentity; files:
   const doc: LoadedDocument =
     past ?? (historical ? { tooLarge: false, changes: [], sha: search.rev!, error: review.error ?? null } : current);
   const commits = useQuery({ ...pullRequestCommitsQuery(id), enabled: !!entry });
+  const trialEnds = useQuery({
+    ...trialEndsQuery(id),
+    enabled: id.access === "user" && !!pr.base.repository?.private,
+  }).data;
   const [view, setView] = useState<"rendered" | "raw">("rendered");
   // The rendered article, as state so the rail and anchors follow it across loads and view switches.
   const [article, setArticle] = useState<HTMLElement | null>(null);
@@ -257,7 +264,7 @@ function ReviewPage({ pr, id, files }: { pr: PullRequest; id: PrIdentity; files:
 
   return (
     <AppShell
-      title={<PrTitle pr={pr} id={id} docCount={changed.length} />}
+      title={<PrTitle pr={pr} id={id} docCount={changed.length} trialEnds={trialEnds} />}
       actions={
         <>
           <ExternalLink className="rr-btn rr-btn-ghost" href={pr.htmlUrl}>
@@ -419,6 +426,7 @@ function ReviewPage({ pr, id, files }: { pr: PullRequest; id: PrIdentity; files:
     >
       <RateLimitBanner />
       {guest && <GuestNotice host={id.host} />}
+      {trialEnds && <TrialStarted owner={id.owner} endsAt={trialEnds} />}
       {overview ? (
         <PrOverview
           pr={pr}
@@ -601,7 +609,17 @@ function useLineTarget(article: HTMLElement | null, rendered: RenderedMarkdown |
   }, [article, rendered, hash]);
 }
 
-function PrTitle({ pr, id, docCount }: { pr: PullRequest; id: PrIdentity; docCount: number }) {
+function PrTitle({
+  pr,
+  id,
+  docCount,
+  trialEnds,
+}: {
+  pr: PullRequest;
+  id: PrIdentity;
+  docCount: number;
+  trialEnds?: string | null;
+}) {
   const { state, label } = prState(pr);
   const verb = pr.merged ? "merged into" : pr.state === "open" ? "wants to merge into" : "proposed merging into";
   return (
@@ -622,6 +640,7 @@ function PrTitle({ pr, id, docCount }: { pr: PullRequest; id: PrIdentity; docCou
         <span>
           {docCount} {docCount === 1 ? "doc" : "docs"} changed
         </span>
+        {trialEnds && <TrialDaysLeft endsAt={trialEnds} />}
       </div>
     </>
   );
@@ -656,7 +675,15 @@ function SignInButton() {
   );
 }
 
-function ErrorState({ error, offerSignIn }: { error: Error; offerSignIn?: boolean }) {
+function ErrorState({
+  error,
+  pr,
+  offerSignIn,
+}: {
+  error: Error;
+  pr: { host: string; owner: string; repo: string; number: number };
+  offerSignIn?: boolean;
+}) {
   if (isSignInRequired(error)) {
     return (
       <Message title="Sign in again" action={<SignInButton />}>
@@ -669,6 +696,15 @@ function ErrorState({ error, offerSignIn }: { error: Error; offerSignIn?: boolea
     return (
       <Message title="Private repositories aren't supported yet">
         Rendered Review can only show pull requests in public repositories for now.
+      </Message>
+    );
+  }
+  // Drafts still in this browser are listed to copy before following the plans link.
+  if (isTrialExpired(error)) {
+    return (
+      <Message title="Private-repository trial ended" action={<TrialEndedDrafts {...pr} />}>
+        The 30-day trial for {pr.owner} has ended. Choose a plan to keep reviewing its private pull requests here.
+        Comments already on GitHub are unaffected. <a href={UPGRADE_URL}>See plans</a>
       </Message>
     );
   }

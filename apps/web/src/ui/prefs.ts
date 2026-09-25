@@ -77,3 +77,8 @@ export function guestNoticeDismissed(s?: Store | null, now = Date.now()) {
 }
 
 export const dismissGuestNotice = (s?: Store | null, now = Date.now()) => write(GUEST_NOTICE, String(now), s);
+
+/** Whether this browser already announced the trial `key` names (owner and end). */
+export const trialNoticeSeen = (key: string, s?: Store | null) => read(`rr-trial-seen:${key}`, s) !== null;
+
+export const markTrialNoticeSeen = (key: string, s?: Store | null) => write(`rr-trial-seen:${key}`, "1", s);

@@ -3,7 +3,7 @@
 // returns must never reach the browser or a log.
 import type { EntitlementDecision } from "@rendered-review/control-plane";
 import type { Identity } from "@rendered-review/identity";
-import type { EntitlementCheck, PrivateRepository } from "../billing";
+import type { EntitlementCheck, PrivateRepository, Requester } from "../billing";
 import type { InstallationCheck } from "./installation";
 import { type RepoFacts, repoFacts } from "./proxy";
 
@@ -83,7 +83,7 @@ export async function forRepository(
   if (facts.visibility === "private") {
     const repository = privateRepository(host, op.repo, facts);
     if (!repository || !deps.entitlement) return { kind: "private-repo-unsupported" };
-    const decision = await deps.entitlement(repository);
+    const decision = await deps.entitlement(repository, { userId: op.userId, operation: "write" });
     // An entitled private repository is written with the GitHub App user token (the app is installed there).
     return decision.allowed ? { kind: "user", token, repository } : { kind: "not-entitled", reason: decision.reason };
   }
@@ -100,9 +100,10 @@ export async function privateAccess(
   name: string | undefined,
   facts: RepoFacts,
   entitlement: EntitlementCheck | undefined,
+  requester?: Requester,
 ): Promise<EntitlementDecision | undefined> {
   const repository = privateRepository(host, name, facts);
-  return entitlement && repository ? entitlement(repository) : undefined;
+  return entitlement && repository ? entitlement(repository, requester) : undefined;
 }
 
 function privateRepository(host: string, name: string | undefined, facts: RepoFacts): PrivateRepository | undefined {

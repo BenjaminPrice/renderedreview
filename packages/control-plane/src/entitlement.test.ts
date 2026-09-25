@@ -49,12 +49,16 @@ describe("private personal repositories (hosted)", () => {
     });
   });
 
-  it("are covered by an active trial and refused once it expires", () => {
+  it("are covered by an active trial, with its end, and refused as an ended trial once it expires", () => {
     const trial = { planId: "team", source: "trial", validUntil: later } as const;
-    expect(resolveEntitlement(hosted({ entitlement: trial }))).toEqual({ allowed: true, reason: "trial" });
+    expect(resolveEntitlement(hosted({ entitlement: trial }))).toEqual({
+      allowed: true,
+      reason: "trial",
+      validUntil: later,
+    });
     expect(resolveEntitlement(hosted({ entitlement: { ...trial, validUntil: earlier } }))).toEqual({
       allowed: false,
-      reason: "entitlement-expired",
+      reason: "trial-expired",
     });
   });
 });

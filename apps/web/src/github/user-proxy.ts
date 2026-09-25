@@ -28,6 +28,12 @@ export const REQUESTED_WITH = "rendered-review";
 export const PRIVATE_REPO_UNSUPPORTED = "Private repositories aren't supported yet";
 /** Body of the 403 for a private repository no plan or policy covers. */
 export const NOT_ENTITLED = "This private repository isn't covered by a Rendered Review plan";
+/** Body of the 403 once the owner's private-repository trial has ended; the client matches on it. */
+export const TRIAL_EXPIRED = "The private-repository trial for this owner has ended";
+/** Where an ended trial points. ponytail: a placeholder path until billing has its own pages. */
+export const UPGRADE_URL = "/pricing";
+/** On private reads covered by a trial: when it ends (ISO), for the days-left indicator. */
+export const TRIAL_ENDS_HEADER = "x-rendered-review-trial-ends";
 
 // Largest response passed through; GitHub's own pages are far smaller, blobs can be huge.
 const MAX_BYTES = 10 * 1024 * 1024;
@@ -44,10 +50,13 @@ const deny = (status: number, category: string, message: string) => {
   return res;
 };
 const reauth = () => deny(401, "reauth", "Sign in with GitHub again");
-const notEntitled = (reason: string) => {
-  log.info("github.user_proxy", { category: "not-entitled", status: 403 });
+const notEntitled = (reason: string, repositoryId?: number) => {
+  const ended = reason === "trial-expired";
+  log.info("github.user_proxy", { category: ended ? reason : "not-entitled", status: 403 });
   return Response.json(
-    { message: NOT_ENTITLED, code: "not-entitled", reason },
+    ended
+      ? { code: reason, message: TRIAL_EXPIRED, upgradeUrl: UPGRADE_URL, repositoryId }
+      : { message: NOT_ENTITLED, code: "not-entitled", reason },
     { status: 403, headers: { "cache-control": "no-store", vary: "Cookie" } },
   );
 };
@@ -100,11 +109,18 @@ export async function proxyUserGitHub(
   const repoPath = REPO_PREFIX.exec(path)![0];
   const facts = await repoFacts(host, repoPath, headers, fetchFn, !entitlement);
   if (facts instanceof Response) return facts.status === 401 ? reauth() : passError(facts);
+  let served: Record<string, string> = PRIVATE;
   if (facts.visibility === "private") {
     const [, , name] = repoPath.split("/");
-    const decision = await privateAccess(host, repoPath.startsWith("repos/") ? name : undefined, facts, entitlement);
+    const decision = await privateAccess(host, repoPath.startsWith("repos/") ? name : undefined, facts, entitlement, {
+      userId: user.id,
+      operation: "read",
+    });
     if (!decision) return deny(403, "private-repo-unsupported", PRIVATE_REPO_UNSUPPORTED);
-    if (!decision.allowed) return notEntitled(decision.reason);
+    // The ID lets an ended trial's page find this PR's drafts; GitHub just showed this viewer the repository.
+    if (!decision.allowed) return notEntitled(decision.reason, facts.id);
+    if (decision.reason === "trial" && decision.validUntil)
+      served = { ...PRIVATE, [TRIAL_ENDS_HEADER]: decision.validUntil };
   }
 
   if (threads) {
@@ -117,7 +133,7 @@ export async function proxyUserGitHub(
       maxRetries: 0,
     });
     try {
-      return Response.json(await client.listReviewThreads(owner!, repo!, Number(number)), { headers: PRIVATE });
+      return Response.json(await client.listReviewThreads(owner!, repo!, Number(number)), { headers: served });
     } catch (error) {
       if (!(error instanceof GitHubError)) throw error;
       if (error.status === 401) return reauth();
@@ -134,7 +150,7 @@ export async function proxyUserGitHub(
   if (Number(upstream.headers.get("content-length")) > MAX_BYTES) return deny(502, "too-large", "Response too large");
   const body = upstream.status === 304 ? null : await upstream.arrayBuffer();
   if (body && body.byteLength > MAX_BYTES) return deny(502, "too-large", "Response too large");
-  return new Response(body, { status: upstream.status, headers: forwardHeaders(upstream, PRIVATE) });
+  return new Response(body, { status: upstream.status, headers: forwardHeaders(upstream, served) });
 }
 
 async function passError(upstream: Response): Promise<Response> {

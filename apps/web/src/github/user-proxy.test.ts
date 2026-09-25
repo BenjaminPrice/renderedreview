@@ -3,7 +3,7 @@ import { loadConfig } from "@rendered-review/runtime";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { entitlementCheckFor, type EntitlementCheck } from "../billing";
 import { captureLogs } from "../test-utils";
-import { proxyUserGitHub, USER_PREFIX } from "./user-proxy";
+import { proxyUserGitHub, TRIAL_ENDS_HEADER, TRIAL_EXPIRED, UPGRADE_URL, USER_PREFIX } from "./user-proxy";
 
 const OID = "a".repeat(40);
 const origin = "https://app.example";
@@ -111,7 +111,12 @@ describe("proxyUserGitHub", () => {
 
   describe("private repositories", () => {
     const privateRepo = () =>
-      Response.json({ private: true, visibility: "private", owner: { id: 100, login: "acme", type: "Organization" } });
+      Response.json({
+        id: 4242,
+        private: true,
+        visibility: "private",
+        owner: { id: 100, login: "acme", type: "Organization" },
+      });
     const withPrivate = (entitlement: EntitlementCheck | undefined) => {
       const t = setup({ entitlement });
       const upstream = t.fetch.getMockImplementation()!;
@@ -140,12 +145,32 @@ describe("proxyUserGitHub", () => {
       expect(res.status).toBe(200);
       expect(res.headers.get("cache-control")).toBe("private, no-store");
       expect(fetch.mock.calls.at(-1)![0]).toBe("https://api.github.com/repos/acme/covered/pulls/1");
-      expect(entitlement).toHaveBeenCalledWith({
-        host: "github.com",
-        owner: "acme",
-        name: "covered",
-        ownerId: "100",
-        ownerType: "Organization",
+      expect(entitlement).toHaveBeenCalledWith(
+        { host: "github.com", owner: "acme", name: "covered", ownerId: "100", ownerType: "Organization" },
+        // The signed-in reader: their first private read may start the owner's trial.
+        { userId: "u1", operation: "read" },
+      );
+      expect(res.headers.get(TRIAL_ENDS_HEADER)).toBeNull();
+    });
+
+    it("carry a running trial's end for the days-left indicator", async () => {
+      const validUntil = "2026-10-25T12:00:00.000Z";
+      const { call } = withPrivate(async () => ({ allowed: true, reason: "trial", validUntil }));
+      const res = await call("github.com/repos/acme/trialing/pulls/1");
+      expect(res.status).toBe(200);
+      expect(res.headers.get(TRIAL_ENDS_HEADER)).toBe(validUntil);
+    });
+
+    it("are refused with the upgrade path once the owner's trial has ended", async () => {
+      const { call } = withPrivate(async () => ({ allowed: false, reason: "trial-expired" }));
+      const res = await call("github.com/repos/acme/ended/pulls/1");
+      expect(res.status).toBe(403);
+      // The repository ID (GitHub just showed it to this viewer) lets the page find this PR's drafts.
+      expect(await res.json()).toEqual({
+        code: "trial-expired",
+        message: TRIAL_EXPIRED,
+        upgradeUrl: UPGRADE_URL,
+        repositoryId: 4242,
       });
     });
 

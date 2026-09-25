@@ -111,6 +111,8 @@ const VISIBILITY_TTL_MS = 5 * 60_000;
 /** A repository's visibility and its current owner (absent if GitHub's answer lacks one). */
 export interface RepoFacts {
   visibility: "public" | "private";
+  /** GitHub's repository ID. */
+  id?: number;
   name?: string;
   owner?: { id: string; login: string; type: "User" | "Organization" };
 }
@@ -144,17 +146,18 @@ export async function repoFacts(
   const key = `${host}/${repo.toLowerCase()}`;
   const hit = visibility.get(key);
   if (hit && hit.until > Date.now() && (privateFromCache || hit.visibility === "public"))
-    return { visibility: hit.visibility, name: hit.name, owner: hit.owner };
+    return { visibility: hit.visibility, id: hit.id, name: hit.name, owner: hit.owner };
   const res = await fetchFn(`${apiBase(host)}/${repo}`, {
     headers: { ...headers, Accept: "application/vnd.github+json" },
   }).catch(() => undefined);
   if (!res) return reject(502, "GitHub unreachable");
   if (res.status !== 200) return res;
   const body = (await res.json().catch(() => undefined)) as
-    { private?: unknown; visibility?: unknown; name?: unknown; owner?: unknown } | undefined;
+    { id?: unknown; private?: unknown; visibility?: unknown; name?: unknown; owner?: unknown } | undefined;
   const isPublic = body?.private === false && (body.visibility ?? "public") === "public";
   const facts: RepoFacts = {
     visibility: isPublic ? "public" : "private",
+    id: Number.isSafeInteger(body?.id) ? (body!.id as number) : undefined,
     name: typeof body?.name === "string" ? body.name : undefined,
     owner: ownerOf(body?.owner),
   };

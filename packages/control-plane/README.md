@@ -38,3 +38,12 @@ The `user`, `session`, `account` and `verification` tables match Better Auth's c
 - `packages/runtime-cloudflare/src/d1.contract.test.ts` covers the D1 adapter on a real local D1 (workerd via Miniflare).
 
 To run the PostgreSQL contract locally, start a scratch server and set `TEST_POSTGRES_URL=postgres://postgres@127.0.0.1:<port>/postgres`.
+
+## Trials
+
+The hosted private-repository trial (`apps/web/src/trial.ts`) writes a `trial` ledger row and a matching `entitlement` row (`source = 'trial'`, plan `team`, `valid_until` 30 days after the start). What the ledger holds and why is in `docs/privacy-trial-ledger.md`. There is no admin UI. For a sales-approved larger or longer trial, update both rows for the owner's billing account:
+
+```sql
+UPDATE trial SET contributor_limit = 25, expires_at = '2026-12-31T00:00:00.000Z' WHERE billing_account_id = '<account id>';
+UPDATE entitlement SET contributor_limit = 25, valid_until = '2026-12-31T00:00:00.000Z', updated_at = '<now>' WHERE billing_account_id = '<account id>' AND source = 'trial';
+```

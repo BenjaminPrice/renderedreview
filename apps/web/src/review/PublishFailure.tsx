@@ -6,6 +6,13 @@ import { ExternalLink } from "../ui/ExternalLink";
 /** `error.message` is already for the reviewer; `cause` is the refusal, when it needs more than text. */
 export function PublishFailure({ error }: { error: { message: string; cause?: unknown } }) {
   const refusal = error.cause as Partial<PublishError> | undefined;
+  if (refusal?.upgradeUrl && (refusal.code === "trial-expired" || refusal.code === "trial-contributor-cap"))
+    return (
+      <>
+        {error.message} {/* A new tab keeps unsent text and in-memory drafts here. */}
+        <ExternalLink href={refusal.upgradeUrl}>See plans</ExternalLink>
+      </>
+    );
   if (refusal?.code !== "oauth-org-restricted") return error.message;
   return (
     <>

@@ -13,7 +13,7 @@ import {
   type ReviewThread,
 } from "@rendered-review/github-integration";
 import { apiBase, PROXY_PREFIX } from "./proxy";
-import { PRIVATE_REPO_UNSUPPORTED, REQUESTED_WITH, USER_PREFIX } from "./user-proxy";
+import { PRIVATE_REPO_UNSUPPORTED, REQUESTED_WITH, TRIAL_EXPIRED, USER_PREFIX } from "./user-proxy";
 
 /** Whose GitHub access a read uses: the signed-in user's, or public (anonymous/operator) access. */
 export type Access = "user" | "public";
@@ -181,3 +181,6 @@ export const isSignInRequired = (error: unknown) => error instanceof GitHubError
 /** A signed-in read reached a private repository, which is not supported yet. */
 export const isPrivateRepoUnsupported = (error: unknown) =>
   error instanceof ForbiddenError && error.message === PRIVATE_REPO_UNSUPPORTED;
+
+/** A signed-in read reached a private repository whose owner's trial has ended. */
+export const isTrialExpired = (error: unknown) => error instanceof ForbiddenError && error.message === TRIAL_EXPIRED;

@@ -6,6 +6,7 @@ import type { PullRequest } from "@rendered-review/github-integration";
 import { queryOptions } from "@tanstack/react-query";
 import type { PrParams } from "../pr-url";
 import { type Access, browserCache, userReviewThreads, withGitHub } from "./client";
+import { REQUESTED_WITH, TRIAL_ENDS_HEADER, USER_PREFIX } from "./user-proxy";
 
 /** Mutable PR data: refetched (with ETag revalidation) once this old. */
 const PR_STALE_MS = 30_000;
@@ -156,3 +157,28 @@ export const viewerQuery = queryOptions({
   },
   staleTime: Infinity,
 });
+
+/** When the owner's private-repository trial ends (ISO), null outside a trial. Read with the viewer's access. */
+export const trialEndsQuery = (id: PrIdentity) =>
+  queryOptions({
+    queryKey: ["trial-ends", id.host, id.ownerId],
+    queryFn: async () => {
+      const path = `repos/${encodeURIComponent(id.owner)}/${encodeURIComponent(id.repo)}`;
+      const res = await fetch(`${USER_PREFIX}${id.host}/${path}`, { headers: { "X-Requested-With": REQUESTED_WITH } });
+      return res.headers.get(TRIAL_ENDS_HEADER);
+    },
+    staleTime: Infinity,
+  });
+
+/** The repository ID an ended trial's refusal names, so the ended page can find the PR's drafts. */
+export const trialEndedRepositoryQuery = (host: string, owner: string, repo: string) =>
+  queryOptions({
+    queryKey: ["trial-ended-repository", host, owner.toLowerCase(), repo.toLowerCase()],
+    queryFn: async () => {
+      const path = `repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
+      const res = await fetch(`${USER_PREFIX}${host}/${path}`, { headers: { "X-Requested-With": REQUESTED_WITH } });
+      const body = (await res.json().catch(() => null)) as { repositoryId?: unknown } | null;
+      return Number.isSafeInteger(body?.repositoryId) ? (body!.repositoryId as number) : null;
+    },
+    staleTime: Infinity,
+  });

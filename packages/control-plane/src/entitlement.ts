@@ -28,7 +28,9 @@ export interface EntitlementInput {
 }
 
 export type EntitlementDecision =
-  | { allowed: true; reason: "public" | "access-policy" | LocalEntitlement["source"] }
+  | { allowed: true; reason: "public" | "access-policy" | "subscription" | "manual" }
+  /** A running trial, with its end for the "days left" indicator. */
+  | { allowed: true; reason: "trial"; validUntil: string | null }
   | {
       allowed: false;
       reason:
@@ -37,6 +39,9 @@ export type EntitlementDecision =
         | "not-installed"
         | "no-entitlement"
         | "entitlement-expired"
+        | "trial-expired"
+        /** Set by the caller: the trial's active private contributors are all taken (nothing here counts them). */
+        | "trial-contributor-cap"
         | "individual-plan-org-repo";
     };
 
@@ -67,9 +72,11 @@ export function resolveEntitlement(input: EntitlementInput): EntitlementDecision
   if (!e || e.planId === "public") return { allowed: false, reason: "no-entitlement" };
   // Compared as instants (offsets and precision vary); an unparseable end counts as ended (NaN > x is false).
   if (e.validUntil !== null && !(Date.parse(e.validUntil) > Date.parse(input.now)))
-    return { allowed: false, reason: "entitlement-expired" };
+    return { allowed: false, reason: e.source === "trial" ? "trial-expired" : "entitlement-expired" };
   // An Individual subscription covers its personal owner's repositories, never an organization's.
   if (e.planId === "individual" && repo.ownerType === "Organization")
     return { allowed: false, reason: "individual-plan-org-repo" };
-  return { allowed: true, reason: e.source };
+  return e.source === "trial"
+    ? { allowed: true, reason: "trial", validUntil: e.validUntil }
+    : { allowed: true, reason: e.source };
 }

@@ -219,6 +219,43 @@ it("publishes a comment now, and explains a refusal without losing the text", as
   await vi.waitFor(() => expect(screen.queryByRole("region", { name: "New comment" })).toBeNull());
 });
 
+it("keeps drafts copyable when an ended trial refuses the review, and points to the plans", async () => {
+  renderPage();
+  const { composer } = await commentOn("Responses are grouped", "grouped");
+  await userEvent.type(within(composer).getByRole("textbox", { name: "Comment" }), "Grouped how?");
+  await userEvent.click(within(composer).getByRole("button", { name: "Add to review" }));
+  responses[`${WRITE}/review`] = Response.json(
+    {
+      code: "trial-expired",
+      message: "The private-repository trial for this owner has ended",
+      upgradeUrl: "/pricing",
+    },
+    { status: 403 },
+  );
+
+  await userEvent.click(await reviewButton());
+  const dialog = screen.getByRole("dialog", { name: "Submit review" });
+  await userEvent.click(within(dialog).getByRole("button", { name: "Submit review" }));
+  const alert = await within(dialog).findByRole("alert");
+  expect(alert.textContent).toMatch(/trial for this owner has ended/);
+  // Private drafts live only in this tab: the reviewer is told to copy them before reloading.
+  expect(alert.textContent).toMatch(/Copy your drafts now/);
+  expect(alert.textContent).toMatch(/reloading shows the trial-ended page/);
+  expect(alert.textContent).not.toMatch(/drafts are kept/);
+  expect(
+    within(alert)
+      .getByRole("link", { name: /See plans/ })
+      .getAttribute("href"),
+  ).toBe("/pricing");
+
+  await userEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+  const draft = screen.getByRole("region", { name: "Draft comment on line 10" });
+  const writeText = vi.fn(async () => {});
+  Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+  await userEvent.click(within(draft).getByRole("button", { name: "Copy" }));
+  expect(writeText).toHaveBeenCalledWith(expect.stringMatching(/^> grouped\n\nGrouped how\?/));
+});
+
 it("retries a line comment GitHub refuses as a file comment", async () => {
   renderPage();
   const { composer } = await commentOn("This interim response indicates", "interim response");

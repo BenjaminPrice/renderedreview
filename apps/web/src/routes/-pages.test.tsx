@@ -9,6 +9,7 @@ import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { routeTree } from "../routeTree.gen";
+import { browserCache } from "../github/client";
 import { expectNewTab } from "../test-utils";
 import { allowedHostsQuery } from "./$host.$owner.$repo.pull.$number";
 import { Route as RootRoute } from "./__root";
@@ -213,6 +214,82 @@ describe("signed-in and sign-in states", () => {
     renderApp("/github.com/mdn/content/pull/45377");
     expect(await heading("Private repositories aren't supported yet")).toBeTruthy();
     expect(requested).toEqual([`${USER}/pulls/45377`]);
+  });
+
+  it("says the owner's trial has ended, pointing to the plans, without rendering content", async () => {
+    stubGitHub(
+      signedIn(() =>
+        json(
+          JSON.stringify({
+            code: "trial-expired",
+            message: "The private-repository trial for this owner has ended",
+            upgradeUrl: "/pricing",
+          }),
+          { status: 403 },
+        ),
+      ),
+    );
+    renderApp("/github.com/mdn/content/pull/45377");
+    const title = await heading("Private-repository trial ended");
+    const message = title.parentElement!;
+    expect(message.textContent).toMatch(/30-day trial for mdn has ended/);
+    expect(message.textContent).toMatch(/Comments already on GitHub are unaffected/);
+    const plans = within(message).getByRole("link", { name: "See plans" });
+    expect(plans.getAttribute("href")).toBe("/pricing");
+    expect(plans.getAttribute("target")).toBeNull();
+    expect(message.textContent).not.toMatch(/draft/i);
+  });
+
+  it("lists this pull request's stored drafts with Copy on the trial-ended page", async () => {
+    const ended = JSON.stringify({
+      code: "trial-expired",
+      message: "The private-repository trial for this owner has ended",
+      upgradeUrl: "/pricing",
+      repositoryId: 295774370,
+    });
+    stubGitHub(signedIn(() => json(ended, { status: 403 })));
+    const draft = { id: "d1", path: "docs/intro.md", comment: "Grouped how?", body: "> grouped\n\nGrouped how?" };
+    await browserCache.set("drafts", "github.com/295774370/45377", [draft], { private: true });
+    renderApp("/github.com/mdn/content/pull/45377");
+    const drafts = await screen.findByRole("region", { name: "Unpublished drafts" });
+    expect(drafts.textContent).toMatch(/docs\/intro\.md/);
+    expect(drafts.textContent).toMatch(/Grouped how\?/);
+    const writeText = vi.fn(async () => {});
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    await userEvent.click(within(drafts).getByRole("button", { name: "Copy" }));
+    expect(writeText).toHaveBeenCalledWith(draft.body);
+    await browserCache.clearLocalData();
+  });
+
+  it("announces a started trial once and then shows the days left", async () => {
+    localStorage.clear();
+    const ends = new Date(Date.now() + 23.5 * 86_400_000);
+    const files = (JSON.parse(fixture("files.json")) as { filename: string }[]).filter(
+      (f) => !f.filename.endsWith(".md"),
+    );
+    const responses: Record<string, Response> = {
+      [`${USER}/pulls/45377`]: json(
+        fixture("pull.json").replace(
+          '"full_name":"mdn/content","private":false',
+          '"full_name":"mdn/content","private":true',
+        ),
+      ),
+      [`${USER}/pulls/45377/files?per_page=100`]: json(JSON.stringify(files)),
+      [USER]: json("{}", { headers: { "x-rendered-review-trial-ends": ends.toISOString() } }),
+    };
+    stubGitHub(signedIn((url) => responses[url]?.clone()));
+    renderApp("/github.com/mdn/content/pull/45377");
+    const date = ends.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
+    const started = await screen.findByRole("status", { name: "Trial started" });
+    expect(started.textContent).toBe(`30-day trial started for mdn · ends ${date}`);
+    expect((await screen.findByTitle(`Private-repository trial ends ${date}`)).textContent).toBe(
+      "Trial · 24 days left",
+    );
+    cleanup();
+
+    renderApp("/github.com/mdn/content/pull/45377");
+    expect(await screen.findByTitle(`Private-repository trial ends ${date}`)).toBeTruthy();
+    expect(screen.queryByRole("status", { name: "Trial started" })).toBeNull();
   });
 
   it("asks the user to sign in again when their GitHub session has expired", async () => {
