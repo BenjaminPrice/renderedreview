@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Billing accounts, memberships and the entitlement check, on SQLite and PostgreSQL.
+import { generateKeyPairSync } from "node:crypto";
 import { migrate } from "@rendered-review/control-plane";
 import { loadConfig, type SqlDatabase } from "@rendered-review/runtime";
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   adminAccounts,
   billingAccountFor,
@@ -11,6 +12,7 @@ import {
   ownerEntitlement,
   setMembershipRole,
 } from "./billing";
+import { upsertOwner } from "./github/installations";
 import { testDatabases } from "./github/test-databases";
 
 const now = "2026-09-25T12:00:00.000Z";
@@ -135,6 +137,28 @@ describe.each(testDatabases)("billing accounts on %s", (_, open) => {
       expect(await check(repo(acme))).toEqual({ allowed: false, reason: "no-entitlement" });
       await entitle((await billingAccountFor(db, "github.com", acme)).id, "individual");
       expect(await check(repo(acme))).toEqual({ allowed: false, reason: "individual-plan-org-repo" });
+    });
+
+    afterEach(() => vi.restoreAllMocks());
+
+    it("asks GitHub whether the app is installed, never the local installation tables", async () => {
+      const { privateKey: appKey } = generateKeyPairSync("rsa", {
+        modulusLength: 2048,
+        privateKeyEncoding: { type: "pkcs1", format: "pem" },
+        publicKeyEncoding: { type: "spki", format: "pem" },
+      });
+      const config = loadConfig({ ...env, HOSTING_MODE: "hosted", GITHUB_APP_PRIVATE_KEY: appKey });
+      await entitle((await billingAccountFor(db, "github.com", acme)).id, "team");
+      // The tables claim an all-repositories installation for "acme", as a stale row after a missed rename would.
+      await upsertOwner(db, "github.com", acme);
+      await db.run(
+        `INSERT INTO github_installation (id, host, github_id, owner_id, repository_selection, created_at, updated_at)
+         VALUES (?, ?, ?, (SELECT id FROM github_owner WHERE host = ? AND github_id = ?), ?, ?, ?)`,
+        ["i1", "github.com", "42", "github.com", "100", "all", now, now],
+      );
+      const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 404 }));
+      expect(await entitlementCheckFor(config, db)!(repo(acme))).toEqual({ allowed: false, reason: "not-installed" });
+      expect(String(fetch.mock.calls[0]![0])).toBe("https://api.github.com/repos/acme/widgets/installation");
     });
 
     it("in dedicated mode follows the installation and never reads billing tables", async () => {

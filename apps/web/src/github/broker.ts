@@ -99,7 +99,8 @@ export async function privateAccess(
   facts: RepoFacts,
   entitlement: EntitlementCheck | undefined,
 ): Promise<EntitlementDecision | undefined> {
-  name ??= facts.name;
+  // GitHub's current name wins over the requested path's (which may be a pre-rename redirect).
+  name = facts.name ?? name;
   if (!entitlement || !facts.owner || !name) return undefined;
   const { id, login, type } = facts.owner;
   return entitlement({ host, owner: login, name, ownerId: id, ownerType: type });

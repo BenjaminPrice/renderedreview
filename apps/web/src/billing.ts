@@ -16,7 +16,7 @@ import {
   resolveEntitlement,
 } from "@rendered-review/control-plane";
 import type { AppConfig, SqlDatabase } from "@rendered-review/runtime";
-import type { InstallationCheck } from "./github/installation";
+import { type InstallationCheck, installationCheckFor } from "./github/installation";
 import { type Account, upsertOwner } from "./github/installations";
 import { apiBase } from "./github/proxy";
 
@@ -152,11 +152,16 @@ export type EntitlementCheck = (repo: PrivateRepository) => Promise<EntitlementD
 /**
  * The deployment's private-repository entitlement check. Undefined in community mode, so callers
  * keep refusing private repositories there exactly as before, and nothing reads billing tables.
+ *
+ * Decided from stable IDs plus GitHub's live answers: the owner is looked up by the ID GitHub reports
+ * for the repository, and installation by asking GitHub (`installed` defaults to the live check).
+ * The webhook-fed installation tables match by login and name, so a missed rename could make them
+ * say "installed" for the wrong repository: they never authorize private access.
  */
 export function entitlementCheckFor(
   config: AppConfig,
   db: SqlDatabase | undefined,
-  installed: InstallationCheck | undefined,
+  installed: InstallationCheck | undefined = installationCheckFor(config),
 ): EntitlementCheck | undefined {
   const { hostingMode, accessPolicy, allowlist } = config;
   if (hostingMode === "community" || !db) return undefined;

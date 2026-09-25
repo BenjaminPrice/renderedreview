@@ -2,7 +2,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { identityFor } from "../../../../auth";
 import { entitlementCheckFor } from "../../../../billing";
-import { installationCheckFor } from "../../../../github/installation";
 import { allowedHosts } from "../../../../github/proxy";
 import { proxyUserGitHub } from "../../../../github/user-proxy";
 
@@ -14,11 +13,7 @@ export const Route = createFileRoute("/api/github/user/$")({
         proxyUserGitHub(request, {
           allowedHosts: allowedHosts(context.config),
           identity: await identityFor(context, new URL(request.url).origin),
-          entitlement: entitlementCheckFor(
-            context.config,
-            context.db,
-            installationCheckFor(context.config, context.db),
-          ),
+          entitlement: entitlementCheckFor(context.config, context.db),
         }),
     },
   },

@@ -12,12 +12,11 @@ export const Route = createFileRoute("/api/github/write/$")({
     handlers: {
       ANY: async ({ request, context }) => {
         const { github } = context.config;
-        const installed = installationCheckFor(context.config, context.db);
         return publishToGitHub(request, {
           allowedHosts: allowedHosts(context.config),
           identity: await identityFor(context, new URL(request.url).origin),
-          installed,
-          entitlement: entitlementCheckFor(context.config, context.db, installed),
+          installed: installationCheckFor(context.config, context.db),
+          entitlement: entitlementCheckFor(context.config, context.db),
           approvalUrl: github.oauth && `${github.url}/settings/connections/applications/${github.oauth.clientId}`,
         });
       },
