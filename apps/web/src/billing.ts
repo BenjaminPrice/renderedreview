@@ -19,6 +19,7 @@ import { type AppConfig, errorName, log, type SqlDatabase } from "@rendered-revi
 import { type InstallationCheck, installationCheckFor } from "./github/installation";
 import { type Account, upsertOwner } from "./github/installations";
 import { apiBase } from "./github/proxy";
+import { ownerTrial, trialContributorCapReached } from "./trial";
 
 export type BillingAccountKind = "individual" | "organization";
 export type MembershipRole = "admin" | "member";
@@ -147,7 +148,15 @@ export interface PrivateRepository {
   ownerId: string;
   ownerType: OwnerType;
 }
-export type EntitlementCheck = (repo: PrivateRepository) => Promise<EntitlementDecision>;
+/**
+ * Who is asking, signed in: any private read may start the owner's trial (the repository facts
+ * come from GitHub with this user's token, so they can see it); writes count against its contributor cap.
+ */
+export interface Requester {
+  userId: string;
+  operation: "read" | "write";
+}
+export type EntitlementCheck = (repo: PrivateRepository, requester?: Requester) => Promise<EntitlementDecision>;
 
 /**
  * The deployment's private-repository entitlement check. Undefined in community mode, so callers
@@ -163,20 +172,40 @@ export function entitlementCheckFor(
   db: SqlDatabase | undefined,
   installed: InstallationCheck | undefined = installationCheckFor(config),
 ): EntitlementCheck | undefined {
-  const { hostingMode, accessPolicy, allowlist } = config;
+  const { hostingMode, accessPolicy, allowlist, authSecret } = config;
   if (hostingMode === "community" || !db) return undefined;
   // Hosted private access always needs the installation; elsewhere only the `installed` policy asks.
   const needsInstallation = hostingMode === "hosted" || accessPolicy === "installed";
-  return async (repo) =>
-    resolveEntitlement({
-      hostingMode,
-      accessPolicy,
-      allowlist,
-      repo: { owner: repo.owner, name: repo.name, private: true, ownerType: repo.ownerType },
-      installed: needsInstallation ? await isInstalled(installed, repo) : undefined,
-      entitlement: hostingMode === "hosted" ? await ownerEntitlement(db, repo.host, repo.ownerId) : null,
-      now: new Date().toISOString(),
-    });
+  return async (repo, requester) => {
+    const isInstalledNow = needsInstallation ? await isInstalled(installed, repo) : undefined;
+    const decide = (entitlement: LocalEntitlement | null) =>
+      resolveEntitlement({
+        hostingMode,
+        accessPolicy,
+        allowlist,
+        repo: { owner: repo.owner, name: repo.name, private: true, ownerType: repo.ownerType },
+        installed: isInstalledNow,
+        entitlement,
+        now: new Date().toISOString(),
+      });
+    if (hostingMode !== "hosted") return decide(null);
+
+    const entitlement = await ownerEntitlement(db, repo.host, repo.ownerId);
+    let decision = decide(entitlement);
+    if (!requester || !authSecret) return decision;
+    // No plan yet (or an ended trial, which the ledger may still hold as active): the owner's trial decides.
+    if ((decision.reason === "no-entitlement" && !entitlement) || decision.reason === "trial-expired") {
+      const owner = { id: repo.ownerId, login: repo.owner, type: repo.ownerType };
+      decision = decide(await ownerTrial(db, authSecret, repo.host, owner));
+    }
+    if (
+      decision.reason === "trial" &&
+      requester.operation === "write" &&
+      (await trialContributorCapReached(db, repo.host, repo.ownerId, requester.userId))
+    )
+      return { allowed: false, reason: "trial-contributor-cap" };
+    return decision;
+  };
 }
 
 /** Fails closed: an installation check that cannot answer counts as not installed. */

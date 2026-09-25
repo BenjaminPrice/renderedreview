@@ -16,7 +16,12 @@ const env = {
   GITHUB_APP_WEBHOOK_SECRET: "webhook-secret",
   ENCRYPTION_KEY: btoa("k".repeat(32)),
   BETTER_AUTH_SECRET: secret,
+  GITHUB_OAUTH_CLIENT_ID: "oauth-client",
+  GITHUB_OAUTH_CLIENT_SECRET: "oauth-secret",
   DATABASE_URL: "sqlite::memory:",
+  BILLING_PROVIDER: "stripe",
+  BILLING_API_KEY: "sk_test",
+  BILLING_WEBHOOK_SECRET: "whsec",
 };
 const hosted = loadConfig({ ...env, HOSTING_MODE: "hosted" });
 
