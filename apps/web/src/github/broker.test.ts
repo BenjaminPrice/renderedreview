@@ -112,12 +112,11 @@ describe("forRepository (comment, review, resolve)", () => {
     const entitlement = vi.fn(async () => allowed);
     const op = write();
     const deps = { identity: writer("app-token", null), fetch: privateRepo(), entitlement };
-    expect(await forRepository(op, deps)).toEqual({ kind: "user", token: "app-token" });
-    expect(entitlement).toHaveBeenCalledWith(
-      { host: "github.com", owner: "acme", name: op.repo, ownerId: "100", ownerType: "Organization" },
-      // The writer: a trial counts them against its contributor cap.
-      { userId: "u1", operation: "write" },
-    );
+    const repository = { host: "github.com", owner: "acme", name: op.repo, ownerId: "100", ownerType: "Organization" };
+    // The repository comes back with the credential: a publish counts its contributor against that owner.
+    expect(await forRepository(op, deps)).toEqual({ kind: "user", token: "app-token", repository });
+    // The writer: a trial counts them against its contributor cap.
+    expect(entitlement).toHaveBeenCalledWith(repository, { userId: "u1", operation: "write" });
   });
 
   it("refuses a private repository its owner's plan does not cover, with the reason", async () => {
