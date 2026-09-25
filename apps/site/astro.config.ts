@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "astro/config";
+import { rehypeDocLinks } from "./src/docs-links";
+import { publishedDocs } from "./src/docs-nav";
 
 export default defineConfig({
   site: "https://renderedreview.com",
@@ -11,4 +14,11 @@ export default defineConfig({
     inlineStylesheets: "never",
   },
   vite: { build: { assetsInlineLimit: 0 } },
+  markdown: {
+    // Highlighting would add inline style attributes, which the CSP forbids.
+    syntaxHighlight: false,
+    rehypePlugins: [
+      [rehypeDocLinks, { repoRoot: fileURLToPath(new URL("../..", import.meta.url)), published: publishedDocs }],
+    ],
+  },
 });

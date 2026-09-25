@@ -1,7 +1,7 @@
 ---
 // SPDX-License-Identifier: AGPL-3.0-only
 // Links only to pages that exist: legal pages (privacy, terms) are added once they have passed legal review.
-import { APP_URL, DOCS_URL, LICENSE_URL, REPO_URL, SITE_LICENSE_URL, SPONSORS_URL } from "../site";
+import { APP_URL, LICENSE_URL, REPO_URL, SITE_LICENSE_URL, SPONSORS_URL } from "../site";
 import Ext from "./Ext.astro";
 import Logo from "./Logo.astro";
 ---
@@ -26,9 +26,10 @@ import Logo from "./Logo.astro";
       <nav aria-labelledby="foot-docs">
         <h2 id="foot-docs">Docs</h2>
         <ul>
-          <li><Ext href={DOCS_URL} arrow>Documentation</Ext></li>
-          <li><Ext href={`${DOCS_URL}/annotation-format.md`} arrow>Annotation format</Ext></li>
-          <li><Ext href={`${DOCS_URL}/deploy-cloudflare.md`} arrow>Self-hosting</Ext></li>
+          <li><a href="/docs/">All docs</a></li>
+          <li><a href="/docs/deploy-cloudflare/">Self-hosting</a></li>
+          <li><a href="/docs/annotation-format/">Annotation format</a></li>
+          <li><a href="/docs/privacy-external-resources/">External resources</a></li>
         </ul>
       </nav>
       <nav aria-labelledby="foot-oss">

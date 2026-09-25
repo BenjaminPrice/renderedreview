@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Plans, rendered from src/pricing.ts. The monthly/annual switch is two radio buttons and CSS (:has),
 // so it works without JavaScript and with the keyboard.
-import { APP_URL, DOCS_URL } from "../site";
+import { APP_URL } from "../site";
 import { annualPrice, formatUsd, plans, TRIAL_CONTRIBUTORS, TRIAL_DAYS } from "../pricing";
 import Check from "./Check.astro";
 import Ext from "./Ext.astro";
@@ -122,7 +122,7 @@ const notCounted = [
       </div>
       <div></div>
       <p>
-        <Ext href={`${DOCS_URL}/deploy-cloudflare.md`}>Self-hosting docs</Ext> · <a href="/commercial/"
+        <a href="/docs/deploy-cloudflare/">Self-hosting docs</a> · <a href="/commercial/"
           >Commercial options</a
         >
       </p>
