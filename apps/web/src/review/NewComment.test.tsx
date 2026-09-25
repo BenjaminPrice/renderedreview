@@ -8,6 +8,7 @@ import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 import { type PrIdentity, viewerQuery } from "../github/queries";
+import { TRIAL_STARTS_USER } from "../rate-limit";
 import { expectNewTab, expectNoSeriousA11yViolations } from "../test-utils";
 import { authorizePublicComments, signIn } from "../ui/Viewer";
 import { HEAD } from "./fixtures";
@@ -138,6 +139,20 @@ it("explains this app's own limit with how long to wait", async () => {
     "Too many requests right now. Your text is kept; try again in 42 seconds.",
   );
   expect((box() as HTMLTextAreaElement).value).toBe("Keep me");
+});
+
+it("names a daily trial limit as the reviewer's own, with when to retry", async () => {
+  mount(undefined, () =>
+    Response.json(
+      { code: "rate-limited", message: TRIAL_STARTS_USER, retryAfter: 60 },
+      { status: 429, headers: { "retry-after": "60" } },
+    ),
+  );
+  await userEvent.type(box(), "Keep me");
+  await userEvent.click(screen.getByRole("button", { name: "Comment" }));
+  expect((await screen.findByRole("alert")).textContent).toBe(
+    `${TRIAL_STARTS_USER} Your text is kept; try again in 60 seconds.`,
+  );
 });
 
 it("explains an organization's third-party app restriction and links to request approval", async () => {

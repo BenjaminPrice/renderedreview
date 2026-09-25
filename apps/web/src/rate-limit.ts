@@ -6,9 +6,16 @@
 // with the limit's name only.
 import { type AppConfig, log, type RateLimiter, type RequestContext } from "@rendered-review/runtime";
 
-export type LimitName = "guest" | "auth" | "writes" | "trial-start";
-/** The 429's message; the browser matches on it (the wait is in `retryAfter`). */
+export type LimitName = "guest" | "auth" | "writes" | "trial-start-user" | "trial-start-network";
+/** The 429's messages; the browser matches on them (the wait is in `retryAfter`). */
 export const RATE_LIMITED = "Too many requests. Try again shortly.";
+export const TRIAL_STARTS_USER = "You have started as many private-repository trials as one person can in a day.";
+export const TRIAL_STARTS_NETWORK =
+  "As many private-repository trials as one network can start in a day were started from yours.";
+const MESSAGES: Partial<Record<LimitName, string>> = {
+  "trial-start-user": TRIAL_STARTS_USER,
+  "trial-start-network": TRIAL_STARTS_NETWORK,
+};
 
 export class RateLimited extends Error {
   constructor(
@@ -16,7 +23,7 @@ export class RateLimited extends Error {
     /** Seconds until the client may try again. */
     readonly retryAfter: number,
   ) {
-    super(RATE_LIMITED);
+    super(MESSAGES[limit] ?? RATE_LIMITED);
     this.name = "RateLimited";
   }
   get body() {

@@ -274,7 +274,7 @@ describe("credential selection", () => {
 
   it("answers a typed 429 when publishing would start a trial over the daily limit", async () => {
     const entitlement = vi.fn<EntitlementCheck>(async () => {
-      throw new RateLimited("trial-start", 600);
+      throw new RateLimited("trial-start-user", 600);
     });
     const { call, writes } = setup({ visibility: "private", entitlement, clientAddress: "198.51.100.7" });
     const res = await call("comment", comment());

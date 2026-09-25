@@ -19,7 +19,7 @@ import { type AppConfig, errorName, log, type SqlDatabase } from "@rendered-revi
 import { type InstallationCheck, installationCheckFor } from "./github/installation";
 import { type Account, upsertOwner } from "./github/installations";
 import { apiBase } from "./github/proxy";
-import { countTrialStart, ownerTrial, trialContributorCapReached } from "./trial";
+import { ownerTrial, trialContributorCapReached, trialStartLimit } from "./trial";
 
 export type BillingAccountKind = "individual" | "organization";
 export type MembershipRole = "admin" | "member";
@@ -201,8 +201,8 @@ export function entitlementCheckFor(
     if (decision.reason === "no-entitlement" && !entitlement) {
       const owner = { id: repo.ownerId, login: repo.owner, type: repo.ownerType };
       // Starting one counts against the requester's daily trial starts (throws `RateLimited`).
-      const count = () => countTrialStart(db, authSecret, limits.trialStartsPerDay, requester);
-      decision = decide(await ownerTrial(db, authSecret, repo.host, owner, count));
+      const guard = trialStartLimit(db, authSecret, limits.trialStartsPerDay, requester);
+      decision = decide(await ownerTrial(db, authSecret, repo.host, owner, guard));
     }
     if (
       decision.reason === "trial" &&

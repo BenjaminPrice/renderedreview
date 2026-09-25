@@ -10,6 +10,7 @@ import userEvent from "@testing-library/user-event";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { routeTree } from "../routeTree.gen";
 import { browserCache } from "../github/client";
+import { TRIAL_STARTS_USER } from "../rate-limit";
 import { expectNewTab } from "../test-utils";
 import { allowedHostsQuery } from "./$host.$owner.$repo.pull.$number";
 import { Route as RootRoute } from "./__root";
@@ -162,6 +163,23 @@ describe("pull request page states", () => {
     expect(await heading("Too many requests")).toBeTruthy();
     expect(screen.getByText(/made many requests in a short time\. Try again after \d/)).toBeTruthy();
     expect(screen.queryByText(/GitHub rate limit/)).toBeNull();
+  });
+
+  it("tells a reader over the daily trial limit that it is their own limit, not their network's", async () => {
+    stubGitHub((url) =>
+      url.startsWith("/api/github/public/")
+        ? json(JSON.stringify({ code: "rate-limited", message: TRIAL_STARTS_USER, retryAfter: 3600 }), {
+            status: 429,
+            headers: { "retry-after": "3600" },
+          })
+        : Promise.reject(new TypeError("Failed to fetch")),
+    );
+    renderApp(`/${BUSY_HOST}/team/trials/pull/13`);
+    expect(await heading("Trial limit reached")).toBeTruthy();
+    expect(
+      screen.getByText(/as many private-repository trials as one person can in a day\. Try again after \d/),
+    ).toBeTruthy();
+    expect(screen.queryByText(/network/)).toBeNull();
   });
 
   it("keeps showing a recently viewed pull request from the cache when rate-limited", async () => {

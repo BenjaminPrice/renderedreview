@@ -34,15 +34,15 @@ export async function ownerTrial(
   secret: string,
   host: string,
   owner: Account,
-  /** Runs only when this call would start a new trial; throws to refuse it (see `countTrialStart`). */
-  beforeStart?: () => Promise<void>,
+  /** Asked only when this call would start a new trial, told once it did (see `trialStartLimit`). */
+  guard?: TrialStartGuard,
 ) {
   const now = new Date();
   const key = await trialSubjectKey(secret, host, owner);
   const existing = await db.all("SELECT 1 FROM trial WHERE subject_key = ?", [key]);
-  if (!existing.length) await beforeStart?.();
+  if (!existing.length) await guard?.check();
   const account = await billingAccountFor(db, host, owner);
-  await db.run(
+  const { changes: started } = await db.run(
     `INSERT INTO trial (subject_key, started_at, expires_at, status, contributor_limit, billing_account_id)
      VALUES (?, ?, ?, 'active', ?, ?) ON CONFLICT (subject_key) DO NOTHING`,
     [
@@ -53,6 +53,8 @@ export async function ownerTrial(
       account.id,
     ],
   );
+  // Only the request that created the row counts a start: not a racing duplicate, not a refusal.
+  if (started > 0) await guard?.record();
   const [trial] = await db.all<{ expiresAt: string; status: string; limit: number }>(
     `SELECT expires_at AS "expiresAt", status, contributor_limit AS "limit" FROM trial WHERE subject_key = ?`,
     [key],
@@ -73,43 +75,60 @@ export async function ownerTrial(
   return { planId: "team", source: "trial", validUntil: expiresAt } satisfies LocalEntitlement;
 }
 
+export interface TrialStartGuard {
+  /** Throws `RateLimited` when the requester may not start another trial today. */
+  check(): Promise<void>;
+  /** Counts a trial the requester just started. */
+  record(): Promise<void>;
+}
+
 /**
- * Counts a trial start against the user and the client address for the current UTC day, and throws
- * `RateLimited` (retry at the next midnight) when either is over `limit`: throwaway organizations
- * cannot each get a trial from one person or one network. Rows are aggregate counters in
- * `usage_counter`; the address is stored only as an HMAC that also covers the day, so days cannot be
- * linked, and earlier days are deleted here.
+ * Limits trial starts per user and per client address per UTC day: throwaway organizations cannot
+ * each get a trial from one person or one network. Refused over `limit`, retrying at the next
+ * midnight. Rows are aggregate counters in `usage_counter`; the address is stored only as an HMAC
+ * that also covers the day, so days cannot be linked. Earlier days are deleted when counting.
+ * ponytail: check-then-record, so starts racing at limit - 1 can overshoot by that burst.
  */
-export async function countTrialStart(
+export function trialStartLimit(
   db: SqlDatabase,
   secret: string,
   limit: number,
   requester: { userId: string; clientAddress?: string },
-) {
-  const now = new Date();
-  const day = now.toISOString().slice(0, 10);
-  await db.run("DELETE FROM usage_counter WHERE metric = 'trial-start' AND window_start < ?", [day]);
-  const subjects = [["user", requester.userId]];
-  if (requester.clientAddress)
-    subjects.push([
-      "network",
-      await hmacHex(secret, "rendered-review trial start v1", `${day}\n${addressBucket(requester.clientAddress)}`),
-    ]);
-  let over = false;
-  for (const [scope, subject] of subjects) {
-    await db.run(
-      `INSERT INTO usage_counter (scope, subject, metric, window_start, count) VALUES (?, ?, 'trial-start', ?, 1)
-       ON CONFLICT (scope, subject, metric, window_start) DO UPDATE SET count = usage_counter.count + 1`,
-      [scope!, subject!, day],
-    );
-    const [row] = await db.all<{ count: number }>(
-      "SELECT count FROM usage_counter WHERE scope = ? AND subject = ? AND metric = 'trial-start' AND window_start = ?",
-      [scope!, subject!, day],
-    );
-    if (Number(row!.count) > limit) over = true;
-  }
-  if (over)
-    throw limited("trial-start", Math.ceil((Date.parse(`${day}T00:00:00Z`) + 86_400_000 - now.getTime()) / 1000));
+): TrialStartGuard {
+  const day = () => new Date().toISOString().slice(0, 10);
+  const subjects = async (d: string) => {
+    const out: ["user" | "network", string][] = [["user", requester.userId]];
+    if (requester.clientAddress) {
+      const bucket = addressBucket(requester.clientAddress);
+      out.push(["network", await hmacHex(secret, "rendered-review trial start v1", `${d}\n${bucket}`)]);
+    }
+    return out;
+  };
+  return {
+    async check() {
+      const d = day();
+      for (const [scope, subject] of await subjects(d)) {
+        const [row] = await db.all<{ count: number }>(
+          "SELECT count FROM usage_counter WHERE scope = ? AND subject = ? AND metric = 'trial-start' AND window_start = ?",
+          [scope, subject, d],
+        );
+        if (Number(row?.count ?? 0) >= limit) {
+          const retryAfter = Math.ceil((Date.parse(`${d}T00:00:00Z`) + 86_400_000 - Date.now()) / 1000);
+          throw limited(scope === "user" ? "trial-start-user" : "trial-start-network", retryAfter);
+        }
+      }
+    },
+    async record() {
+      const d = day();
+      await db.run("DELETE FROM usage_counter WHERE metric = 'trial-start' AND window_start < ?", [d]);
+      for (const [scope, subject] of await subjects(d))
+        await db.run(
+          `INSERT INTO usage_counter (scope, subject, metric, window_start, count) VALUES (?, ?, 'trial-start', ?, 1)
+           ON CONFLICT (scope, subject, metric, window_start) DO UPDATE SET count = usage_counter.count + 1`,
+          [scope, subject, d],
+        );
+    },
+  };
 }
 
 /**

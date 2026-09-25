@@ -12,7 +12,7 @@ import {
   RateLimitError,
   type ReviewThread,
 } from "@rendered-review/github-integration";
-import { RATE_LIMITED } from "../rate-limit";
+import { RATE_LIMITED, TRIAL_STARTS_NETWORK, TRIAL_STARTS_USER } from "../rate-limit";
 import { apiBase, PROXY_PREFIX } from "./proxy";
 import { PRIVATE_REPO_UNSUPPORTED, REQUESTED_WITH, TRIAL_EXPIRED, USER_PREFIX } from "./user-proxy";
 
@@ -187,5 +187,9 @@ export const isPrivateRepoUnsupported = (error: unknown) =>
 /** This app's own guest limit (its proxy's 429), as opposed to GitHub's. */
 export const isAppRateLimited = (error: unknown): error is RateLimitError =>
   error instanceof RateLimitError && error.message === RATE_LIMITED;
+
+/** This app's daily limit on starting private-repository trials (per person or per network). */
+export const isTrialStartLimited = (error: unknown): error is RateLimitError =>
+  error instanceof RateLimitError && (error.message === TRIAL_STARTS_USER || error.message === TRIAL_STARTS_NETWORK);
 
 export const isTrialExpired = (error: unknown) => error instanceof ForbiddenError && error.message === TRIAL_EXPIRED;

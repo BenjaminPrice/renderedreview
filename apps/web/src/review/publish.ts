@@ -6,6 +6,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useRef } from "react";
 import { type CommentInput, commentMutation, PublishError, reviewMutation } from "../github/mutations";
 import type { PrIdentity } from "../github/queries";
+import { RATE_LIMITED } from "../rate-limit";
 
 /** One comment to publish, against the head it was checked against. */
 export type CommentIntent = CommentInput & { expectedHeadOid: string };
@@ -52,8 +53,11 @@ export function publishErrorMessage(error: {
       return "Your GitHub sign-in has expired. Sign in again, then retry.";
     case "rate-limited":
       // This app's own limits send only the wait; GitHub's send its reset time.
-      if (!error.resetAt && error.retryAfter)
-        return `Too many requests right now. Your text is kept; try again ${wait(error.retryAfter)}.`;
+      if (!error.resetAt && error.retryAfter) {
+        // A daily trial limit names whose limit it is; the per-minute ones read the same for everyone.
+        const what = error.message === RATE_LIMITED ? "Too many requests right now." : error.message;
+        return `${what} Your text is kept; try again ${wait(error.retryAfter)}.`;
+      }
       return `GitHub's rate limit was reached. Try again${error.resetAt ? ` after ${new Date(error.resetAt).toLocaleTimeString()}` : " later"}.`;
     default:
       return error.message;

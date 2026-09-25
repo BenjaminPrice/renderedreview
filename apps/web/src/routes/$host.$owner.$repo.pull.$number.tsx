@@ -47,6 +47,7 @@ import { ExternalLink } from "../ui/ExternalLink";
 import {
   isAppRateLimited,
   isPrivateRepoUnsupported,
+  isTrialStartLimited,
   isSignInRequired,
   isTrialExpired,
   preferProxy,
@@ -717,6 +718,13 @@ function ErrorState({
   }
   // Signed in, the viewer's own 5,000/hour limit replaces the shared anonymous one.
   const action = offerSignIn ? <SignInButton /> : undefined;
+  if (isTrialStartLimited(error)) {
+    return (
+      <Message title="Trial limit reached">
+        {error.message} Try again after {error.resetAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.
+      </Message>
+    );
+  }
   if (isAppRateLimited(error)) {
     return (
       <Message title="Too many requests" action={action}>

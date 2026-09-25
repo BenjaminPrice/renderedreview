@@ -167,7 +167,7 @@ describe("proxyUserGitHub", () => {
 
     it("answer a typed 429 when starting the owner's trial is over the daily limit", async () => {
       const entitlement = vi.fn<EntitlementCheck>(async () => {
-        throw new RateLimited("trial-start", 3600);
+        throw new RateLimited("trial-start-user", 3600);
       });
       const { fetch, call } = withPrivate(entitlement, PLANS, "198.51.100.7");
       const res = await call("github.com/repos/acme/throwaway/pulls/1");
